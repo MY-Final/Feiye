@@ -1,31 +1,47 @@
 import { basicSetup } from "codemirror";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
-import { EditorState, Prec } from "@codemirror/state";
+import { Compartment, EditorState, Prec, type Extension } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
+
+import type { ResolvedImage } from "../../lib/images";
+import { formatKeymap } from "./format-keymap";
+import { readFormatState, type FormatState } from "./formatting";
+import { createLivePreview } from "./live-preview";
+import { mathMarkdownExtension } from "./live-preview/math-extension";
+
+export type EditorMode = "source" | "wysiwyg";
 
 export interface EditorHandlers {
   onSave(): void;
   onChange(): void;
   onCursor(line: number, column: number): void;
+  onFormatState(state: FormatState): void;
 }
+
+export interface EditorOptions {
+  mode: EditorMode;
+  resolveImage(src: string): ResolvedImage | null;
+}
+
+export const editorModeCompartment = new Compartment();
 
 const editorTheme = EditorView.theme({
   "&": {
     height: "100%",
     backgroundColor: "var(--bg)",
     color: "var(--text)",
-    fontSize: "15px",
+    fontSize: "var(--editor-font-size)",
   },
   ".cm-scroller": {
     fontFamily: "var(--font-editor)",
-    lineHeight: "1.75",
+    lineHeight: "var(--editor-line-height, 1.75)",
     overflow: "auto",
   },
   ".cm-content": {
-    maxWidth: "780px",
+    maxWidth: "var(--editor-measure)",
     margin: "0 auto",
-    padding: "32px 28px 45vh",
+    padding: "var(--editor-padding)",
     caretColor: "var(--text)",
     userSelect: "text",
     WebkitUserSelect: "text",
@@ -84,17 +100,33 @@ const editorTheme = EditorView.theme({
   },
 });
 
+export function editorModeExtension(
+  mode: EditorMode,
+  options: EditorOptions,
+): Extension {
+  if (mode === "wysiwyg") {
+    return createLivePreview({ resolveImage: options.resolveImage });
+  }
+  return [];
+}
+
 export function createEditorState(
   doc: string,
   handlers: EditorHandlers,
+  options: EditorOptions,
 ): EditorState {
   return EditorState.create({
     doc,
     extensions: [
       basicSetup,
-      markdown({ base: markdownLanguage, codeLanguages: languages }),
+      markdown({
+        base: markdownLanguage,
+        codeLanguages: languages,
+        extensions: [mathMarkdownExtension],
+      }),
       EditorView.lineWrapping,
       editorTheme,
+      editorModeCompartment.of(editorModeExtension(options.mode, options)),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) handlers.onChange();
         if (update.docChanged || update.selectionSet) {
@@ -102,6 +134,9 @@ export function createEditorState(
           const line = update.state.doc.lineAt(head);
           handlers.onCursor(line.number, head - line.from + 1);
         }
+        // 语法树解析完成时还会产生事务；每次都同步一次，保证工具栏
+        // 的标题 / 列表等激活态不会停留在解析前的旧值。
+        handlers.onFormatState(readFormatState(update.state));
       }),
       Prec.highest(
         keymap.of([
@@ -115,6 +150,7 @@ export function createEditorState(
           },
         ]),
       ),
+      Prec.high(keymap.of(formatKeymap)),
     ],
   });
 }

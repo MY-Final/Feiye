@@ -76,8 +76,11 @@ export async function openFile(entry: Entry): Promise<void> {
 
   try {
     const file = await readFile(entry.relPath);
+    // 先更新文档路径，图片 widget 需要在构建时解析相对地址。
+    useDocumentStore
+      .getState()
+      .setDocument(entry.relPath, entry.name, file.modifiedMs);
     setEditorDocument(file.content);
-    useDocumentStore.getState().setDocument(entry.relPath, entry.name, file.modifiedMs);
     requestPreview(file.content, true);
   } catch (error) {
     toastError("打开文件失败", error);
@@ -191,8 +194,25 @@ export async function changeViewMode(mode: ViewMode): Promise<void> {
   await setSetting("viewMode", mode);
 
   const doc = useDocumentStore.getState();
-  if (doc.path && mode !== "source") {
+  if (doc.path && (mode === "split" || mode === "preview")) {
     const text = getEditorText();
     if (text !== null) requestPreview(text, true);
   }
+}
+
+/** 在当前位置新建一篇 Markdown，并打开它。 */
+export async function newDocumentNearActive(): Promise<void> {
+  const doc = useDocumentStore.getState();
+  await createMarkdownFile(doc.path ? parentRel(doc.path) : "");
+}
+
+/** 重命名当前文档。 */
+export async function renameActiveDocument(): Promise<void> {
+  const doc = useDocumentStore.getState();
+  if (!doc.path || !doc.name) return;
+  await renameEntry({
+    name: doc.name,
+    relPath: doc.path,
+    isDir: false,
+  });
 }

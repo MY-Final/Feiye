@@ -955,6 +955,7 @@ name = "feiye"
 version = "0.1.0"
 dependencies = [
  "dunce",
+ "percent-encoding",
  "serde",
  "serde_json",
  "tauri",

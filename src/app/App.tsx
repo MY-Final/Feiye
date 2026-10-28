@@ -8,36 +8,43 @@ import { guardUnsaved, saveActiveDocument } from "../features/editor/save";
 import { PreviewPane } from "../features/preview/PreviewPane";
 import { WorkspaceSidebar } from "../features/workspace/WorkspaceSidebar";
 import {
-  changeViewMode,
   chooseWorkspace,
   createMarkdownFile,
+  newDocumentNearActive,
+  renameActiveDocument,
   restoreLastWorkspace,
 } from "../features/workspace/workspace-actions";
-import { APP_NAME, APP_NAME_EN, APP_TAGLINE } from "../lib/app-info";
+import { APP_NAME, APP_TAGLINE } from "../lib/app-info";
 import { getSetting } from "../lib/tauri";
-import { useDocumentStore, type ViewMode } from "../stores/document";
+import { isViewMode } from "../lib/view-modes";
+import { useDocumentStore } from "../stores/document";
 import { useUiStore } from "../stores/ui";
 import { useWorkspaceStore } from "../stores/workspace";
+import { TitleBar } from "./TitleBar";
+import { Toolbar } from "./Toolbar";
 import "./App.css";
-
-const VIEW_MODES: { value: ViewMode; label: string }[] = [
-  { value: "source", label: "源码" },
-  { value: "split", label: "分栏" },
-  { value: "preview", label: "预览" },
-];
 
 let bootstrapped = false;
 
+function dialogOpen(): boolean {
+  const ui = useUiStore.getState();
+  return Boolean(ui.confirm || ui.prompt);
+}
+
+function isTextEntry(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLElement &&
+    Boolean(target.closest("input, textarea, select, [contenteditable='true']"))
+  );
+}
+
 export default function App() {
   const root = useWorkspaceStore((state) => state.root);
-  const workspaceName = useWorkspaceStore((state) => state.name);
   const docPath = useDocumentStore((state) => state.path);
-  const docName = useDocumentStore((state) => state.name);
   const dirty = useDocumentStore((state) => state.dirty);
   const viewMode = useDocumentStore((state) => state.viewMode);
   const cursor = useDocumentStore((state) => state.cursor);
   const sidebarVisible = useUiStore((state) => state.sidebarVisible);
-  const toggleSidebar = useUiStore((state) => state.toggleSidebar);
 
   // 启动时恢复上次的视图模式和工作区（StrictMode 下只执行一次）。
   useEffect(() => {
@@ -45,12 +52,8 @@ export default function App() {
     bootstrapped = true;
 
     void (async () => {
-      const savedMode = await getSetting<ViewMode>("viewMode");
-      if (
-        savedMode === "source" ||
-        savedMode === "split" ||
-        savedMode === "preview"
-      ) {
+      const savedMode = await getSetting<unknown>("viewMode");
+      if (isViewMode(savedMode)) {
         useDocumentStore.getState().setViewMode(savedMode);
       }
       await restoreLastWorkspace();
@@ -63,16 +66,18 @@ export default function App() {
     let unlisten: (() => void) | undefined;
     let disposed = false;
 
-    void window_.onCloseRequested(async (event) => {
-      if (!useDocumentStore.getState().dirty) return;
-      event.preventDefault();
-      if (await guardUnsaved()) {
-        await window_.destroy();
-      }
-    }).then((fn) => {
-      if (disposed) fn();
-      else unlisten = fn;
-    });
+    void window_
+      .onCloseRequested(async (event) => {
+        if (!useDocumentStore.getState().dirty) return;
+        event.preventDefault();
+        if (await guardUnsaved()) {
+          await window_.destroy();
+        }
+      })
+      .then((fn) => {
+        if (disposed) fn();
+        else unlisten = fn;
+      });
 
     return () => {
       disposed = true;
@@ -80,13 +85,28 @@ export default function App() {
     };
   }, []);
 
-  // 全局快捷键：编辑器内由 CodeMirror keymap 处理 Mod-s。
+  // 应用级快捷键。编辑器内的格式快捷键由 CodeMirror keymap 先行处理。
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
+      if (dialogOpen()) return;
+
+      if (event.key === "F2") {
+        if (isTextEntry(event.target)) return;
+        event.preventDefault();
+        void renameActiveDocument();
+        return;
+      }
+
       if (!(event.ctrlKey || event.metaKey)) return;
 
       switch (event.key.toLowerCase()) {
+        case "n":
+          event.preventDefault();
+          if (useWorkspaceStore.getState().root) {
+            void newDocumentNearActive();
+          }
+          break;
         case "s":
           event.preventDefault();
           void saveActiveDocument();
@@ -96,6 +116,7 @@ export default function App() {
           void chooseWorkspace();
           break;
         case "b":
+          // 编辑器内 Ctrl+B 是加粗，已由 keymap preventDefault。
           event.preventDefault();
           if (useWorkspaceStore.getState().root) {
             useUiStore.getState().toggleSidebar();
@@ -114,71 +135,8 @@ export default function App() {
 
   return (
     <div className="app">
-      <header className="titlebar">
-        <div className="titlebar-left">
-          <button
-            type="button"
-            className="icon-btn"
-            title="切换侧栏 (Ctrl+B)"
-            disabled={!hasWorkspace}
-            onClick={toggleSidebar}
-          >
-            ☰
-          </button>
-          <span className="brand">
-            {APP_NAME}
-            <span className="brand-en">{APP_NAME_EN}</span>
-          </span>
-          {workspaceName ? (
-            <span className="workspace-name" title={root ?? undefined}>
-              {workspaceName}
-            </span>
-          ) : null}
-        </div>
-
-        <div className="titlebar-center">
-          {docName ? (
-            <span className="doc-title">
-              {docName}
-              {dirty ? <span className="dirty-dot" title="未保存" /> : null}
-            </span>
-          ) : null}
-        </div>
-
-        <div className="titlebar-actions">
-          {hasWorkspace ? (
-            <div className="segmented" role="group" aria-label="视图模式">
-              {VIEW_MODES.map((mode) => (
-                <button
-                  key={mode.value}
-                  type="button"
-                  className={viewMode === mode.value ? "active" : ""}
-                  onClick={() => void changeViewMode(mode.value)}
-                >
-                  {mode.label}
-                </button>
-              ))}
-            </div>
-          ) : null}
-
-          <button
-            type="button"
-            className="btn ghost"
-            disabled={!docPath}
-            onClick={() => void saveActiveDocument()}
-          >
-            保存
-          </button>
-
-          <button
-            type="button"
-            className="btn"
-            onClick={() => void chooseWorkspace()}
-          >
-            打开文件夹
-          </button>
-        </div>
-      </header>
+      <TitleBar />
+      <Toolbar />
 
       <div className="app-body">
         {hasWorkspace && sidebarVisible ? <WorkspaceSidebar /> : null}
@@ -210,18 +168,24 @@ export default function App() {
             </>
           ) : (
             <div className="welcome">
-              <div className="mark" aria-hidden="true">
-                扉
+              <div className="welcome-inner">
+                <div className="mark" aria-hidden="true">
+                  扉
+                </div>
+                <h1>{APP_NAME}</h1>
+                <p className="welcome-tagline">{APP_TAGLINE}</p>
+                <span className="welcome-rule" aria-hidden="true" />
+                <button
+                  type="button"
+                  className="btn primary"
+                  onClick={() => void chooseWorkspace()}
+                >
+                  打开文件夹
+                </button>
+                <p className="welcome-hint">
+                  本地 Markdown · 不建立数据库 · 文件始终属于你
+                </p>
               </div>
-              <h1>{APP_TAGLINE}</h1>
-              <p>打开一个文件夹，扉页只读写其中的 Markdown 文件。</p>
-              <button
-                type="button"
-                className="btn primary"
-                onClick={() => void chooseWorkspace()}
-              >
-                打开文件夹
-              </button>
             </div>
           )}
         </main>

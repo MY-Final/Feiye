@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type ViewMode = "source" | "split" | "preview";
+export type ViewMode = "source" | "split" | "preview" | "wysiwyg";
 
 interface DocumentStore {
   path: string | null;
@@ -24,7 +24,7 @@ export const useDocumentStore = create<DocumentStore>((set) => ({
   name: null,
   dirty: false,
   savedModifiedMs: null,
-  viewMode: "split",
+  viewMode: "wysiwyg",
   cursor: { line: 1, column: 1 },
 
   setDocument(path, name, modifiedMs) {

@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import "katex/dist/katex.min.css";
 
+import { rewritePreviewImages } from "../../lib/images";
+import { useDocumentStore } from "../../stores/document";
+import { useWorkspaceStore } from "../../stores/workspace";
 import "./preview.css";
 import type { PreviewResult } from "./preview-protocol";
 import { setPreviewListener } from "./preview-controller";
@@ -9,6 +11,14 @@ import { setPreviewListener } from "./preview-controller";
 export function PreviewPane() {
   const [result, setResult] = useState<PreviewResult>({ html: "" });
   const bodyRef = useRef<HTMLDivElement>(null);
+  const root = useWorkspaceStore((state) => state.root);
+  const docPath = useDocumentStore((state) => state.path);
+
+  // 本地图片走工作区作用域的 feiyeimg 协议；远程图片保持原样。
+  const html = useMemo(
+    () => rewritePreviewImages(result.html, root, docPath ?? ""),
+    [result.html, root, docPath],
+  );
 
   useEffect(() => {
     setPreviewListener(setResult);
@@ -36,8 +46,19 @@ export function PreviewPane() {
       }
     };
 
+    const onImageError = (event: Event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLImageElement)) return;
+      target.classList.add("preview-image-broken");
+      if (!target.alt) target.alt = "图片无法加载";
+    };
+
     body.addEventListener("click", onClick);
-    return () => body.removeEventListener("click", onClick);
+    body.addEventListener("error", onImageError, true);
+    return () => {
+      body.removeEventListener("click", onClick);
+      body.removeEventListener("error", onImageError, true);
+    };
   }, []);
 
   return (
@@ -50,7 +71,7 @@ export function PreviewPane() {
       <article
         className="markdown-body"
         ref={bodyRef}
-        dangerouslySetInnerHTML={{ __html: result.html }}
+        dangerouslySetInnerHTML={{ __html: html }}
       />
     </div>
   );

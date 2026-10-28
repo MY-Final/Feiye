@@ -51,8 +51,8 @@ export async function reloadActiveDocument(): Promise<boolean> {
 
   try {
     const file = await readFile(doc.path);
-    setEditorDocument(file.content);
     useDocumentStore.getState().setDocument(doc.path, doc.name, file.modifiedMs);
+    setEditorDocument(file.content);
     requestPreview(file.content, true);
     return true;
   } catch (error) {

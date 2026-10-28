@@ -1,0 +1,224 @@
+.mode-wysiwyg {
+  --editor-measure: 68ch;
+  --editor-font-size: 16px;
+  --editor-padding: 40px 32px 45vh;
+  --editor-line-height: 1.8;
+}
+
+.mode-wysiwyg .cm-gutters {
+  display: none;
+}
+
+.mode-wysiwyg .cm-activeLine {
+  background: transparent;
+}
+
+.mode-wysiwyg .cm-line {
+  padding: 0 2px;
+}
+
+/* 标题 */
+.mode-wysiwyg .cm-wysiwyg-h1,
+.mode-wysiwyg .cm-wysiwyg-h2,
+.mode-wysiwyg .cm-wysiwyg-h3,
+.mode-wysiwyg .cm-wysiwyg-h4,
+.mode-wysiwyg .cm-wysiwyg-h5,
+.mode-wysiwyg .cm-wysiwyg-h6 {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.35;
+}
+
+.mode-wysiwyg .cm-wysiwyg-h1 {
+  padding: 0.5em 0 0.32em;
+  font-size: 1.9em;
+  letter-spacing: 0.01em;
+}
+
+.mode-wysiwyg .cm-wysiwyg-h2 {
+  padding: 0.55em 0 0.25em;
+  font-size: 1.45em;
+}
+
+.mode-wysiwyg .cm-wysiwyg-h3 {
+  padding: 0.5em 0 0.2em;
+  font-size: 1.18em;
+}
+
+.mode-wysiwyg .cm-wysiwyg-h4 {
+  font-size: 1em;
+}
+
+.mode-wysiwyg .cm-wysiwyg-h5,
+.mode-wysiwyg .cm-wysiwyg-h6 {
+  font-size: 0.92em;
+  color: var(--text-muted);
+}
+
+/* 默认语法高亮会给标题加下划线；所见模式改用字号与字体区分层级。 */
+.mode-wysiwyg .cm-line span:not(.cm-wysiwyg-link):not(.cm-wysiwyg-strike) {
+  text-decoration-line: none;
+}
+
+/* 行内样式 */
+.mode-wysiwyg .cm-wysiwyg-strong {
+  font-weight: 700;
+}
+
+.mode-wysiwyg .cm-wysiwyg-em {
+  font-style: italic;
+}
+
+.mode-wysiwyg .cm-wysiwyg-strike {
+  color: var(--text-faint);
+  text-decoration: line-through;
+}
+
+.mode-wysiwyg .cm-wysiwyg-code {
+  padding: 0.08em 0.32em;
+  border-radius: var(--radius-sm);
+  background: var(--code-bg);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.mode-wysiwyg .cm-wysiwyg-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 0.18em;
+}
+
+/* 引用 */
+.mode-wysiwyg .cm-wysiwyg-quote {
+  padding-left: 14px;
+  border-left: 2px solid var(--line-strong);
+  color: var(--text-muted);
+}
+
+/* 列表 */
+.mode-wysiwyg .cm-wysiwyg-li {
+  padding-left: 4px;
+}
+
+.mode-wysiwyg .cm-wysiwyg-bullet {
+  display: inline-block;
+  width: 0.85em;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.mode-wysiwyg .cm-wysiwyg-ordered-mark {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.mode-wysiwyg .cm-wysiwyg-task {
+  width: 0.95em;
+  height: 0.95em;
+  margin: 0 0.42em 0 0;
+  vertical-align: -0.08em;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* 代码块 */
+.mode-wysiwyg .cm-wysiwyg-code-line {
+  padding: 0 14px;
+  background: var(--code-bg);
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  line-height: 1.7;
+}
+
+.mode-wysiwyg .cm-wysiwyg-code-first {
+  padding-top: 8px;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+.mode-wysiwyg .cm-wysiwyg-code-last {
+  padding-bottom: 8px;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+}
+
+.mode-wysiwyg .cm-wysiwyg-code-first.cm-wysiwyg-code-last {
+  border-radius: var(--radius-md);
+}
+
+/* 分隔线 */
+.mode-wysiwyg .cm-wysiwyg-hr {
+  margin: 14px 0;
+}
+
+.mode-wysiwyg .cm-wysiwyg-hr hr {
+  margin: 0;
+  border: none;
+  border-top: 1px solid var(--line-strong);
+}
+
+/* 图片 */
+.mode-wysiwyg .cm-wysiwyg-image {
+  display: inline-block;
+  max-width: 100%;
+  margin: 6px 0;
+  vertical-align: top;
+}
+
+.mode-wysiwyg .cm-wysiwyg-image img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 2px;
+}
+
+.mode-wysiwyg .cm-wysiwyg-image.broken,
+.mode-wysiwyg .cm-wysiwyg-image-fallback {
+  padding: 8px 12px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-md);
+  color: var(--text-faint);
+  font-size: 0.86em;
+}
+
+/* 公式 */
+.mode-wysiwyg .cm-wysiwyg-math-inline {
+  padding: 0 0.1em;
+}
+
+.mode-wysiwyg .cm-wysiwyg-math-block {
+  margin: 12px 0;
+  padding: 4px 0;
+  overflow-x: auto;
+}
+
+/* 表格 */
+.mode-wysiwyg .cm-wysiwyg-table {
+  margin: 12px 0;
+  overflow-x: auto;
+}
+
+.mode-wysiwyg .cm-wysiwyg-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92em;
+  line-height: 1.6;
+}
+
+.mode-wysiwyg .cm-wysiwyg-table th,
+.mode-wysiwyg .cm-wysiwyg-table td {
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.mode-wysiwyg .cm-wysiwyg-table th {
+  background: var(--bg-sunken);
+  font-weight: 600;
+}
+
+.mode-wysiwyg .cm-wysiwyg-table tbody tr:nth-child(even) {
+  background: var(--table-stripe);
+}

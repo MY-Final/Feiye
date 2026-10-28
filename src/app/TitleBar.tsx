@@ -1,0 +1,143 @@
+import { chooseWorkspace } from "../features/workspace/workspace-actions";
+import { useWindowControls } from "../features/window/use-window-controls";
+import { useDocumentStore } from "../stores/document";
+import { useUiStore } from "../stores/ui";
+import { useWorkspaceStore } from "../stores/workspace";
+
+function SidebarIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M2.5 4h11M2.5 8h7M2.5 12h11" />
+    </svg>
+  );
+}
+
+function FolderIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.2l1.2 1.4h5.6A1.5 1.5 0 0 1 14 5.9v5.6A1.5 1.5 0 0 1 12.5 13h-9A1.5 1.5 0 0 1 2 11.5z" />
+    </svg>
+  );
+}
+
+function MinimizeIcon() {
+  return (
+    <svg viewBox="0 0 12 12" aria-hidden="true">
+      <path d="M2 6h8" />
+    </svg>
+  );
+}
+
+function MaximizeIcon({ restored }: { restored: boolean }) {
+  return restored ? (
+    <svg viewBox="0 0 12 12" aria-hidden="true">
+      <path d="M4 2.5h5.5V8M2.5 4H8v5.5H2.5z" />
+    </svg>
+  ) : (
+    <svg viewBox="0 0 12 12" aria-hidden="true">
+      <path d="M2.5 2.5h7v7h-7z" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg viewBox="0 0 12 12" aria-hidden="true">
+      <path d="M3 3l6 6M9 3l-6 6" />
+    </svg>
+  );
+}
+
+export function TitleBar() {
+  const workspaceName = useWorkspaceStore((state) => state.name);
+  const root = useWorkspaceStore((state) => state.root);
+  const docName = useDocumentStore((state) => state.name);
+  const dirty = useDocumentStore((state) => state.dirty);
+  const sidebarVisible = useUiStore((state) => state.sidebarVisible);
+  const toggleSidebar = useUiStore((state) => state.toggleSidebar);
+  const controls = useWindowControls();
+
+  return (
+    <header className="titlebar" data-tauri-drag-region="deep">
+      <div className="titlebar-left">
+        <button
+          type="button"
+          className="icon-btn"
+          title={sidebarVisible ? "收起侧栏 (Ctrl+B)" : "展开侧栏 (Ctrl+B)"}
+          disabled={!root}
+          onClick={toggleSidebar}
+        >
+          <SidebarIcon />
+        </button>
+
+        <span className="brand-seal" aria-hidden="true">
+          扉
+        </span>
+        <span className="brand-name">扉页</span>
+
+        {workspaceName ? (
+          <>
+            <span className="brand-divider" aria-hidden="true">
+              /
+            </span>
+            <span className="workspace-name" title={root ?? undefined}>
+              {workspaceName}
+            </span>
+          </>
+        ) : null}
+
+        <button
+          type="button"
+          className="icon-btn titlebar-folder"
+          title="打开文件夹 (Ctrl+O)"
+          onClick={() => void chooseWorkspace()}
+        >
+          <FolderIcon />
+        </button>
+      </div>
+
+      <div className="titlebar-center">
+        {docName ? (
+          <span className="doc-title" title={docName}>
+            {docName}
+            {dirty ? <span className="dirty-dot" title="未保存" /> : null}
+          </span>
+        ) : null}
+      </div>
+
+      <div
+        className="window-controls"
+        data-tauri-drag-region="false"
+        hidden={!controls.available}
+      >
+        <button
+          type="button"
+          className="window-control"
+          title="最小化"
+          aria-label="最小化"
+          onClick={() => void controls.minimize()}
+        >
+          <MinimizeIcon />
+        </button>
+        <button
+          type="button"
+          className="window-control"
+          title={controls.maximized ? "还原" : "最大化"}
+          aria-label={controls.maximized ? "还原" : "最大化"}
+          onClick={() => void controls.toggleMaximize()}
+        >
+          <MaximizeIcon restored={controls.maximized} />
+        </button>
+        <button
+          type="button"
+          className="window-control close"
+          title="关闭"
+          aria-label="关闭"
+          onClick={() => void controls.requestClose()}
+        >
+          <CloseIcon />
+        </button>
+      </div>
+    </header>
+  );
+}

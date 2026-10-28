@@ -1,9 +1,11 @@
 mod commands;
 mod error;
 mod fs_path;
+mod images;
 mod watcher;
 
 use commands::workspace::WorkspaceState;
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -12,6 +14,11 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .manage(WorkspaceState::default())
+        // 工作区作用域的本地图片：只能读取当前工作区内白名单格式的图片。
+        .register_uri_scheme_protocol("feiyeimg", |ctx, request| {
+            let root = ctx.app_handle().state::<WorkspaceState>().root().ok();
+            images::respond(root, &request)
+        })
         .invoke_handler(tauri::generate_handler![
             commands::workspace::open_workspace,
             commands::workspace::current_workspace,

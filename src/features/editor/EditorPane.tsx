@@ -1,11 +1,14 @@
 import { useEffect, useRef } from "react";
 
 import { useDocumentStore } from "../../stores/document";
+import { useEditorStore } from "../../stores/editor";
 import { requestPreview } from "../preview/preview-controller";
+import { resolveEditorImage } from "./editor-images";
 import {
   getEditorText,
   mountEditor,
   refreshEditorLayout,
+  setEditorMode,
   unmountEditor,
 } from "./editor-bridge";
 import { saveActiveDocument } from "./save";
@@ -18,28 +21,43 @@ export function EditorPane() {
     const host = hostRef.current;
     if (!host) return;
 
-    mountEditor(host, {
-      onSave() {
-        void saveActiveDocument();
+    const mode = useDocumentStore.getState().viewMode;
+
+    mountEditor(
+      host,
+      {
+        onSave() {
+          void saveActiveDocument();
+        },
+        onChange() {
+          useDocumentStore.getState().markDirty(true);
+          if (useDocumentStore.getState().viewMode === "wysiwyg") return;
+
+          const text = getEditorText();
+          if (text !== null && useDocumentStore.getState().path) {
+            requestPreview(text);
+          }
+        },
+        onCursor(line, column) {
+          useDocumentStore.getState().setCursor(line, column);
+        },
+        onFormatState(state) {
+          useEditorStore.getState().setFormat(state);
+        },
       },
-      onChange() {
-        useDocumentStore.getState().markDirty(true);
-        const text = getEditorText();
-        if (text !== null && useDocumentStore.getState().path) {
-          requestPreview(text);
-        }
+      {
+        mode: mode === "wysiwyg" ? "wysiwyg" : "source",
+        resolveImage: resolveEditorImage,
       },
-      onCursor(line, column) {
-        useDocumentStore.getState().setCursor(line, column);
-      },
-    });
+    );
 
     return () => unmountEditor();
   }, []);
 
-  // 分栏切换后编辑器容器尺寸变化，需要重新测量。
+  // 视图切换：只重配置编辑器，不重建文档。
   useEffect(() => {
-    refreshEditorLayout();
+    setEditorMode(viewMode === "wysiwyg" ? "wysiwyg" : "source");
+    requestAnimationFrame(() => refreshEditorLayout());
   }, [viewMode]);
 
   return <div className="editor-host" ref={hostRef} />;
