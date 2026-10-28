@@ -1,3 +1,4 @@
 //! 文件、工作区与设置相关的 Tauri 命令。
-//!
-//! M0 阶段仅占位，具体命令随各里程碑逐个加入。
+
+pub mod file;
+pub mod workspace;

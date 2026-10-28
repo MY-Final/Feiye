@@ -1,14 +1,32 @@
 :root {
   --bg: #fbfaf8;
   --bg-elevated: #ffffff;
+  --bg-sunken: #f3f0eb;
   --text: #1c1b19;
   --text-muted: #6f6b64;
+  --text-faint: #a29c92;
   --line: #e6e2db;
+  --line-strong: #d5cfc5;
   --accent: #8a6a4f;
+  --accent-strong: #6f5138;
+  --accent-soft: rgba(138, 106, 79, 0.12);
+  --danger: #b4423a;
+  --danger-soft: #fdf0ee;
+  --danger-line: #f0cfca;
+  --code-bg: #f4f1ec;
+  --table-stripe: #faf8f5;
+  --editor-active-line: rgba(138, 106, 79, 0.05);
+  --editor-selection: rgba(138, 106, 79, 0.18);
+
+  --font-ui: system-ui, -apple-system, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-editor: system-ui, -apple-system, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-mono: "Cascadia Code", "SFMono-Regular", Consolas, "Liberation Mono",
+    monospace;
 
   color-scheme: light dark;
-  font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC",
-    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-family: var(--font-ui);
   font-size: 15px;
   line-height: 1.65;
   font-synthesis: none;
@@ -21,10 +39,22 @@
   :root {
     --bg: #1a1917;
     --bg-elevated: #211f1d;
+    --bg-sunken: #151413;
     --text: #ece8e1;
     --text-muted: #948e85;
+    --text-faint: #6b655d;
     --line: #33302c;
+    --line-strong: #45413b;
     --accent: #c0a183;
+    --accent-strong: #d8bda1;
+    --accent-soft: rgba(192, 161, 131, 0.14);
+    --danger: #e07a70;
+    --danger-soft: rgba(180, 66, 58, 0.15);
+    --danger-line: #5e3631;
+    --code-bg: #242220;
+    --table-stripe: #1f1d1b;
+    --editor-active-line: rgba(255, 255, 255, 0.03);
+    --editor-selection: rgba(192, 161, 131, 0.22);
   }
 }
 
@@ -45,10 +75,43 @@ body {
   background: var(--bg);
   color: var(--text);
   overflow: hidden;
-}
-
-/* 桌面应用里不出现文本选中和拖拽选中，编辑区之后会自行开启 */
-body {
   user-select: none;
   -webkit-user-select: none;
+}
+
+button,
+input {
+  font-family: inherit;
+  color: inherit;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+::selection {
+  background: var(--editor-selection);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: var(--line-strong);
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-faint);
+  background-clip: content-box;
 }

@@ -16,7 +16,9 @@
 
 ## 项目状态
 
-> **脚手架阶段（M0）。** Tauri 2 + React + TypeScript + Vite + Bun 已跑通，窗口可以启动；编辑器、工作区与文件读写尚未接入。
+> **第一个功能里程碑已完成。** 打开文件夹作为工作区、Markdown 文件树、CodeMirror 6 源码编辑、手动保存（Ctrl+S）、保存冲突检测，以及「源码 / 分栏 / 预览」三种视图已经可用，预览支持 GFM、KaTeX 与 Shiki。
+>
+> 下一步是类 Typora 的所见即所得模式（`viewMode` 已预留接缝）。自动保存、目录监听、Mermaid、大纲与滚动同步尚未实现。
 
 本文档同时作为项目的产品说明与技术方案，后续的实现、迭代和发布都以这里为准。
 
@@ -42,21 +44,28 @@
 
 ## 功能规划
 
-### MVP
+### 已完成（当前里程碑）
 
-- 工作区与文件树：打开一个文件夹作为工作区，浏览、新建、重命名、删除 `.md` 文件
-- 文件操作：新建、打开、保存、另存为、最近打开
-- CodeMirror 6 编辑器：Markdown 语法高亮、行号、查找替换、撤销/重做、常用快捷键
-- 实时预览：GFM（表格、任务列表、删除线、脚注）、标题锚点、目录
-- 代码块高亮：Shiki，支持常用语言与亮/暗主题
-- 数学公式：KaTeX，行内与块级
-- 图表：Mermaid，按需渲染
-- 大纲与滚动同步：编辑区与预览区双向定位
-- 主题：亮色 / 暗色 / 跟随系统
-- 设置：字体、字号、行宽、自动保存间隔、预览开关
-- 自动保存与恢复：防抖保存、关闭前落盘、异常退出后的恢复副本
-- 外部修改检测：文件被其他程序改动时提示，避免静默覆盖
-- 导出 HTML：生成可独立打开的 HTML 文件
+- 工作区与文件树：打开一个文件夹作为工作区；只展示目录与 `.md` / `.markdown` / `.mdx`；懒加载、右键新建/重命名/删除（进回收站）；记住上次工作区
+- 文件操作：打开、手动保存（Ctrl/Cmd+S）、保存冲突检测（拒绝静默覆盖，可重新加载）
+- CodeMirror 6 编辑器：Markdown 语法高亮、行号、查找替换、撤销/重做、换行与光标状态
+- 三种视图：源码 / 分栏 / 预览，选择会持久化
+- 实时预览：GFM（表格、任务列表、删除线）、Shiki 代码高亮、KaTeX 行内与块级公式
+- 安全渲染：先 `rehype-sanitize` 再渲染，原始 HTML 中的脚本与事件属性会被清除
+- 未保存守卫：切换文件、切换工作区、关闭窗口时提示保存 / 放弃 / 取消
+- 写入可靠性：临时文件 + 原子替换；外部修改以 mtime 检测
+- 主题：亮 / 暗跟随系统（`prefers-color-scheme`）
+
+### 计划中
+
+- 类 Typora 的所见即所得编辑模式
+- 标题锚点与目录、大纲与滚动同步
+- Mermaid 图表
+- 自动保存与异常恢复副本
+- 目录监听（保存之外的外部修改提示）、覆盖 / 另存副本
+- 设置界面：字体、字号、行宽、预览开关
+- 手动亮/暗主题切换
+- 另存为、最近打开、导出 HTML
 
 ### 后续
 
@@ -84,7 +93,7 @@
 | 前端框架 | **React + TypeScript** | 界面与交互 | 生态成熟，类型安全，便于长期维护 |
 | 构建工具 | **Vite** | 开发服务器、HMR、生产构建 | 启动快，配置简单 |
 | 包管理与脚本 | **Bun** | 依赖安装、脚本入口 | 安装与执行速度快；Rust 侧仍由 Tauri CLI 与 Cargo 负责 |
-| UI | **shadcn/ui + Tailwind CSS** | 组件与样式 | 组件代码归项目所有，样式可控，不绑定重型组件库 |
+| UI | **手写组件 + CSS 变量** | 组件与样式 | 当前用原生 CSS 设计令牌实现亮/暗主题；组件代码归项目所有，后续再评估 Tailwind / shadcn/ui |
 | 编辑器 | **CodeMirror 6** | 编辑核心、Markdown 语法、扩展 | 模块化、性能好、可深度定制 |
 | Markdown 解析 | **remark + rehype**（unified） | Markdown → AST → HTML/React | 插件生态完整，GFM、数学、清理都能组合 |
 | 代码高亮 | **Shiki** | 代码块高亮 | 与 VS Code 同源的语法和主题，输出稳定 |
@@ -96,7 +105,7 @@
 ### 依赖说明
 
 - **Bun 不是 Rust 构建器**：它负责 `bun install`、前端脚本和统一的命令入口；Tauri 的 Rust 编译与安装包生成仍由 `tauri` CLI / Cargo 完成。
-- **shadcn/ui 不是运行时组件库**：组件以源码形式放进项目，基于 Radix UI 与 Tailwind，按需修改。
+- **UI 层保持轻量**：不使用重型组件库；模态框、右键菜单、Toast 都是项目内的小组件，样式由 `src/styles/global.css` 的 CSS 变量统一控制。
 - **Markdown 渲染不直接拼接 HTML**：统一走 `remark → rehype → sanitize` 管线，渲染结果可审计、可清理。
 
 ## 架构设计
@@ -113,8 +122,8 @@
 │  CodeMirror 6  ←── 编辑状态的唯一来源             │
 │       │                                          │
 │       ├── 预览管线：remark → rehype → sanitize    │
-│       ├── Zustand：工作区 / UI / 设置             │
-│       └── shadcn/ui + Tailwind                    │
+│       ├── Zustand：工作区 / 文档 / UI             │
+│       └── 自绘组件 + CSS 设计令牌                 │
 └──────────────────────────────────────────────────┘
 ```
 
@@ -127,10 +136,10 @@
    CodeMirror 事务更新文档 → 防抖 150–250ms → 交给预览管线 → 生成经过清理的 HTML/React 节点 → 更新预览。
 
 3. **保存**
-   显式保存或自动保存 → Rust 侧原子写入 → 更新文件的修改时间与内容哈希 → 刷新界面状态。
+   Ctrl/Cmd+S 或保存按钮 → 从 CodeMirror 取全文 → Rust 携带打开/上次保存时的 mtime 原子写入 → 成功后更新状态栏；不自动保存。
 
 4. **外部修改**
-   目录监听或窗口重新获得焦点时检查 mtime/哈希 → 若与内存中的版本不一致 → 弹出冲突提示：重新加载 / 覆盖 / 另存副本。
+   保存时若磁盘 mtime 与记录不一致 → 拒绝写入 → 提示「文件已被其他程序修改」，可重新加载磁盘内容或取消。目录监听的主动提示留到后续。
 
 ### 关键设计
 
@@ -164,39 +173,42 @@
 ### 数据可靠性
 
 - 保存采用「临时文件 + 原子替换」，降低写入中断导致的文件损坏。
-- 自动保存采用防抖，并在窗口失焦、切换文档、关闭窗口前强制落盘。
-- 恢复副本存放在应用数据目录，不污染用户的工作区。
-- 外部修改检测基于 mtime + 内容哈希，冲突时绝不静默覆盖。
+- 当前采用手动保存；切换文档、切换工作区、关闭窗口前都会检查未保存内容并提示。
+- 自动保存与恢复副本属于后续计划；将来会采用防抖写入，并把恢复副本放在应用数据目录，不污染工作区。
+- 外部修改检测基于文件 mtime，冲突时拒绝写入，绝不静默覆盖。
 - 任何删除操作都需要确认，优先提供「移到回收站」而不是永久删除。
 
 ## 目录结构
 
 ```
 Feiye/
-├─ src/                      # React 前端
-│  ├─ app/                   # 应用壳、布局、路由
-│  ├─ components/            # 通用 UI 组件
+├─ src/                          # React 前端
+│  ├─ app/                       # 应用壳：标题栏、侧栏、编辑/预览分栏、状态栏
+│  ├─ components/                # Dialog / Menu / Toast
 │  ├─ features/
-│  │  ├─ editor/             # CodeMirror 配置、扩展、主题
-│  │  ├─ preview/            # Markdown 渲染管线
-│  │  ├─ workspace/          # 文件树、标签、最近打开
-│  │  └─ settings/           # 设置界面
-│  ├─ stores/                # Zustand stores
-│  ├─ lib/                   # Tauri bridge、工具函数
-│  ├─ styles/                # Tailwind 与全局样式
+│  │  ├─ editor/                 # CodeMirror 视图、桥接、保存与未保存守卫
+│  │  ├─ preview/                # Worker 渲染管线、预览面板与样式
+│  │  ├─ workspace/              # 文件树与打开/新建/重命名/删除动作
+│  │  └─ settings/               # 设置界面（预留）
+│  ├─ stores/                    # Zustand：workspace / document / ui
+│  ├─ lib/                       # Tauri invoke 封装、路径工具
+│  ├─ styles/                    # 全局样式与设计令牌
 │  ├─ main.tsx
 │  └─ vite-env.d.ts
-├─ src-tauri/                # Rust 桌面壳
+├─ src-tauri/                    # Rust 桌面壳
 │  ├─ src/
-│  │  ├─ commands/           # 文件、工作区、设置相关命令
-│  │  ├─ watcher.rs          # 目录监听与外部修改检测
+│  │  ├─ commands/
+│  │  │  ├─ workspace.rs         # open / current / close、list_dir
+│  │  │  └─ file.rs              # read / write / create / rename / delete
+│  │  ├─ fs_path.rs              # 相对路径校验与工作区包含检查
+│  │  ├─ error.rs                # AppError → { code, message }
 │  │  ├─ lib.rs
 │  │  └─ main.rs
-│  ├─ capabilities/          # Tauri 权限配置
+│  ├─ capabilities/              # Tauri 权限配置（不含 fs 插件）
+│  ├─ .cargo/config.toml         # rsproxy 镜像（可删除恢复默认源）
 │  ├─ icons/
 │  └─ tauri.conf.json
-├─ public/                   # 静态资源
-├─ docs/                     # 设计与使用文档
+├─ public/                       # 静态资源
 ├─ index.html
 ├─ package.json
 ├─ vite.config.ts
@@ -232,10 +244,10 @@ bun run tauri build   # 打包桌面安装包
 
 | 阶段 | 目标 |
 | --- | --- |
-| M0 · 脚手架 | Tauri 2 + React + Vite + Bun 跑通；窗口、文件打开/保存 |
-| M1 · 编辑 | CodeMirror 6、Markdown 语法、实时预览、滚动同步 |
-| M2 · 渲染 | Shiki、KaTeX、Mermaid、HTML 清理与安全策略 |
-| M3 · 工作区 | 文件树、标签、自动保存、外部修改检测、恢复副本 |
+| M0 · 脚手架 | ✅ Tauri 2 + React + Vite + Bun 跑通；窗口、文件打开/保存 |
+| M1 · 编辑 | ✅ CodeMirror 6、Markdown 语法、实时预览；滚动同步待做 |
+| M2 · 渲染 | ✅ Shiki、KaTeX、HTML 清理与安全策略；Mermaid 待做 |
+| M3 · 工作区 | 🚧 文件树、保存冲突已完成；标签、自动保存、目录监听、恢复副本待做 |
 | M4 · 发布 | 主题、设置、HTML 导出、安装包、自动更新 |
 | M5 · 增强 | 全文搜索、历史快照、PDF 导出、命令面板 |
 

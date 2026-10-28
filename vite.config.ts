@@ -8,6 +8,12 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(() => ({
   plugins: [react()],
 
+  resolve: {
+    // 预览管线在 Web Worker 中运行。hast-util-from-html-isomorphic 的 "worker"
+    // 导出是不依赖 DOMParser/document 的实现，必须优先命中，否则 Worker 会崩溃。
+    conditions: ["worker", "module", "browser", "development|production"],
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors
