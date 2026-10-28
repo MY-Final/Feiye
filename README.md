@@ -16,7 +16,7 @@
 
 ## 项目状态
 
-> **设计阶段。** 仓库目前只有这份项目说明，代码尚未初始化。
+> **脚手架阶段（M0）。** Tauri 2 + React + TypeScript + Vite + Bun 已跑通，窗口可以启动；编辑器、工作区与文件读写尚未接入。
 
 本文档同时作为项目的产品说明与技术方案，后续的实现、迭代和发布都以这里为准。
 
@@ -169,7 +169,7 @@
 - 外部修改检测基于 mtime + 内容哈希，冲突时绝不静默覆盖。
 - 任何删除操作都需要确认，优先提供「移到回收站」而不是永久删除。
 
-## 目录结构（规划）
+## 目录结构
 
 ```
 Feiye/
@@ -183,15 +183,21 @@ Feiye/
 │  │  └─ settings/           # 设置界面
 │  ├─ stores/                # Zustand stores
 │  ├─ lib/                   # Tauri bridge、工具函数
-│  └─ styles/                # Tailwind 与全局样式
+│  ├─ styles/                # Tailwind 与全局样式
+│  ├─ main.tsx
+│  └─ vite-env.d.ts
 ├─ src-tauri/                # Rust 桌面壳
 │  ├─ src/
 │  │  ├─ commands/           # 文件、工作区、设置相关命令
 │  │  ├─ watcher.rs          # 目录监听与外部修改检测
+│  │  ├─ lib.rs
 │  │  └─ main.rs
 │  ├─ capabilities/          # Tauri 权限配置
+│  ├─ icons/
 │  └─ tauri.conf.json
+├─ public/                   # 静态资源
 ├─ docs/                     # 设计与使用文档
+├─ index.html
 ├─ package.json
 ├─ vite.config.ts
 ├─ tsconfig.json
@@ -209,9 +215,7 @@ Feiye/
   - macOS：Xcode Command Line Tools
   - Linux：WebKitGTK、libappindicator 等，参见 Tauri 官方文档
 
-### 计划中的命令
-
-代码脚手架初始化后，使用以下命令：
+### 命令
 
 ```bash
 bun install
@@ -220,7 +224,9 @@ bun run build         # 构建前端
 bun run tauri build   # 打包桌面安装包
 ```
 
-> 当前仓库尚未初始化代码，以上命令是约定的开发入口，不是现在就能执行的脚本。
+> 首次 `bun run tauri dev` 会编译 Rust 依赖，耗时较长；之后增量编译会快很多。
+
+> 仓库内的 `src-tauri/.cargo/config.toml` 把 crates.io 指向了 rsproxy 镜像，用于在无法直连 crates.io 的网络下构建。如果你的网络可以直接访问 crates.io，删除该文件即可恢复默认源。
 
 ## Roadmap
 

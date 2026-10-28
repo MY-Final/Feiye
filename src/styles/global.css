@@ -1,0 +1,54 @@
+:root {
+  --bg: #fbfaf8;
+  --bg-elevated: #ffffff;
+  --text: #1c1b19;
+  --text-muted: #6f6b64;
+  --line: #e6e2db;
+  --accent: #8a6a4f;
+
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-size: 15px;
+  line-height: 1.65;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1917;
+    --bg-elevated: #211f1d;
+    --text: #ece8e1;
+    --text-muted: #948e85;
+    --line: #33302c;
+    --accent: #c0a183;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+}
+
+/* 桌面应用里不出现文本选中和拖拽选中，编辑区之后会自行开启 */
+body {
+  user-select: none;
+  -webkit-user-select: none;
+}

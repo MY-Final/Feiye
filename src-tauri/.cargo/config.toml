@@ -1,0 +1,13 @@
+# crates.io 在当前网络环境下无法直连，这里使用 rsproxy 镜像。
+# 如果所在网络可以直连 crates.io，删除本文件即可恢复默认源。
+[source.crates-io]
+replace-with = "rsproxy-sparse"
+
+[source.rsproxy-sparse]
+registry = "sparse+https://rsproxy.cn/index/"
+
+[registries.rsproxy]
+index = "sparse+https://rsproxy.cn/index/"
+
+[net]
+git-fetch-with-cli = true

@@ -41,4 +41,9 @@ desktop.ini
 # 临时文件
 *.swp
 *.swo
+*.sw?
 *~
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
