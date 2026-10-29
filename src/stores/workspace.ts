@@ -18,9 +18,11 @@ interface WorkspaceStore {
   setWorkspace(info: WorkspaceInfo | null): void;
   loadDir(relPath: string): Promise<void>;
   refreshDir(relPath: string): Promise<void>;
+  refreshTree(): Promise<void>;
   toggleDir(relPath: string): Promise<void>;
   invalidateDir(relPath: string): void;
   expandDir(relPath: string): Promise<void>;
+  collapseAll(): void;
 }
 
 const EMPTY_MAPS = {
@@ -65,6 +67,20 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       return { children };
     });
     await get().loadDir(relPath);
+  },
+
+  /** 重新读取根目录与所有已展开的目录。 */
+  async refreshTree() {
+    const { expanded, children } = get();
+    const dirs = [""];
+    for (const [relPath, open] of Object.entries(expanded)) {
+      if (open && children[relPath]) dirs.push(relPath);
+    }
+    await Promise.all(dirs.map((relPath) => get().refreshDir(relPath)));
+  },
+
+  collapseAll() {
+    set({ expanded: {} });
   },
 
   async toggleDir(relPath) {

@@ -1,4 +1,4 @@
-import { useState, type MouseEvent } from "react";
+import { useState, type CSSProperties, type MouseEvent } from "react";
 
 import { ContextMenu, type MenuAction } from "../../components/Menu";
 import { OutlinePanel } from "../outline/OutlinePanel";
@@ -8,6 +8,7 @@ import { useDocumentStore } from "../../stores/document";
 import { useOutlineStore } from "../../stores/outline";
 import { useWorkspaceStore } from "../../stores/workspace";
 import {
+  createFolderIn,
   createMarkdownFile,
   deleteEntry,
   openFile,
@@ -34,6 +35,12 @@ function buildMenuActions(entry: Entry | null): MenuAction[] {
         void createMarkdownFile(parent);
       },
     },
+    {
+      label: "新建文件夹",
+      onSelect: () => {
+        void createFolderIn(parent);
+      },
+    },
   ];
 
   if (entry) {
@@ -55,6 +62,76 @@ function buildMenuActions(entry: Entry | null): MenuAction[] {
   return actions;
 }
 
+function ChevronIcon({ open }: { open: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      className={`tree-chevron${open ? " open" : ""}`}
+      aria-hidden="true"
+    >
+      <path d="M6 3.6 10.4 8 6 12.4" />
+    </svg>
+  );
+}
+
+function FolderIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path
+        className="folder-shape"
+        d="M13.3 13.3a1.3 1.3 0 0 0 1.3-1.3V5.3a1.3 1.3 0 0 0-1.3-1.3H8.1a1.3 1.3 0 0 1-1.1-.6L6.4 2.6A1.3 1.3 0 0 0 5.3 2H2.7A1.3 1.3 0 0 0 1.4 3.3v8.7a1.3 1.3 0 0 0 1.3 1.3Z"
+      />
+    </svg>
+  );
+}
+
+function MarkdownIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <rect className="md-badge" x="1" y="2.6" width="14" height="10.8" rx="2" />
+      <path className="md-mark" d="M3.7 10.2V5.9l1.8 2.2 1.8-2.2v4.3" />
+      <path className="md-mark" d="M11.2 5.9v4m0 0L9.9 8.6m1.3 1.3 1.3-1.3" />
+    </svg>
+  );
+}
+
+function NewFileIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M9.2 2.5H4.6c-.7 0-1.2.5-1.2 1.2v8.6c0 .7.5 1.2 1.2 1.2h6.8c.7 0 1.2-.5 1.2-1.2V5.9L9.2 2.5z" />
+      <path d="M9.2 2.7v3.2h3.3" />
+      <path d="M8 8.3v3.2M6.4 9.9h3.2" />
+    </svg>
+  );
+}
+
+function NewFolderIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M1.7 4.3c0-.6.5-1.1 1.1-1.1h3l1.2 1.4h6.2c.6 0 1.1.5 1.1 1.1v5.9c0 .6-.5 1.1-1.1 1.1H2.8c-.6 0-1.1-.5-1.1-1.1V4.3z" />
+      <path d="M8 7v3.4M6.3 8.7h3.4" />
+    </svg>
+  );
+}
+
+function RefreshIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M13.4 3.2v3.6H9.8" />
+      <path d="M12.8 9.2a5 5 0 1 1-1.4-4.8" />
+    </svg>
+  );
+}
+
+function CollapseIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M4.8 6.4 8 3.2l3.2 3.2" />
+      <path d="M4.8 9.6 8 12.8l3.2-3.2" />
+    </svg>
+  );
+}
+
 interface TreeNodeProps {
   entry: Entry;
   depth: number;
@@ -72,7 +149,7 @@ function TreeNode({ entry, depth, onMenu }: TreeNodeProps) {
   const active = useDocumentStore((state) => state.path === entry.relPath);
   const toggleDir = useWorkspaceStore((state) => state.toggleDir);
 
-  const indent = 8 + depth * 14;
+  const indent = 4 + depth * 14;
 
   return (
     <div className="tree-node">
@@ -90,16 +167,22 @@ function TreeNode({ entry, depth, onMenu }: TreeNodeProps) {
         }}
         onContextMenu={(event) => onMenu(event, entry)}
       >
-        <span className={`tree-caret${entry.isDir ? " visible" : ""}`}>
-          {entry.isDir ? (expanded ? "▾" : "▸") : ""}
+        <span className="tree-caret">
+          {entry.isDir ? <ChevronIcon open={expanded} /> : null}
+        </span>
+        <span className={`tree-icon ${entry.isDir ? "folder" : "markdown"}`}>
+          {entry.isDir ? <FolderIcon /> : <MarkdownIcon />}
         </span>
         <span className="tree-label">{entry.name}</span>
       </button>
 
       {entry.isDir && expanded ? (
-        <div className="tree-children">
+        <div
+          className="tree-children"
+          style={{ "--guide-left": `${indent + 8}px` } as CSSProperties}
+        >
           {!children && loading ? (
-            <div className="tree-hint" style={{ paddingLeft: indent + 14 }}>
+            <div className="tree-hint" style={{ paddingLeft: indent + 36 }}>
               加载中…
             </div>
           ) : null}
@@ -112,7 +195,7 @@ function TreeNode({ entry, depth, onMenu }: TreeNodeProps) {
             />
           ))}
           {children && children.length === 0 ? (
-            <div className="tree-hint" style={{ paddingLeft: indent + 14 }}>
+            <div className="tree-hint" style={{ paddingLeft: indent + 36 }}>
               空
             </div>
           ) : null}
@@ -127,13 +210,26 @@ type SidebarTab = "files" | "outline";
 export function WorkspaceSidebar() {
   const children = useWorkspaceStore((state) => state.children[""]);
   const rootLoading = useWorkspaceStore((state) => Boolean(state.loading[""]));
+  const refreshTree = useWorkspaceStore((state) => state.refreshTree);
+  const collapseAll = useWorkspaceStore((state) => state.collapseAll);
   const headingCount = useOutlineStore((state) => state.headings.length);
   const [tab, setTab] = useState<SidebarTab>("files");
   const [menu, setMenu] = useState<MenuState | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const openMenu = (event: MouseEvent, entry: Entry | null) => {
     event.preventDefault();
     setMenu({ x: event.clientX, y: event.clientY, entry });
+  };
+
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await refreshTree();
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   return (
@@ -170,16 +266,51 @@ export function WorkspaceSidebar() {
         </div>
 
         {tab === "files" ? (
-          <button
-            type="button"
-            className="icon-btn"
-            title="新建 Markdown"
-            onClick={() => {
-              void createMarkdownFile("");
-            }}
-          >
-            ＋
-          </button>
+          <div className="sidebar-actions">
+            <button
+              type="button"
+              className="sidebar-action"
+              title="新建 Markdown"
+              aria-label="新建 Markdown"
+              onClick={() => {
+                void createMarkdownFile("");
+              }}
+            >
+              <NewFileIcon />
+            </button>
+            <button
+              type="button"
+              className="sidebar-action"
+              title="新建文件夹"
+              aria-label="新建文件夹"
+              onClick={() => {
+                void createFolderIn("");
+              }}
+            >
+              <NewFolderIcon />
+            </button>
+            <button
+              type="button"
+              className="sidebar-action"
+              title="刷新文件树"
+              aria-label="刷新文件树"
+              disabled={refreshing}
+              onClick={() => {
+                void handleRefresh();
+              }}
+            >
+              <RefreshIcon />
+            </button>
+            <button
+              type="button"
+              className="sidebar-action"
+              title="全部折叠"
+              aria-label="全部折叠"
+              onClick={() => collapseAll()}
+            >
+              <CollapseIcon />
+            </button>
+          </div>
         ) : null}
       </div>
 

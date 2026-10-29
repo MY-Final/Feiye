@@ -1,6 +1,7 @@
 import { isWithin, parentRel } from "../../lib/paths";
 import {
   createFile as apiCreateFile,
+  createFolder as apiCreateFolder,
   deleteEntry as apiDeleteEntry,
   describeError,
   getSetting,
@@ -123,6 +124,36 @@ export async function createMarkdownFile(parent: string): Promise<void> {
     await openFile(created);
   } catch (error) {
     toastError("新建文件失败", error);
+  }
+}
+
+export async function createFolderIn(parent: string): Promise<void> {
+  const name = await useUiStore.getState().askInput({
+    title: "新建文件夹",
+    label: "文件夹名称",
+    initialValue: "新建文件夹",
+    confirmLabel: "创建",
+    validate: (value) => {
+      const trimmed = value.trim();
+      if (!trimmed) return "名称不能为空";
+      if (trimmed.includes("/") || trimmed.includes("\\")) {
+        return "名称不能包含路径分隔符";
+      }
+      return null;
+    },
+  });
+
+  if (!name) return;
+
+  try {
+    const created = await apiCreateFolder(parent, name.trim());
+    const workspace = useWorkspaceStore.getState();
+    await workspace.refreshDir(parent);
+    if (parent) await workspace.expandDir(parent);
+    // 新目录默认展开，方便立刻往里新建笔记。
+    await workspace.expandDir(created.relPath);
+  } catch (error) {
+    toastError("新建文件夹失败", error);
   }
 }
 

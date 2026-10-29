@@ -142,6 +142,32 @@ fn create_in(root: &Path, parent_rel: &str, name: &str) -> Result<Entry, AppErro
     })
 }
 
+fn create_folder_in(root: &Path, parent_rel: &str, name: &str) -> Result<Entry, AppError> {
+    fs_path::validate_name(name)?;
+
+    let parent = fs_path::resolve_in_workspace(root, parent_rel)?;
+    if !parent.is_dir() {
+        return Err(AppError::NotFound(format!("目录不存在：{parent_rel}")));
+    }
+
+    let clean_parent = fs_path::normalize_rel(parent_rel)?;
+    let path = parent.join(name);
+    if path.exists() {
+        return Err(AppError::AlreadyExists(fs_path::join_rel(
+            &clean_parent,
+            name,
+        )));
+    }
+
+    fs::create_dir(&path)?;
+
+    Ok(Entry {
+        name: name.to_string(),
+        rel_path: fs_path::join_rel(&clean_parent, name),
+        is_dir: true,
+    })
+}
+
 fn rename_in(root: &Path, rel: &str, new_name: &str) -> Result<Entry, AppError> {
     let clean = fs_path::normalize_rel(rel)?;
     if clean.is_empty() {
@@ -234,6 +260,16 @@ pub fn create_file(
 }
 
 #[tauri::command]
+pub fn create_folder(
+    parent_rel_path: String,
+    name: String,
+    state: State<'_, WorkspaceState>,
+) -> Result<Entry, AppError> {
+    let root = state.root()?;
+    create_folder_in(&root, &parent_rel_path, &name)
+}
+
+#[tauri::command]
 pub fn rename_entry(
     rel_path: String,
     new_name: String,
@@ -313,6 +349,30 @@ mod tests {
         ));
         assert!(create_in(&root, "", "a.txt").is_err());
         assert!(create_in(&root, "", "../escape.md").is_err());
+    }
+
+    #[test]
+    fn creates_folders_and_files_inside_them() {
+        let (_temp, root) = workspace();
+        let folder = create_folder_in(&root, "", "01_笔记").unwrap();
+        assert!(folder.is_dir);
+        assert_eq!(folder.rel_path, "01_笔记");
+        assert!(root.join("01_笔记").is_dir());
+
+        let nested = create_folder_in(&root, "01_笔记", "01_子目录").unwrap();
+        assert_eq!(nested.rel_path, "01_笔记/01_子目录");
+
+        let file = create_in(&root, "01_笔记/01_子目录", "a.md").unwrap();
+        assert_eq!(file.rel_path, "01_笔记/01_子目录/a.md");
+        assert!(root.join("01_笔记/01_子目录/a.md").is_file());
+
+        assert!(matches!(
+            create_folder_in(&root, "", "01_笔记"),
+            Err(AppError::AlreadyExists(_))
+        ));
+        assert!(create_folder_in(&root, "", "bad/name").is_err());
+        assert!(create_folder_in(&root, "", "..").is_err());
+        assert!(create_folder_in(&root, "missing", "x").is_err());
     }
 
     #[test]

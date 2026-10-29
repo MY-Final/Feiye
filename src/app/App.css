@@ -768,6 +768,50 @@ body.is-resizing-split * {
   text-align: center;
 }
 
+.sidebar-actions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  margin-right: -2px;
+}
+
+.sidebar-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.sidebar-action svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.15;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sidebar-action:hover:not(:disabled) {
+  background: var(--bg-sunken);
+  color: var(--text);
+}
+
+.sidebar-action:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .outline-list {
   flex: 1;
   overflow-y: auto;
@@ -829,7 +873,7 @@ body.is-resizing-split * {
 .tree {
   flex: 1;
   overflow-y: auto;
-  padding: 8px 8px 20px;
+  padding: 6px 6px 24px;
 }
 
 .tree-node {
@@ -839,14 +883,16 @@ body.is-resizing-split * {
 .tree-row {
   display: flex;
   align-items: center;
+  gap: 6px;
   width: 100%;
-  height: 27px;
-  padding-right: 10px;
+  height: 24px;
+  padding-right: 8px;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--text);
+  color: var(--text-muted);
   font-size: 12.5px;
+  line-height: 24px;
   text-align: left;
   cursor: pointer;
   transition:
@@ -856,26 +902,99 @@ body.is-resizing-split * {
 
 .tree-row:hover {
   background: var(--bg-sunken);
+  color: var(--text);
 }
 
 .tree-row.active {
   background: var(--accent-soft);
-  box-shadow: inset 2px 0 0 var(--accent);
   color: var(--text);
-  font-weight: 600;
 }
 
 .tree-caret {
-  width: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
   flex: none;
+}
+
+.tree-chevron {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
   color: var(--text-faint);
-  font-size: 9px;
+  transition: transform 0.12s ease;
+}
+
+.tree-chevron.open {
+  transform: rotate(90deg);
+}
+
+.tree-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.tree-icon svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.tree-icon.folder {
+  color: var(--text-faint);
+}
+
+.tree-icon.folder .folder-shape {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.05;
+  stroke-linejoin: round;
+}
+
+.tree-icon.markdown .md-badge {
+  fill: var(--accent);
+  stroke: none;
+}
+
+.tree-icon.markdown .md-mark {
+  fill: none;
+  stroke: var(--bg-elevated);
+  stroke-width: 1.15;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .tree-label {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.tree-children {
+  position: relative;
+}
+
+.tree-children::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--guide-left, 12px);
+  width: 1px;
+  background: var(--line);
+  pointer-events: none;
 }
 
 .tree-hint {

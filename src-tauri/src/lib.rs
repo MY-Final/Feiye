@@ -28,6 +28,7 @@ pub fn run() {
             commands::file::read_file,
             commands::file::write_file,
             commands::file::create_file,
+            commands::file::create_folder,
             commands::file::rename_entry,
             commands::file::delete_entry,
             commands::recovery::save_recovery,

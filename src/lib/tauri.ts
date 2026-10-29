@@ -106,6 +106,13 @@ export function createFile(
   return invoke<Entry>("create_file", { parentRelPath, name });
 }
 
+export function createFolder(
+  parentRelPath: string,
+  name: string,
+): Promise<Entry> {
+  return invoke<Entry>("create_folder", { parentRelPath, name });
+}
+
 export function renameEntry(
   relPath: string,
   newName: string,
