@@ -44,7 +44,7 @@ export const PREFERENCE_LIMITS = {
   fontSize: { min: 13, max: 20, step: 1 },
   lineHeight: { min: 1.4, max: 2.2, step: 0.05 },
   editorWidth: { min: 600, max: 1200, step: 20 },
-  autoSaveDelay: { min: 500, max: 10000 },
+  autoSaveDelay: { min: 0, max: 10000 },
   recoveryInterval: { min: 1000, max: 30000 },
 } as const;
 

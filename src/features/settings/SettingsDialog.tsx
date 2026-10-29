@@ -38,6 +38,7 @@ const FONT_FAMILY_OPTIONS: { value: FontFamily; label: string }[] = [
 ];
 
 const AUTO_SAVE_OPTIONS = [
+  { value: 0, label: "关闭（手动保存）" },
   { value: 1000, label: "1 秒" },
   { value: 1800, label: "1.8 秒（默认）" },
   { value: 3000, label: "3 秒" },
@@ -301,7 +302,7 @@ export function SettingsDialog() {
 
                 <Row
                   label="自动保存"
-                  hint="停止输入后等待多久写入源文件"
+                  hint="停止输入后等待多久写入源文件；关闭后仍保留崩溃恢复副本"
                 >
                   <select
                     className="settings-select"

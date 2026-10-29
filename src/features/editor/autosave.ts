@@ -35,10 +35,14 @@ function scheduleAutoSave(): void {
   const doc = useDocumentStore.getState();
   if (!doc.path || !doc.dirty || doc.saveBlocked) return;
 
+  const delay = useSettingsStore.getState().preferences.autoSaveDelay;
+  // 0 表示关闭自动保存，仅保留恢复副本与手动保存。
+  if (delay <= 0) return;
+
   autoSaveTimer = window.setTimeout(() => {
     autoSaveTimer = null;
     void flushAutoSave();
-  }, useSettingsStore.getState().preferences.autoSaveDelay);
+  }, delay);
 }
 
 function scheduleRecovery(
