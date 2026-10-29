@@ -289,16 +289,18 @@ export function toggleFencedCode(view: EditorView): boolean {
   const fence = findAncestor(state, head, "FencedCode");
 
   if (fence) {
-    const openLine = state.doc.lineAt(fence.from);
-    const closeLine = state.doc.lineAt(Math.max(fence.from, fence.to - 1));
+    const marks = fenceMarks(fence);
+    if (!marks) return false;
     const changes: ChangeSpec[] = [];
-    if (closeLine.number > openLine.number) {
+    if (marks.closing) {
+      const closeLine = state.doc.lineAt(marks.closing.from);
       changes.push({
         from: closeLine.from,
         to: Math.min(state.doc.length, closeLine.to + 1),
         insert: "",
       });
     }
+    const openLine = state.doc.lineAt(marks.opening.from);
     changes.push({
       from: openLine.from,
       to: Math.min(state.doc.length, openLine.to + 1),
@@ -333,6 +335,128 @@ export function toggleFencedCode(view: EditorView): boolean {
     changes,
     selection: EditorSelection.range(insertAt - selected.length, insertAt),
   });
+}
+
+function fenceMarks(
+  fence: SyntaxNode,
+): { opening: SyntaxNode; closing: SyntaxNode | null } | null {
+  const marks = fence.getChildren("CodeMark");
+  if (marks.length === 0) return null;
+  return { opening: marks[0], closing: marks.length > 1 ? marks[1] : null };
+}
+
+/** 把光标移到代码块之后的空段落；没有闭合围栏时先补上。 */
+export function exitCodeBlock(view: EditorView): boolean {
+  const { state } = view;
+  const fence = findAncestor(
+    state,
+    state.selection.main.head,
+    "FencedCode",
+  );
+  if (!fence) return false;
+  const marks = fenceMarks(fence);
+  if (!marks) return false;
+
+  if (marks.closing) {
+    const closeLine = state.doc.lineAt(marks.closing.from);
+
+    if (closeLine.number < state.doc.lines) {
+      const next = state.doc.line(closeLine.number + 1);
+      if (next.text.trim() === "") {
+        view.dispatch({
+          selection: EditorSelection.cursor(next.from),
+          scrollIntoView: true,
+        });
+        view.focus();
+        return true;
+      }
+    }
+
+    const atEnd = closeLine.to === state.doc.length;
+    const insert = atEnd ? "\n\n" : "\n";
+    view.dispatch({
+      changes: { from: closeLine.to, insert },
+      selection: EditorSelection.cursor(closeLine.to + insert.length),
+      scrollIntoView: true,
+      userEvent: "input.format",
+    });
+    view.focus();
+    return true;
+  }
+
+  // 没有闭合围栏时，块会一直延伸到文末；在最后一行代码后补围栏，
+  // 并去掉块尾多余的空行，避免退出后留下一个很高的空白代码块。
+  const openingLine = state.doc.lineAt(marks.opening.from);
+  let contentEnd = openingLine.to;
+  for (let number = state.doc.lines; number > openingLine.number; number--) {
+    const line = state.doc.line(number);
+    if (line.text.trim() !== "") {
+      contentEnd = line.to;
+      break;
+    }
+  }
+
+  const fenceText = state.doc.sliceString(marks.opening.from, marks.opening.to);
+  const insert = `\n${fenceText}\n\n`;
+  view.dispatch({
+    changes: { from: contentEnd, to: state.doc.length, insert },
+    selection: EditorSelection.cursor(contentEnd + insert.length),
+    scrollIntoView: true,
+    userEvent: "input.format",
+  });
+  view.focus();
+  return true;
+}
+
+/**
+ * 代码块里按回车：只有光标位于块尾的空行时才退出，
+ * 普通代码行仍然插入换行。
+ */
+export function handleCodeBlockEnter(view: EditorView): boolean {
+  const { state } = view;
+  const selection = state.selection.main;
+  if (!selection.empty) return false;
+
+  const fence = findAncestor(state, selection.head, "FencedCode");
+  if (!fence) return false;
+
+  const line = state.doc.lineAt(selection.head);
+  if (line.text.trim() !== "") return false;
+
+  const marks = fenceMarks(fence);
+  if (!marks) return false;
+
+  if (marks.closing) {
+    const closeLine = state.doc.lineAt(marks.closing.from);
+    // 最后一行代码之后的空行，或闭合围栏所在行（已被隐藏）。
+    if (line.number < closeLine.number - 1) return false;
+    return exitCodeBlock(view);
+  }
+
+  // 未闭合的围栏只在文档最后一行收尾，避免中断代码中间的换行。
+  if (line.number !== state.doc.lines) return false;
+  return exitCodeBlock(view);
+}
+
+/** 把焦点移到当前代码块底部的语言输入框，并选中已有语言。 */
+export function focusCodeLanguage(view: EditorView): boolean {
+  const { state } = view;
+  const fence = findAncestor(state, state.selection.main.head, "FencedCode");
+  if (!fence) return false;
+
+  const inputs =
+    view.dom.querySelectorAll<HTMLInputElement>(
+      ".cm-wysiwyg-code-lang-input",
+    );
+  for (const input of inputs) {
+    const from = Number(input.dataset.fenceFrom);
+    if (Number.isFinite(from) && from >= fence.from && from <= fence.to) {
+      input.focus();
+      input.select();
+      return true;
+    }
+  }
+  return false;
 }
 
 export function insertMath(view: EditorView, display: boolean): boolean {

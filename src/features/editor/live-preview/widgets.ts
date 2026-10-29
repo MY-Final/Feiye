@@ -5,6 +5,428 @@ import katex from "katex";
 import type { ResolvedImage } from "../../../lib/images";
 import { buildTableDom, type TableModel } from "./table";
 
+let languageListId = 0;
+
+const CODE_LANGUAGES: ReadonlyArray<readonly [value: string, label: string]> = [
+  ["", "纯文本"],
+  ["bash", "Bash"],
+  ["c", "C"],
+  ["cpp", "C++"],
+  ["csharp", "C#"],
+  ["css", "CSS"],
+  ["diff", "Diff"],
+  ["dockerfile", "Dockerfile"],
+  ["go", "Go"],
+  ["html", "HTML"],
+  ["java", "Java"],
+  ["javascript", "JavaScript"],
+  ["json", "JSON"],
+  ["jsx", "JSX"],
+  ["kotlin", "Kotlin"],
+  ["lua", "Lua"],
+  ["markdown", "Markdown"],
+  ["php", "PHP"],
+  ["python", "Python"],
+  ["ruby", "Ruby"],
+  ["rust", "Rust"],
+  ["shell", "Shell"],
+  ["sql", "SQL"],
+  ["swift", "Swift"],
+  ["toml", "TOML"],
+  ["tsx", "TSX"],
+  ["typescript", "TypeScript"],
+  ["xml", "XML"],
+  ["yaml", "YAML"],
+];
+
+interface CodeLanguageOption {
+  value: string;
+  label: string;
+  hint: string;
+}
+
+const footerCleanup = new WeakMap<HTMLElement, () => void>();
+
+/** 常用语言在前，自定义语言其次，纯文本（清空）放在最后。 */
+function codeLanguageOptions(current: string): CodeLanguageOption[] {
+  const options: CodeLanguageOption[] = CODE_LANGUAGES.filter(
+    ([value]) => value !== "",
+  ).map(([value, label]) => ({ value, label, hint: value }));
+  if (
+    current &&
+    !CODE_LANGUAGES.some(([value]) => value === current)
+  ) {
+    options.push({ value: current, label: current, hint: "自定义" });
+  }
+  options.push({ value: "", label: "纯文本", hint: "清除" });
+  return options;
+}
+
+function filterCodeLanguages(
+  options: CodeLanguageOption[],
+  query: string,
+): CodeLanguageOption[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return options;
+
+  const scored: { option: CodeLanguageOption; index: number; score: number }[] =
+    [];
+  options.forEach((option, index) => {
+    const value = option.value.toLowerCase();
+    const label = option.label.toLowerCase();
+    if (!value.includes(needle) && !label.includes(needle)) return;
+    const score =
+      value === needle || label === needle
+        ? 0
+        : value.startsWith(needle) || label.startsWith(needle)
+          ? 1
+          : 2;
+    scored.push({ option, index, score });
+  });
+
+  scored.sort((a, b) => a.score - b.score || a.index - b.index);
+  return scored.map((entry) => entry.option);
+}
+
+/** 顶替开头围栏的零高占位；隐藏围栏，又不让代码首行贴到卡片外。 */
+export class CodeBlockTopWidget extends WidgetType {
+  eq(other: WidgetType): boolean {
+    return other instanceof CodeBlockTopWidget;
+  }
+
+  toDOM(): HTMLElement {
+    const top = document.createElement("div");
+    top.className = "cm-wysiwyg-code-top";
+    return top;
+  }
+
+  ignoreEvent(): boolean {
+    return true;
+  }
+
+  get estimatedHeight(): number {
+    return 10;
+  }
+}
+
+/**
+ * 代码块底部的语言输入框。直接键入语言标识后回车应用；
+ * 下方自绘建议列表，可用方向键选择，全程不需要鼠标。
+ */
+export class CodeBlockFooterWidget extends WidgetType {
+  constructor(
+    readonly fenceFrom: number,
+    readonly from: number,
+    readonly to: number,
+    readonly language: string,
+  ) {
+    super();
+  }
+
+  eq(other: WidgetType): boolean {
+    return (
+      other instanceof CodeBlockFooterWidget &&
+      other.fenceFrom === this.fenceFrom &&
+      other.from === this.from &&
+      other.to === this.to &&
+      other.language === this.language
+    );
+  }
+
+  toDOM(view: EditorView): HTMLElement {
+    const { fenceFrom, from, to, language } = this;
+    const shell = document.createElement("div");
+    shell.className = "cm-wysiwyg-code-footer-shell";
+
+    const footer = document.createElement("div");
+    footer.className = "cm-wysiwyg-code-footer";
+    footer.dataset.fenceFrom = String(fenceFrom);
+
+    const label = document.createElement("span");
+    label.className = "cm-wysiwyg-code-footer-label";
+    label.textContent = "语言";
+
+    const menuId = `feiye-code-languages-${++languageListId}`;
+    const input = document.createElement("input");
+    input.className = "cm-wysiwyg-code-lang-input";
+    input.type = "text";
+    input.value = language;
+    input.placeholder = "输入语言，↓ 选择";
+    input.autocomplete = "off";
+    input.spellcheck = false;
+    input.setAttribute("role", "combobox");
+    input.setAttribute("aria-label", "代码语言");
+    input.setAttribute("aria-autocomplete", "list");
+    input.setAttribute("aria-haspopup", "listbox");
+    input.setAttribute("aria-expanded", "false");
+    input.setAttribute("aria-controls", menuId);
+    input.title =
+      "输入语言标识；↓ 选择建议，回车应用（Ctrl+Shift+L 聚焦）";
+    input.dataset.fenceFrom = String(fenceFrom);
+
+    const menu = document.createElement("div");
+    menu.className = "cm-wysiwyg-code-lang-menu";
+    menu.id = menuId;
+    menu.setAttribute("role", "listbox");
+    menu.setAttribute("aria-label", "代码语言建议");
+
+    let applying = false;
+    let suppressBlurApply = false;
+    let menuVisible = false;
+    let options: CodeLanguageOption[] = [];
+    let highlighted = -1;
+    let removeWindowListeners: (() => void) | null = null;
+
+    function hideMenu(): void {
+      if (!menuVisible) return;
+      menuVisible = false;
+      removeWindowListeners?.();
+      removeWindowListeners = null;
+      highlighted = -1;
+      menu.remove();
+      input.setAttribute("aria-expanded", "false");
+      input.removeAttribute("aria-activedescendant");
+    }
+
+    function positionMenu(): void {
+      if (!menuVisible) return;
+      const rect = input.getBoundingClientRect();
+      const width = Math.max(rect.width, 220);
+      menu.style.width = `${width}px`;
+      menu.style.left = `${Math.max(
+        8,
+        Math.min(rect.right - width, window.innerWidth - width - 8),
+      )}px`;
+      const height = menu.offsetHeight;
+      const below = rect.bottom + 4;
+      const above = rect.top - height - 4;
+      const top =
+        below + height <= window.innerHeight - 8 || above < 8
+          ? below
+          : above;
+      menu.style.top = `${Math.max(
+        8,
+        Math.min(top, window.innerHeight - height - 8),
+      )}px`;
+    }
+
+    function syncHighlight(): void {
+      for (let index = 0; index < menu.children.length; index++) {
+        const child = menu.children[index] as HTMLElement;
+        const active = index === highlighted;
+        child.classList.toggle("is-active", active);
+        child.setAttribute("aria-selected", String(active));
+      }
+      const active = menu.children[highlighted] as HTMLElement | undefined;
+      if (active) {
+        input.setAttribute("aria-activedescendant", active.id);
+        const top = active.offsetTop;
+        const bottom = top + active.offsetHeight;
+        if (top < menu.scrollTop) {
+          menu.scrollTop = top;
+        } else if (bottom > menu.scrollTop + menu.clientHeight) {
+          menu.scrollTop = bottom - menu.clientHeight;
+        }
+      } else {
+        input.removeAttribute("aria-activedescendant");
+      }
+    }
+
+    function renderMenu(useQuery = true): void {
+      options = filterCodeLanguages(
+        codeLanguageOptions(language),
+        useQuery ? input.value : "",
+      );
+      if (useQuery) {
+        if (highlighted >= options.length) highlighted = options.length - 1;
+      } else {
+        // 首次打开时展示全部语言，并把当前语言置于高亮位置；
+        // 纯文本没有语言，直接从列表顶部开始。
+        highlighted = language
+          ? options.findIndex((option) => option.value === language)
+          : -1;
+      }
+      menu.replaceChildren();
+      input.setAttribute("aria-expanded", "true");
+
+      if (!options.length) {
+        const empty = document.createElement("div");
+        empty.className = "cm-wysiwyg-code-lang-empty";
+        empty.textContent = "回车使用自定义语言";
+        menu.append(empty);
+        return;
+      }
+
+      options.forEach((option, index) => {
+        const item = document.createElement("button");
+        item.type = "button";
+        item.className = "cm-wysiwyg-code-lang-option";
+        item.id = `${menuId}-option-${index}`;
+        item.tabIndex = -1;
+        item.dataset.value = option.value;
+        item.setAttribute("role", "option");
+        item.setAttribute("aria-selected", "false");
+
+        const name = document.createElement("span");
+        name.className = "cm-wysiwyg-code-lang-option-label";
+        name.textContent = option.label;
+
+        const hint = document.createElement("span");
+        hint.className = "cm-wysiwyg-code-lang-option-hint";
+        hint.textContent = option.hint;
+
+        item.append(name, hint);
+        item.addEventListener("mousedown", (event) => {
+          event.preventDefault();
+        });
+        item.addEventListener("click", () => {
+          input.value = option.value;
+          hideMenu();
+          apply(true);
+        });
+        item.addEventListener("mousemove", () => {
+          if (highlighted === index) return;
+          highlighted = index;
+          syncHighlight();
+        });
+        menu.append(item);
+      });
+      syncHighlight();
+    }
+
+    function showMenu(useQuery = false): void {
+      if (menuVisible) return;
+      menuVisible = true;
+      highlighted = -1;
+      document.body.append(menu);
+      menu.style.visibility = "hidden";
+      renderMenu(useQuery);
+      positionMenu();
+      menu.style.visibility = "";
+      const reposition = () => positionMenu();
+      window.addEventListener("scroll", reposition, true);
+      window.addEventListener("resize", reposition);
+      removeWindowListeners = () => {
+        window.removeEventListener("scroll", reposition, true);
+        window.removeEventListener("resize", reposition);
+      };
+    }
+
+    function moveHighlight(delta: number): void {
+      if (!menuVisible) showMenu(true);
+      if (!options.length) return;
+      if (highlighted < 0) {
+        highlighted = delta > 0 ? 0 : options.length - 1;
+      } else {
+        highlighted =
+          (highlighted + delta + options.length) % options.length;
+      }
+      syncHighlight();
+    }
+
+    function apply(refocus: boolean): void {
+      if (applying) return;
+      hideMenu();
+      const next = input.value.trim();
+      if (next === language) {
+        if (refocus) view.focus();
+        return;
+      }
+      if (!view.dom.isConnected) return;
+      if (from > view.state.doc.length || to > view.state.doc.length) {
+        return;
+      }
+      applying = true;
+      view.dispatch({
+        changes: { from, to, insert: next },
+        userEvent: "input.format",
+      });
+      if (refocus) view.focus();
+    }
+
+    input.addEventListener("focus", () => {
+      applying = false;
+      suppressBlurApply = false;
+      showMenu();
+    });
+
+    input.addEventListener("input", () => {
+      highlighted = -1;
+      if (!menuVisible) {
+        showMenu(true);
+        return;
+      }
+      renderMenu();
+      positionMenu();
+    });
+
+    input.addEventListener("keydown", (event) => {
+      if (event.isComposing) return;
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        event.stopPropagation();
+        moveHighlight(event.key === "ArrowDown" ? 1 : -1);
+        return;
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        event.stopPropagation();
+        const picked = highlighted >= 0 ? options[highlighted] : undefined;
+        if (picked) input.value = picked.value;
+        apply(true);
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        if (menuVisible) {
+          hideMenu();
+          return;
+        }
+        input.value = language;
+        suppressBlurApply = true;
+        view.focus();
+        return;
+      }
+      if (event.key === "Tab") {
+        hideMenu();
+      }
+    });
+
+    // 点击编辑器或 Tab 离开时也保存输入，不要求必须按回车。
+    input.addEventListener("blur", () => {
+      hideMenu();
+      if (suppressBlurApply) {
+        suppressBlurApply = false;
+        return;
+      }
+      apply(false);
+    });
+
+    const wrap = document.createElement("span");
+    wrap.className = "cm-wysiwyg-code-footer-field";
+    wrap.append(input);
+
+    footer.append(label, wrap);
+    shell.append(footer);
+    footerCleanup.set(shell, hideMenu);
+    return shell;
+  }
+
+  destroy(dom: HTMLElement): void {
+    footerCleanup.get(dom)?.();
+    footerCleanup.delete(dom);
+  }
+
+  ignoreEvent(): boolean {
+    return true;
+  }
+
+  get estimatedHeight(): number {
+    return 42;
+  }
+}
+
 export class ImageWidget extends WidgetType {
   constructor(
     readonly src: string,

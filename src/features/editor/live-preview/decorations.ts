@@ -256,25 +256,26 @@ export function buildDecorations(
         }
 
         if (name === "FencedCode") {
-          const firstLine = state.doc.lineAt(node.from).number;
-          const lastLine = state.doc.lineAt(
-            Math.max(node.from, node.to - 1),
-          ).number;
-          for (let number = firstLine; number <= lastLine; number++) {
+          // 围栏行由 block-decorations 里的顶部占位与底部语言栏替代；
+          // 这里只给中间的代码内容行加样式，卡片底边由语言栏收口。
+          const marks = node.getChildren("CodeMark");
+          const opening = marks[0];
+          if (!opening) return false;
+
+          const closing = marks.length > 1 ? marks[1] : null;
+          const firstContent = state.doc.lineAt(opening.from).number + 1;
+          // 未闭合围栏一直延伸到文末，末尾的空行也属于代码块；
+          // 若只算到 node.to - 1，文末空行会落在卡片与语言栏之间。
+          const lastContent = closing
+            ? state.doc.lineAt(closing.from).number - 1
+            : state.doc.lines;
+
+          for (let number = firstContent; number <= lastContent; number++) {
             const line = state.doc.line(number);
             const classes = ["cm-wysiwyg-code-line"];
-            if (number === firstLine) classes.push("cm-wysiwyg-code-first");
-            if (number === lastLine) classes.push("cm-wysiwyg-code-last");
+            if (number === firstContent) classes.push("cm-wysiwyg-code-first");
+            if (number === lastContent) classes.push("cm-wysiwyg-code-last");
             lineClass(line.from, classes.join(" "));
-          }
-
-          if (!touches(node.from, node.to)) {
-            for (const marker of node.getChildren("CodeMark")) {
-              hide(marker.from, marker.to);
-            }
-            for (const info of node.getChildren("CodeInfo")) {
-              hide(info.from, info.to);
-            }
           }
           return false;
         }

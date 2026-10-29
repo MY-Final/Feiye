@@ -1,6 +1,9 @@
 import type { EditorView, KeyBinding } from "@codemirror/view";
 
 import {
+  exitCodeBlock,
+  focusCodeLanguage,
+  handleCodeBlockEnter,
   insertHorizontalRule,
   insertLink,
   insertMath,
@@ -30,6 +33,9 @@ function block(kind: BlockKind, key: string): KeyBinding {
 }
 
 export const formatKeymap: readonly KeyBinding[] = [
+  // 代码块内：块尾空行回车退出；Ctrl/Cmd+Enter 随时退出。
+  { key: "Enter", run: handleCodeBlockEnter },
+  { key: "Mod-Enter", run: exitCodeBlock },
   inline("bold", "Mod-b"),
   inline("italic", "Mod-i"),
   inline("strike", "Mod-Shift-5"),
@@ -62,6 +68,11 @@ export const formatKeymap: readonly KeyBinding[] = [
     key: "Mod-Shift-k",
     preventDefault: true,
     run: (view) => toggleFencedCode(view),
+  },
+  {
+    key: "Mod-Shift-l",
+    preventDefault: true,
+    run: (view) => focusCodeLanguage(view),
   },
   {
     key: "Mod-Shift-m",

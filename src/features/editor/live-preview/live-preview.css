@@ -1,7 +1,7 @@
 .mode-wysiwyg {
-  --editor-measure: 68ch;
+  --editor-measure: min(900px, 100% - 80px);
   --editor-font-size: 16px;
-  --editor-padding: 40px 32px 45vh;
+  --editor-padding: 52px 40px 45vh;
   --editor-line-height: 1.8;
 }
 
@@ -124,9 +124,22 @@
   cursor: pointer;
 }
 
-/* 代码块 */
+/* 代码块：围栏被隐藏，代码行与底部语言栏合成一张卡片。 */
+.mode-wysiwyg .cm-wysiwyg-code-top {
+  height: 10px;
+  overflow: hidden;
+}
+
+.mode-wysiwyg .cm-wysiwyg-code-footer-shell {
+  box-sizing: border-box;
+  width: 100%;
+  padding-bottom: 10px;
+}
+
 .mode-wysiwyg .cm-wysiwyg-code-line {
   padding: 0 14px;
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
   background: var(--code-bg);
   font-family: var(--font-mono);
   font-size: 0.88em;
@@ -134,17 +147,143 @@
 }
 
 .mode-wysiwyg .cm-wysiwyg-code-first {
-  padding-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line);
   border-radius: var(--radius-md) var(--radius-md) 0 0;
 }
 
 .mode-wysiwyg .cm-wysiwyg-code-last {
-  padding-bottom: 8px;
-  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  padding-bottom: 7px;
 }
 
-.mode-wysiwyg .cm-wysiwyg-code-first.cm-wysiwyg-code-last {
+.mode-wysiwyg .cm-wysiwyg-code-footer {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 30px;
+  padding: 3px 10px 3px 14px;
+  border: 1px solid var(--line);
+  border-top: 0;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  background: var(--code-bg);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+/* 空代码块没有内容行，语言栏自己收住整张卡片的上边。 */
+.mode-wysiwyg
+  .cm-wysiwyg-code-top
+  + .cm-wysiwyg-code-footer-shell
+  .cm-wysiwyg-code-footer {
+  border-top: 1px solid var(--line);
   border-radius: var(--radius-md);
+}
+
+.mode-wysiwyg .cm-wysiwyg-code-footer-label {
+  flex: none;
+  color: var(--text-faint);
+  letter-spacing: 0.12em;
+}
+
+.mode-wysiwyg .cm-wysiwyg-code-footer-field {
+  display: flex;
+  flex: 1;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.mode-wysiwyg .cm-wysiwyg-code-lang-input {
+  width: min(190px, 100%);
+  padding: 2px 7px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.mode-wysiwyg .cm-wysiwyg-code-lang-input::placeholder {
+  color: var(--text-faint);
+  font-family: var(--font-ui);
+}
+
+.mode-wysiwyg .cm-wysiwyg-code-lang-input:hover {
+  border-color: var(--line);
+  color: var(--text);
+}
+
+.mode-wysiwyg .cm-wysiwyg-code-lang-input:focus {
+  border-color: var(--accent);
+  background: var(--bg-elevated);
+  color: var(--text);
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* 语言建议菜单挂到 body，避免被编辑器的滚动容器裁切。 */
+.cm-wysiwyg-code-lang-menu {
+  position: fixed;
+  z-index: 1200;
+  max-height: 240px;
+  padding: 4px;
+  overflow-y: auto;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  box-shadow: var(--overlay-shadow-soft);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.cm-wysiwyg-code-lang-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cm-wysiwyg-code-lang-option.is-active {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.cm-wysiwyg-code-lang-option-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cm-wysiwyg-code-lang-option-hint {
+  flex: none;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.cm-wysiwyg-code-lang-option.is-active .cm-wysiwyg-code-lang-option-hint {
+  color: var(--accent);
+}
+
+.cm-wysiwyg-code-lang-empty {
+  padding: 6px 8px;
+  color: var(--text-faint);
 }
 
 /* 分隔线 */
