@@ -2,6 +2,7 @@ import type { EditorView } from "@codemirror/view";
 import { WidgetType } from "@codemirror/view";
 import katex from "katex";
 
+import { copyText } from "../../../lib/clipboard";
 import type { ResolvedImage } from "../../../lib/images";
 import { buildTableDom, type TableModel } from "./table";
 
@@ -119,6 +120,8 @@ export class CodeBlockFooterWidget extends WidgetType {
     readonly from: number,
     readonly to: number,
     readonly language: string,
+    readonly codeFrom: number,
+    readonly codeTo: number,
   ) {
     super();
   }
@@ -129,12 +132,14 @@ export class CodeBlockFooterWidget extends WidgetType {
       other.fenceFrom === this.fenceFrom &&
       other.from === this.from &&
       other.to === this.to &&
-      other.language === this.language
+      other.language === this.language &&
+      other.codeFrom === this.codeFrom &&
+      other.codeTo === this.codeTo
     );
   }
 
   toDOM(view: EditorView): HTMLElement {
-    const { fenceFrom, from, to, language } = this;
+    const { fenceFrom, from, to, language, codeFrom, codeTo } = this;
     const shell = document.createElement("div");
     shell.className = "cm-wysiwyg-code-footer-shell";
 
@@ -176,6 +181,7 @@ export class CodeBlockFooterWidget extends WidgetType {
     let options: CodeLanguageOption[] = [];
     let highlighted = -1;
     let removeWindowListeners: (() => void) | null = null;
+    let copyTimer: number | null = null;
 
     function hideMenu(): void {
       if (!menuVisible) return;
@@ -403,13 +409,55 @@ export class CodeBlockFooterWidget extends WidgetType {
       apply(false);
     });
 
+    const copyButton = document.createElement("button");
+    copyButton.type = "button";
+    copyButton.className = "cm-wysiwyg-code-copy";
+    copyButton.textContent = "复制";
+    copyButton.title = "复制代码";
+    copyButton.setAttribute("aria-label", "复制代码");
+    copyButton.addEventListener("mousedown", (event) => {
+      event.preventDefault();
+    });
+    copyButton.addEventListener("click", () => {
+      if (copyTimer !== null) {
+        window.clearTimeout(copyTimer);
+        copyTimer = null;
+      }
+      if (codeFrom > view.state.doc.length || codeTo > view.state.doc.length) {
+        return;
+      }
+      const raw = view.state.doc.sliceString(codeFrom, codeTo);
+      const text = raw.endsWith("\n") ? raw.slice(0, -1) : raw;
+      void copyText(text).then((copied) => {
+        if (!copyButton.isConnected) return;
+        copyButton.textContent = copied ? "已复制" : "复制失败";
+        copyButton.classList.toggle("is-copied", copied);
+        copyButton.setAttribute(
+          "aria-label",
+          copied ? "已复制代码" : "复制代码失败",
+        );
+        copyTimer = window.setTimeout(() => {
+          copyButton.textContent = "复制";
+          copyButton.classList.remove("is-copied");
+          copyButton.setAttribute("aria-label", "复制代码");
+          copyTimer = null;
+        }, 1500);
+      });
+    });
+
     const wrap = document.createElement("span");
     wrap.className = "cm-wysiwyg-code-footer-field";
     wrap.append(input);
 
-    footer.append(label, wrap);
+    footer.append(label, wrap, copyButton);
     shell.append(footer);
-    footerCleanup.set(shell, hideMenu);
+    footerCleanup.set(shell, () => {
+      hideMenu();
+      if (copyTimer !== null) {
+        window.clearTimeout(copyTimer);
+        copyTimer = null;
+      }
+    });
     return shell;
   }
 

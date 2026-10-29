@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { SlidingSegmented } from "../components/SlidingSegmented";
 import { runEditorCommand } from "../features/editor/editor-bridge";
 import {
   insertHorizontalRule,
@@ -255,21 +256,13 @@ export function Toolbar() {
       <div className="toolbar-spacer" />
 
       {root ? (
-        <div className="segmented view-switch" role="group" aria-label="视图模式">
-          {VIEW_MODES.map((mode) => (
-            <button
-              key={mode.value}
-              type="button"
-              className={viewMode === mode.value ? "active" : ""}
-              title={mode.title}
-              aria-pressed={viewMode === mode.value}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => void changeViewMode(mode.value)}
-            >
-              {mode.label}
-            </button>
-          ))}
-        </div>
+        <SlidingSegmented
+          className="view-switch"
+          options={VIEW_MODES}
+          value={viewMode}
+          ariaLabel="视图模式"
+          onChange={(mode) => void changeViewMode(mode)}
+        />
       ) : null}
     </div>
   );

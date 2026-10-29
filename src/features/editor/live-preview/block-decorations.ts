@@ -113,11 +113,17 @@ export function buildBlockDecorations(state: EditorState): DecorationSet {
         const languageFrom = info ? info.from : opening.to;
         const languageTo = info ? info.to : opening.to;
         const closing = marks.length > 1 ? marks[1] : null;
+        const codeFrom = Math.min(state.doc.length, openLine.to + 1);
+        const codeTo = closing
+          ? Math.max(codeFrom, state.doc.lineAt(closing.from).from - 1)
+          : state.doc.length;
         const footer = new CodeBlockFooterWidget(
           opening.from,
           languageFrom,
           languageTo,
           language,
+          codeFrom,
+          codeTo,
         );
 
         if (closing) {

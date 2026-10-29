@@ -161,7 +161,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   width: 100%;
   min-height: 30px;
   padding: 3px 10px 3px 14px;
@@ -224,6 +224,37 @@
   color: var(--text);
   outline: 1px solid var(--accent);
   outline-offset: 1px;
+}
+
+.mode-wysiwyg .cm-wysiwyg-code-copy {
+  flex: none;
+  min-width: 42px;
+  height: 20px;
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.mode-wysiwyg .cm-wysiwyg-code-copy:hover {
+  border-color: var(--line);
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.mode-wysiwyg .cm-wysiwyg-code-copy.is-copied {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 /* 语言建议菜单挂到 body，避免被编辑器的滚动容器裁切。 */

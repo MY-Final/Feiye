@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { DialogHost } from "../components/Dialog";
@@ -15,11 +15,17 @@ import {
   restoreLastWorkspace,
 } from "../features/workspace/workspace-actions";
 import { APP_NAME, APP_TAGLINE } from "../lib/app-info";
-import { getSetting } from "../lib/tauri";
+import { getSetting, setSetting } from "../lib/tauri";
 import { isViewMode } from "../lib/view-modes";
 import { useDocumentStore } from "../stores/document";
 import { useUiStore } from "../stores/ui";
 import { useWorkspaceStore } from "../stores/workspace";
+import {
+  clampSplitRatio,
+  DEFAULT_SPLIT_RATIO,
+  SplitHandle,
+} from "./SplitHandle";
+import { StatusBar } from "./StatusBar";
 import { TitleBar } from "./TitleBar";
 import { Toolbar } from "./Toolbar";
 import "./App.css";
@@ -41,10 +47,9 @@ function isTextEntry(target: EventTarget | null): boolean {
 export default function App() {
   const root = useWorkspaceStore((state) => state.root);
   const docPath = useDocumentStore((state) => state.path);
-  const dirty = useDocumentStore((state) => state.dirty);
   const viewMode = useDocumentStore((state) => state.viewMode);
-  const cursor = useDocumentStore((state) => state.cursor);
   const sidebarVisible = useUiStore((state) => state.sidebarVisible);
+  const [splitRatio, setSplitRatio] = useState(DEFAULT_SPLIT_RATIO);
 
   // 启动时恢复上次的视图模式和工作区（StrictMode 下只执行一次）。
   useEffect(() => {
@@ -52,9 +57,15 @@ export default function App() {
     bootstrapped = true;
 
     void (async () => {
-      const savedMode = await getSetting<unknown>("viewMode");
+      const [savedMode, savedRatio] = await Promise.all([
+        getSetting<unknown>("viewMode"),
+        getSetting<unknown>("splitRatio"),
+      ]);
       if (isViewMode(savedMode)) {
         useDocumentStore.getState().setViewMode(savedMode);
+      }
+      if (typeof savedRatio === "number") {
+        setSplitRatio(clampSplitRatio(savedRatio));
       }
       await restoreLastWorkspace();
     })();
@@ -141,12 +152,22 @@ export default function App() {
       <div className="app-body">
         {hasWorkspace && sidebarVisible ? <WorkspaceSidebar /> : null}
 
-        <main className={`workspace-main mode-${viewMode}`}>
+        <main
+          className={`workspace-main mode-${viewMode}`}
+          style={{ "--split-ratio": splitRatio } as CSSProperties}
+        >
           {hasWorkspace ? (
             <>
               <section className="editor-pane">
                 <EditorPane />
               </section>
+              {viewMode === "split" ? (
+                <SplitHandle
+                  ratio={splitRatio}
+                  onChange={setSplitRatio}
+                  onCommit={(next) => void setSetting("splitRatio", next)}
+                />
+              ) : null}
               <PreviewPane />
               {!docPath ? (
                 <div className="pane-overlay">
@@ -191,24 +212,7 @@ export default function App() {
         </main>
       </div>
 
-      <footer className="statusbar">
-        <span className="status-path">
-          {docPath ?? (hasWorkspace ? "未选择文件" : "未打开工作区")}
-        </span>
-        <span className="status-meta">
-          {docPath ? (
-            <>
-              <span>
-                {cursor.line}:{cursor.column}
-              </span>
-              <span>UTF-8</span>
-              <span className={dirty ? "status-dirty" : ""}>
-                {dirty ? "未保存" : "已保存"}
-              </span>
-            </>
-          ) : null}
-        </span>
-      </footer>
+      <StatusBar />
 
       <DialogHost />
       <ToastHost />

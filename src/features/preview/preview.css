@@ -172,6 +172,58 @@
   min-width: max-content;
 }
 
+/* 代码块容器只负责定位复制按钮，间距仍由 pre 自己承担。 */
+.markdown-body .preview-code-block {
+  position: relative;
+  margin: 1em 0;
+}
+
+.markdown-body .preview-code-block > pre {
+  margin: 0;
+  padding-top: 32px;
+}
+
+.preview-code-copy {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  min-width: 42px;
+  height: 20px;
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease,
+    opacity 0.12s ease;
+}
+
+.preview-code-block:hover .preview-code-copy,
+.preview-code-block:focus-within .preview-code-copy,
+.preview-code-copy.is-copied {
+  opacity: 1;
+}
+
+.preview-code-copy:hover {
+  border-color: var(--line);
+  background: var(--bg-sunken);
+  color: var(--text);
+}
+
+.preview-code-copy.is-copied {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .markdown-body table {
   display: block;
   width: max-content;

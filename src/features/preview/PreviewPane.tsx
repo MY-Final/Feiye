@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
+import { copyText } from "../../lib/clipboard";
 import { rewritePreviewImages } from "../../lib/images";
 import { useDocumentStore } from "../../stores/document";
 import { useWorkspaceStore } from "../../stores/workspace";
@@ -60,6 +61,61 @@ export function PreviewPane() {
       body.removeEventListener("error", onImageError, true);
     };
   }, []);
+
+  // 给预览里的每段代码挂一个复制按钮。HTML 由 Worker 生成，
+  // 这里在每次渲染后补齐按钮，不改动 Markdown 管线。
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (!body) return;
+
+    for (const pre of body.querySelectorAll("pre")) {
+      if (pre.parentElement?.classList.contains("preview-code-block")) {
+        continue;
+      }
+
+      const wrapper = document.createElement("div");
+      wrapper.className = "preview-code-block";
+      pre.replaceWith(wrapper);
+      wrapper.append(pre);
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "preview-code-copy";
+      button.textContent = "复制";
+      button.title = "复制代码";
+      button.setAttribute("aria-label", "复制代码");
+      let resetTimer: number | null = null;
+
+      button.addEventListener("mousedown", (event) => {
+        event.preventDefault();
+      });
+      button.addEventListener("click", () => {
+        if (resetTimer !== null) {
+          window.clearTimeout(resetTimer);
+          resetTimer = null;
+        }
+        const raw = pre.textContent ?? "";
+        const text = raw.endsWith("\n") ? raw.slice(0, -1) : raw;
+        void copyText(text).then((copied) => {
+          if (!button.isConnected) return;
+          button.textContent = copied ? "已复制" : "复制失败";
+          button.classList.toggle("is-copied", copied);
+          button.setAttribute(
+            "aria-label",
+            copied ? "已复制代码" : "复制代码失败",
+          );
+          resetTimer = window.setTimeout(() => {
+            button.textContent = "复制";
+            button.classList.remove("is-copied");
+            button.setAttribute("aria-label", "复制代码");
+            resetTimer = null;
+          }, 1500);
+        });
+      });
+
+      wrapper.append(button);
+    }
+  }, [html]);
 
   return (
     <div className="preview-pane">

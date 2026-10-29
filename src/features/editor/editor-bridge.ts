@@ -22,6 +22,9 @@ const guardedHandlers: EditorHandlers = {
   onChange() {
     if (!suppressChange) handlers?.onChange();
   },
+  onStats() {
+    handlers?.onStats();
+  },
   onCursor(line, column) {
     handlers?.onCursor(line, column);
   },
@@ -62,6 +65,7 @@ export function setEditorDocument(content: string): void {
   } finally {
     suppressChange = false;
   }
+  guardedHandlers.onStats();
   guardedHandlers.onFormatState(readFormatState(view.state));
   view.focus();
 }

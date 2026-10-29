@@ -15,6 +15,7 @@ export type EditorMode = "source" | "wysiwyg";
 export interface EditorHandlers {
   onSave(): void;
   onChange(): void;
+  onStats(): void;
   onCursor(line: number, column: number): void;
   onFormatState(state: FormatState): void;
 }
@@ -128,7 +129,10 @@ export function createEditorState(
       editorTheme,
       editorModeCompartment.of(editorModeExtension(options.mode, options)),
       EditorView.updateListener.of((update) => {
-        if (update.docChanged) handlers.onChange();
+        if (update.docChanged) {
+          handlers.onChange();
+          handlers.onStats();
+        }
         if (update.docChanged || update.selectionSet) {
           const head = update.state.selection.main.head;
           const line = update.state.doc.lineAt(head);

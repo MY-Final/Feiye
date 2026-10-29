@@ -1,5 +1,7 @@
 import { create } from "zustand";
 
+import { EMPTY_TEXT_STATS, type TextStats } from "../lib/text-stats";
+
 export type ViewMode = "source" | "split" | "preview" | "wysiwyg";
 
 interface DocumentStore {
@@ -9,6 +11,7 @@ interface DocumentStore {
   savedModifiedMs: number | null;
   viewMode: ViewMode;
   cursor: { line: number; column: number };
+  stats: TextStats;
 
   setDocument(path: string, name: string, modifiedMs: number): void;
   renameActive(path: string, name: string): void;
@@ -17,6 +20,7 @@ interface DocumentStore {
   markSaved(modifiedMs: number): void;
   setViewMode(mode: ViewMode): void;
   setCursor(line: number, column: number): void;
+  setStats(stats: TextStats): void;
 }
 
 export const useDocumentStore = create<DocumentStore>((set) => ({
@@ -26,6 +30,7 @@ export const useDocumentStore = create<DocumentStore>((set) => ({
   savedModifiedMs: null,
   viewMode: "wysiwyg",
   cursor: { line: 1, column: 1 },
+  stats: EMPTY_TEXT_STATS,
 
   setDocument(path, name, modifiedMs) {
     set({
@@ -34,6 +39,7 @@ export const useDocumentStore = create<DocumentStore>((set) => ({
       dirty: false,
       savedModifiedMs: modifiedMs,
       cursor: { line: 1, column: 1 },
+      stats: EMPTY_TEXT_STATS,
     });
   },
 
@@ -48,6 +54,7 @@ export const useDocumentStore = create<DocumentStore>((set) => ({
       dirty: false,
       savedModifiedMs: null,
       cursor: { line: 1, column: 1 },
+      stats: EMPTY_TEXT_STATS,
     });
   },
 
@@ -65,5 +72,13 @@ export const useDocumentStore = create<DocumentStore>((set) => ({
 
   setCursor(line, column) {
     set({ cursor: { line, column } });
+  },
+
+  setStats(stats) {
+    set((state) =>
+      state.stats.words === stats.words && state.stats.chars === stats.chars
+        ? state
+        : { stats },
+    );
   },
 }));
