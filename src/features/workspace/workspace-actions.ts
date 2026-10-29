@@ -1,4 +1,4 @@
-import { isWithin, parentRel } from "../../lib/paths";
+import { baseName, isWithin, parentRel } from "../../lib/paths";
 import {
   createFile as apiCreateFile,
   createFolder as apiCreateFolder,
@@ -60,6 +60,7 @@ export async function openWorkspaceAt(path: string): Promise<void> {
     resetDocument();
     await useWorkspaceStore.getState().loadDir("");
     await setSetting("lastWorkspace", info.root);
+    await setSetting("lastDocument", null);
     void promptPendingRecoveries();
   } catch (error) {
     toastError("打开工作区失败", error);
@@ -74,13 +75,30 @@ export async function restoreLastWorkspace(): Promise<void> {
     const info = await apiOpenWorkspace(last);
     useWorkspaceStore.getState().setWorkspace(info);
     await useWorkspaceStore.getState().loadDir("");
+
+    // 恢复上次打开的文档；文件已不存在时静默清除记录，不打扰启动。
+    const lastDocument = await getSetting<string>("lastDocument");
+    if (lastDocument) {
+      await openFile(
+        {
+          relPath: lastDocument,
+          name: baseName(lastDocument),
+          isDir: false,
+        },
+        true,
+      );
+    }
+
     await promptPendingRecoveries();
   } catch {
     await setSetting("lastWorkspace", null);
   }
 }
 
-export async function openFile(entry: Entry): Promise<void> {
+export async function openFile(
+  entry: Entry,
+  silent = false,
+): Promise<void> {
   if (entry.isDir) return;
   if (useDocumentStore.getState().path === entry.relPath) return;
   if (!(await guardUnsaved())) return;
@@ -93,7 +111,12 @@ export async function openFile(entry: Entry): Promise<void> {
       .setDocument(entry.relPath, entry.name, file.modifiedMs);
     setEditorDocument(file.content);
     requestPreview(file.content, true);
+    void setSetting("lastDocument", entry.relPath);
   } catch (error) {
+    if (silent) {
+      void setSetting("lastDocument", null);
+      return;
+    }
     toastError("打开文件失败", error);
   }
 }
@@ -189,6 +212,7 @@ export async function renameEntry(entry: Entry): Promise<void> {
     if (doc.path === entry.relPath) {
       void clearRecoverySnapshot(entry.relPath);
       doc.renameActive(renamed.relPath, renamed.name);
+      void setSetting("lastDocument", renamed.relPath);
     } else if (entry.isDir && doc.path && isWithin(doc.path, entry.relPath)) {
       // 当前文档所在目录被改名，路径已失效，直接关闭文档。
       void clearRecoverySnapshot(doc.path);
@@ -226,6 +250,7 @@ export async function deleteEntry(entry: Entry): Promise<void> {
     const doc = useDocumentStore.getState();
     if (doc.path && isWithin(doc.path, entry.relPath)) {
       void clearRecoverySnapshot(doc.path);
+      void setSetting("lastDocument", null);
       resetDocument();
     }
   } catch (error) {
