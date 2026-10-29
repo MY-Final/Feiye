@@ -12,6 +12,7 @@ import {
   buildDecorations,
   type LivePreviewOptions,
 } from "./decorations";
+import { keepDashesAsHorizontalRule } from "./rule-input";
 
 import "./live-preview.css";
 
@@ -54,6 +55,7 @@ export function createLivePreview(options: LivePreviewOptions): Extension {
 
   return [
     blockWidgetExtensions,
+    keepDashesAsHorizontalRule,
     plugin,
     EditorView.atomicRanges.of(
       (view) => view.plugin(plugin)?.atomic ?? Decoration.none,

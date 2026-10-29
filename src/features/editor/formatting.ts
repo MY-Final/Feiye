@@ -516,12 +516,28 @@ export function insertHorizontalRule(view: EditorView): boolean {
   const range = state.selection.main;
   const line = state.doc.lineAt(range.from);
   const atLineStart = range.from === line.from && line.text.trim() === "";
-  const insert = atLineStart ? "---" : "\n\n---\n\n";
-  const from = atLineStart ? line.from : line.to;
+
+  if (!atLineStart) {
+    const from = line.to;
+    const insert = "\n\n---\n\n";
+    return dispatchFormat(view, {
+      changes: { from, insert },
+      selection: EditorSelection.cursor(from + insert.length),
+    });
+  }
+
+  // 空行直接换成 `---` 时，若上一行是正文，会变成 Setext H2 下划线。
+  // 因此按相邻行补齐空行，保证插入的是一条真正的分隔线。
+  const prev = line.number > 1 ? state.doc.line(line.number - 1) : null;
+  const next =
+    line.number < state.doc.lines ? state.doc.line(line.number + 1) : null;
+  const insert = `${prev && prev.text.trim() ? "\n" : ""}---${
+    next && next.text.trim() ? "\n" : ""
+  }`;
 
   return dispatchFormat(view, {
-    changes: { from, insert },
-    selection: EditorSelection.cursor(from + insert.length),
+    changes: { from: line.from, to: line.to, insert },
+    selection: EditorSelection.cursor(line.from + insert.length),
   });
 }
 
