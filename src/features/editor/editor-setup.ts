@@ -38,10 +38,13 @@ const editorTheme = EditorView.theme({
     fontFamily: "var(--font-editor)",
     lineHeight: "var(--editor-line-height, 1.75)",
     overflow: "auto",
+    // 行号与正文作为一组居中，避免行号被留在窗口最左侧。
+    justifyContent: "center",
   },
   ".cm-content": {
+    flex: "0 1 var(--editor-measure)",
     maxWidth: "var(--editor-measure)",
-    margin: "0 auto",
+    margin: "0",
     padding: "var(--editor-padding)",
     caretColor: "var(--text)",
     userSelect: "text",
@@ -54,7 +57,12 @@ const editorTheme = EditorView.theme({
     backgroundColor: "transparent",
     border: "none",
     color: "var(--text-faint)",
-    paddingLeft: "8px",
+    paddingLeft: "10px",
+    paddingRight: "10px",
+  },
+  // 写作时不需要代码折叠标记，避免行号旁出现零散的折角。
+  ".cm-foldGutter": {
+    display: "none !important",
   },
   ".cm-activeLine": {
     backgroundColor: "var(--editor-active-line)",
