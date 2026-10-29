@@ -17,6 +17,7 @@ import { useOutlineStore } from "../../stores/outline";
 import { useUiStore } from "../../stores/ui";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { resetAutoSave } from "../editor/autosave";
+import { captureActiveCursor, restoreCursorFor } from "../editor/cursor-memory";
 import { getEditorText, setEditorDocument } from "../editor/editor-bridge";
 import {
   clearRecoverySnapshot,
@@ -32,6 +33,7 @@ const MARKDOWN_NAME = /\.(md|markdown|mdx)$/i;
 
 function resetDocument(): void {
   resetAutoSave();
+  captureActiveCursor();
   setEditorDocument("");
   useDocumentStore.getState().clearDocument();
   useOutlineStore.getState().clear();
@@ -113,6 +115,8 @@ export async function openFile(
 
   try {
     const file = await readFile(entry.relPath);
+    // 离开当前文档前记下光标，打开新文档后再恢复到它上次的位置。
+    captureActiveCursor();
     // 先更新文档路径，图片 widget 需要在构建时解析相对地址。
     useDocumentStore
       .getState()
@@ -120,6 +124,7 @@ export async function openFile(
     setEditorDocument(file.content);
     requestPreview(file.content, true);
     void setSetting("lastDocument", entry.relPath);
+    await restoreCursorFor(entry.relPath);
   } catch (error) {
     if (silent) {
       void setSetting("lastDocument", null);
