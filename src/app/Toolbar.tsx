@@ -1,7 +1,8 @@
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 
 import { SlidingSegmented } from "../components/SlidingSegmented";
 import { runEditorCommand } from "../features/editor/editor-bridge";
+import { insertImageFiles } from "../features/editor/image-insert";
 import {
   insertHorizontalRule,
   insertLink,
@@ -27,6 +28,16 @@ function LinkIcon() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
       <path d="M6.4 9.6l3.2-3.2M5.1 8.4l-1 1a2.2 2.2 0 0 0 3.1 3.1l1-1M10.9 7.6l1-1a2.2 2.2 0 0 0-3.1-3.1l-1 1" />
+    </svg>
+  );
+}
+
+function ImageIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <rect x="2" y="2.8" width="12" height="10.4" rx="1.6" />
+      <circle cx="6" cy="6.4" r="1.1" />
+      <path d="M3.4 11.6l3.1-3.2 2.2 2.2 1.6-1.6 2.3 2.6" />
     </svg>
   );
 }
@@ -69,6 +80,7 @@ export function Toolbar() {
   const docPath = useDocumentStore((state) => state.path);
   const viewMode = useDocumentStore((state) => state.viewMode);
   const format = useEditorStore((state) => state.format);
+  const imageInput = useRef<HTMLInputElement>(null);
 
   const hasDoc = Boolean(docPath);
   const formattingDisabled = !hasDoc || viewMode === "preview";
@@ -78,6 +90,19 @@ export function Toolbar() {
 
   return (
     <div className="toolbar" role="toolbar" aria-label="编辑工具栏">
+      <input
+        ref={imageInput}
+        type="file"
+        accept="image/*"
+        multiple
+        hidden
+        onChange={(event) => {
+          const files = Array.from(event.target.files ?? []);
+          // 清空以便再次选择同一张图片时仍能触发 change。
+          event.target.value = "";
+          insertImageFiles(files);
+        }}
+      />
       <div className="toolbar-group file-actions">
         <button
           type="button"
@@ -250,6 +275,13 @@ export function Toolbar() {
           onClick={() => runEditorCommand((view) => insertHorizontalRule(view))}
         >
           <span className="glyph">―</span>
+        </ToolButton>
+        <ToolButton
+          title="插入图片"
+          disabled={formattingDisabled}
+          onClick={() => imageInput.current?.click()}
+        >
+          <ImageIcon />
         </ToolButton>
       </div>
 
