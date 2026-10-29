@@ -6,6 +6,7 @@ import { rewritePreviewImages } from "../../lib/images";
 import { useDocumentStore } from "../../stores/document";
 import { useOutlineStore } from "../../stores/outline";
 import { useWorkspaceStore } from "../../stores/workspace";
+import { toggleTaskMarkerAt } from "../editor/editor-bridge";
 import "./preview.css";
 import type { PreviewResult } from "./preview-protocol";
 import { setPreviewListener } from "./preview-controller";
@@ -39,6 +40,21 @@ export function PreviewPane() {
 
     const onClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
+
+      // 预览里的任务复选框：翻转源文档中对应的 [ ] / [x]。
+      if (target instanceof HTMLInputElement && target.type === "checkbox") {
+        const boxes = Array.from(
+          body.querySelectorAll<HTMLInputElement>(
+            "li > input[type='checkbox']",
+          ),
+        );
+        const index = boxes.indexOf(target);
+        if (index < 0) return;
+        event.preventDefault();
+        toggleTaskMarkerAt(index, boxes.length);
+        return;
+      }
+
       const anchor = target?.closest("a");
       if (!anchor) return;
 
@@ -77,6 +93,16 @@ export function PreviewPane() {
       .forEach((heading, index) => {
         heading.id = `preview-heading-${index}`;
         heading.dataset.headingIndex = String(index);
+      });
+
+    // GFM 默认把任务复选框渲染成 disabled，这里放开以便在预览里直接勾选。
+    body
+      .querySelectorAll<HTMLInputElement>(
+        "li > input[type='checkbox']",
+      )
+      .forEach((input) => {
+        input.disabled = false;
+        input.setAttribute("aria-label", "切换任务完成状态");
       });
   }, [html]);
 
