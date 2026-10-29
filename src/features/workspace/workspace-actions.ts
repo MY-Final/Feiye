@@ -79,6 +79,14 @@ export async function restoreLastWorkspace(): Promise<void> {
     // 恢复上次打开的文档；文件已不存在时静默清除记录，不打扰启动。
     const lastDocument = await getSetting<string>("lastDocument");
     if (lastDocument) {
+      // 展开文件所在的所有父目录，让文件树能定位到它。
+      const segments = lastDocument.split("/").slice(0, -1);
+      let dir = "";
+      for (const segment of segments) {
+        dir = dir ? `${dir}/${segment}` : segment;
+        await useWorkspaceStore.getState().expandDir(dir);
+      }
+
       await openFile(
         {
           relPath: lastDocument,
