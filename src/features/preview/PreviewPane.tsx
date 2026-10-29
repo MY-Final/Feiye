@@ -4,10 +4,12 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { copyText } from "../../lib/clipboard";
 import { rewritePreviewImages } from "../../lib/images";
 import { useDocumentStore } from "../../stores/document";
+import { useOutlineStore } from "../../stores/outline";
 import { useWorkspaceStore } from "../../stores/workspace";
 import "./preview.css";
 import type { PreviewResult } from "./preview-protocol";
 import { setPreviewListener } from "./preview-controller";
+import { scrollPreviewToHeading } from "./preview-scroll";
 import { attachSplitScrollSync } from "./scroll-sync";
 
 export function PreviewPane() {
@@ -17,6 +19,7 @@ export function PreviewPane() {
   const root = useWorkspaceStore((state) => state.root);
   const docPath = useDocumentStore((state) => state.path);
   const viewMode = useDocumentStore((state) => state.viewMode);
+  const cursorLine = useDocumentStore((state) => state.cursor.line);
 
   // 本地图片走工作区作用域的 feiyeimg 协议；远程图片保持原样。
   const html = useMemo(
@@ -76,6 +79,25 @@ export function PreviewPane() {
         heading.dataset.headingIndex = String(index);
       });
   }, [html]);
+
+  // 切到预览时停止在光标所在标题，而不是回到文档开头。
+  useEffect(() => {
+    if (viewMode !== "preview") return;
+    const headings = useOutlineStore.getState().headings;
+    if (headings.length === 0) return;
+
+    let index = 0;
+    for (let i = 0; i < headings.length; i += 1) {
+      if (headings[i].line <= cursorLine) index = i;
+      else break;
+    }
+
+    // 等一帧，让预览从 display:none 恢复布局后再量标题位置。
+    const frame = requestAnimationFrame(() => {
+      scrollPreviewToHeading(index);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [viewMode, docPath, cursorLine]);
 
   // 分栏模式：按标题锚点同步编辑区与预览区滚动。
   useEffect(() => {
