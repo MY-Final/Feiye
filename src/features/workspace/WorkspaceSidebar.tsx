@@ -1,9 +1,16 @@
-import { useState, type CSSProperties, type MouseEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 
 import { ContextMenu, type MenuAction } from "../../components/Menu";
 import { OutlinePanel } from "../outline/OutlinePanel";
 import { parentRel } from "../../lib/paths";
-import type { Entry } from "../../lib/tauri";
+import { getSetting, setSetting, type Entry } from "../../lib/tauri";
 import { useDocumentStore } from "../../stores/document";
 import { useOutlineStore } from "../../stores/outline";
 import { useWorkspaceStore } from "../../stores/workspace";
@@ -207,6 +214,16 @@ function TreeNode({ entry, depth, onMenu }: TreeNodeProps) {
 
 type SidebarTab = "files" | "outline";
 
+const SIDEBAR_WIDTH_KEY = "sidebarWidth";
+const SIDEBAR_WIDTH = { min: 180, max: 420, default: 240 } as const;
+
+function clampSidebarWidth(value: number): number {
+  return Math.min(
+    SIDEBAR_WIDTH.max,
+    Math.max(SIDEBAR_WIDTH.min, Math.round(value)),
+  );
+}
+
 export function WorkspaceSidebar() {
   const children = useWorkspaceStore((state) => state.children[""]);
   const rootLoading = useWorkspaceStore((state) => Boolean(state.loading[""]));
@@ -216,6 +233,48 @@ export function WorkspaceSidebar() {
   const [tab, setTab] = useState<SidebarTab>("files");
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [width, setWidth] = useState<number>(SIDEBAR_WIDTH.default);
+  const widthRef = useRef<number>(SIDEBAR_WIDTH.default);
+  const resizeStart = useRef<{ x: number; width: number } | null>(null);
+
+  useEffect(() => {
+    void getSetting<number>(SIDEBAR_WIDTH_KEY).then((value) => {
+      if (typeof value !== "number" || !Number.isFinite(value)) return;
+      const next = clampSidebarWidth(value);
+      widthRef.current = next;
+      setWidth(next);
+    });
+  }, []);
+
+  const commitWidth = (value: number) => {
+    const next = clampSidebarWidth(value);
+    widthRef.current = next;
+    setWidth(next);
+    void setSetting(SIDEBAR_WIDTH_KEY, next);
+  };
+
+  const startResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    resizeStart.current = { x: event.clientX, width: widthRef.current };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const moveResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!resizeStart.current) return;
+    const next = clampSidebarWidth(
+      resizeStart.current.width + event.clientX - resizeStart.current.x,
+    );
+    widthRef.current = next;
+    setWidth(next);
+  };
+
+  const endResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!resizeStart.current) return;
+    resizeStart.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    void setSetting(SIDEBAR_WIDTH_KEY, widthRef.current);
+  };
 
   const openMenu = (event: MouseEvent, entry: Entry | null) => {
     event.preventDefault();
@@ -233,7 +292,23 @@ export function WorkspaceSidebar() {
   };
 
   return (
-    <aside className="sidebar" aria-label="工作区文件与大纲">
+    <aside
+      className="sidebar"
+      style={{ width }}
+      aria-label="工作区文件与大纲"
+    >
+      <div
+        className="sidebar-resizer"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="调整侧栏宽度"
+        title="拖动调整侧栏宽度，双击恢复默认"
+        onPointerDown={startResize}
+        onPointerMove={moveResize}
+        onPointerUp={endResize}
+        onPointerCancel={endResize}
+        onDoubleClick={() => commitWidth(SIDEBAR_WIDTH.default)}
+      />
       <div className="sidebar-header">
         <div className="sidebar-tabs" role="tablist" aria-label="侧栏内容">
           <button
