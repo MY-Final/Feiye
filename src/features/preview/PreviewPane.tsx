@@ -12,7 +12,30 @@ import { openFile } from "../workspace/workspace-actions";
 import "./preview.css";
 import type { PreviewResult } from "./preview-protocol";
 import { setPreviewListener } from "./preview-controller";
-import { scrollPreviewToHeading } from "./preview-scroll";
+import { previewHeadingElements, scrollPreviewToHeading } from "./preview-scroll";
+
+/** 标题文本与链接片段归一到同一形式，兼容中文标题和常见 slug 写法。 */
+function normalizeAnchor(value: string): string {
+  let text = value;
+  try {
+    text = decodeURIComponent(value);
+  } catch {
+    // 片段里有非法百分号转义时按原文比较。
+  }
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]/gu, "");
+}
+
+/** 按 `#` 后面的片段在预览标题里定位，找不到返回 -1。 */
+function findHeadingByAnchor(body: HTMLElement, fragment: string): number {
+  const target = normalizeAnchor(fragment);
+  if (!target) return -1;
+  return previewHeadingElements(body).findIndex(
+    (heading) => normalizeAnchor(heading.textContent ?? "") === target,
+  );
+}
 import { attachSplitScrollSync } from "./scroll-sync";
 
 export function PreviewPane() {
@@ -69,7 +92,16 @@ export function PreviewPane() {
         return;
       }
 
-      if (!href || href.startsWith("#")) return;
+      if (!href) return;
+
+      // 文档内锚点：预览标题用的是内部 id，这里按标题文字找回目标标题。
+      if (href.startsWith("#")) {
+        const index = findHeadingByAnchor(body, href.slice(1));
+        if (index < 0) return;
+        event.preventDefault();
+        scrollPreviewToHeading(index);
+        return;
+      }
 
       // 指向其他笔记的相对链接：解析成工作区路径后直接打开。
       event.preventDefault();
