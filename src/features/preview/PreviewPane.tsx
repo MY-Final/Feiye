@@ -3,10 +3,12 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { copyText } from "../../lib/clipboard";
 import { rewritePreviewImages } from "../../lib/images";
+import { baseName, resolveRelLink } from "../../lib/paths";
 import { useDocumentStore } from "../../stores/document";
 import { useOutlineStore } from "../../stores/outline";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { toggleTaskMarkerAt } from "../editor/editor-bridge";
+import { openFile } from "../workspace/workspace-actions";
 import "./preview.css";
 import type { PreviewResult } from "./preview-protocol";
 import { setPreviewListener } from "./preview-controller";
@@ -33,7 +35,7 @@ export function PreviewPane() {
     return () => setPreviewListener(null);
   }, []);
 
-  // 外部链接交给系统浏览器；相对链接暂不跳转，避免 WebView 离开应用。
+  // 外部链接交给系统浏览器；笔记间的相对链接在应用内打开。
   useEffect(() => {
     const body = bodyRef.current;
     if (!body) return;
@@ -64,8 +66,17 @@ export function PreviewPane() {
         void openUrl(href).catch(() => {
           // 权限或系统调用失败时保持页面不动。
         });
-      } else if (!href.startsWith("#")) {
-        event.preventDefault();
+        return;
+      }
+
+      if (!href || href.startsWith("#")) return;
+
+      // 指向其他笔记的相对链接：解析成工作区路径后直接打开。
+      event.preventDefault();
+      const current = useDocumentStore.getState().path;
+      const relPath = current ? resolveRelLink(href, current) : null;
+      if (relPath && /\.(md|markdown|mdx)$/i.test(relPath)) {
+        void openFile({ relPath, name: baseName(relPath), isDir: false });
       }
     };
 
