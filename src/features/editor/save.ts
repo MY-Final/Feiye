@@ -8,40 +8,102 @@ import { useDocumentStore } from "../../stores/document";
 import { useUiStore } from "../../stores/ui";
 import { requestPreview } from "../preview/preview-controller";
 import { getEditorText, setEditorDocument } from "./editor-bridge";
+import {
+  clearRecoverySnapshot,
+  discardRecoveryForPath,
+} from "./recovery";
 
-/**
- * 保存当前文档。返回是否成功写入磁盘。
- * 保存前携带打开/上次保存时的 mtime，磁盘被外部改动时拒绝覆盖。
- */
-export async function saveActiveDocument(): Promise<boolean> {
+export interface SaveOptions {
+  /** 自动保存不弹冲突对话框，只暂停并提示。 */
+  auto?: boolean;
+}
+
+// 自动保存与手动保存可能同时发生；串行执行，避免用旧文本覆盖新文本。
+let saveQueue: Promise<boolean> = Promise.resolve(true);
+
+export function saveActiveDocument(options: SaveOptions = {}): Promise<boolean> {
+  const run = saveQueue.then(
+    () => performSave(options),
+    () => performSave(options),
+  );
+  saveQueue = run;
+  return run;
+}
+
+async function performSave(options: SaveOptions): Promise<boolean> {
   const doc = useDocumentStore.getState();
   if (!doc.path) return false;
 
-  const text = getEditorText();
+  let text = getEditorText();
   if (text === null) return false;
 
+  const path = doc.path;
+  useDocumentStore.getState().setSaving(true);
+
   try {
-    const meta = await writeFile(doc.path, text, doc.savedModifiedMs);
-    useDocumentStore.getState().markSaved(meta.modifiedMs);
-    return true;
+    let meta = await writeFile(path, text, doc.savedModifiedMs);
+
+    // 写入期间用户继续输入时，尽量把最新内容一并保存。
+    let latest = getEditorText();
+    if (latest !== null && latest !== text) {
+      meta = await writeFile(path, latest, meta.modifiedMs);
+      text = latest;
+      latest = getEditorText();
+    }
+
+    const current = useDocumentStore.getState();
+    const sameDocument = current.path === path;
+    const stillDirty = latest !== text;
+
+    if (sameDocument) {
+      current.markSaved(meta.modifiedMs, stillDirty);
+    }
+    if (!stillDirty) {
+      await clearRecoverySnapshot(path);
+    }
+    return sameDocument && !stillDirty;
   } catch (error) {
+    const current = useDocumentStore.getState();
+    const sameDocument = current.path === path;
+
     if (isAppError(error) && error.code === "conflict") {
-      const choice = await useUiStore.getState().ask({
-        title: "文件已被其他程序修改",
-        message:
-          "磁盘上的内容与编辑器不一致，本次保存没有写入。重新加载会丢弃当前未保存的修改。",
-        buttons: [
-          { label: "重新加载", value: "reload", tone: "danger" },
-          { label: "取消", value: "cancel" },
-        ],
-      });
-      if (choice === "reload") {
-        await reloadActiveDocument();
+      if (sameDocument && options.auto) {
+        current.markSaveBlocked("文件已被其他程序修改");
+        useUiStore
+          .getState()
+          .toast(
+            "自动保存已暂停：文件已被其他程序修改。按 Ctrl+S 处理。",
+            "error",
+          );
+      } else if (sameDocument) {
+        const choice = await useUiStore.getState().ask({
+          title: "文件已被其他程序修改",
+          message:
+            "磁盘上的内容与编辑器不一致，本次保存没有写入。重新加载会丢弃当前未保存的修改。",
+          buttons: [
+            { label: "重新加载", value: "reload", tone: "danger" },
+            { label: "取消", value: "cancel" },
+          ],
+        });
+        if (choice === "reload") {
+          await reloadActiveDocument();
+        }
       }
     } else {
-      useUiStore.getState().toast(`保存失败：${describeError(error)}`, "error");
+      if (sameDocument) {
+        current.markSaveBlocked(`保存失败：${describeError(error)}`);
+      }
+      if (!options.auto || sameDocument) {
+        useUiStore
+          .getState()
+          .toast(`保存失败：${describeError(error)}`, "error");
+      }
     }
     return false;
+  } finally {
+    if (useDocumentStore.getState().path === path) {
+      useDocumentStore.getState().setSaving(false);
+    }
   }
 }
 
@@ -54,6 +116,7 @@ export async function reloadActiveDocument(): Promise<boolean> {
     useDocumentStore.getState().setDocument(doc.path, doc.name, file.modifiedMs);
     setEditorDocument(file.content);
     requestPreview(file.content, true);
+    await clearRecoverySnapshot(doc.path);
     return true;
   } catch (error) {
     useUiStore.getState().toast(`重新加载失败：${describeError(error)}`, "error");
@@ -63,9 +126,16 @@ export async function reloadActiveDocument(): Promise<boolean> {
 
 /**
  * 有未保存内容时询问用户。返回 true 表示可以继续后续操作。
+ * 自动保存开启后，先尝试落盘；失败（例如外部冲突）才询问。
  */
 export async function guardUnsaved(): Promise<boolean> {
-  if (!useDocumentStore.getState().dirty) return true;
+  const doc = useDocumentStore.getState();
+  if (!doc.dirty) return true;
+
+  if (doc.path && !doc.saveBlocked) {
+    const saved = await saveActiveDocument({ auto: true });
+    if (saved && !useDocumentStore.getState().dirty) return true;
+  }
 
   const choice = await useUiStore.getState().ask({
     title: "有未保存的修改",
@@ -78,6 +148,14 @@ export async function guardUnsaved(): Promise<boolean> {
   });
 
   if (choice === "cancel") return false;
-  if (choice === "save") return saveActiveDocument();
+  if (choice === "save") {
+    const saved = await saveActiveDocument();
+    return saved && !useDocumentStore.getState().dirty;
+  }
+
+  const path = useDocumentStore.getState().path;
+  if (path) {
+    await discardRecoveryForPath(path);
+  }
   return true;
 }

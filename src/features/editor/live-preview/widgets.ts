@@ -597,6 +597,11 @@ export class RuleWidget extends WidgetType {
     wrapper.appendChild(document.createElement("hr"));
     return wrapper;
   }
+
+  // 让点击落在被替换的分隔线上，光标进入后自动显示 `---` 源码。
+  ignoreEvent(): boolean {
+    return false;
+  }
 }
 
 export class MathWidget extends WidgetType {

@@ -4,6 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { DialogHost } from "../components/Dialog";
 import { ToastHost } from "../components/Toast";
 import { EditorPane } from "../features/editor/EditorPane";
+import { flushAutoSave } from "../features/editor/autosave";
 import { guardUnsaved, saveActiveDocument } from "../features/editor/save";
 import { PreviewPane } from "../features/preview/PreviewPane";
 import { WorkspaceSidebar } from "../features/workspace/WorkspaceSidebar";
@@ -81,6 +82,11 @@ export default function App() {
       .onCloseRequested(async (event) => {
         if (!useDocumentStore.getState().dirty) return;
         event.preventDefault();
+        // 先给自动保存一次落盘机会；冲突或 I/O 失败时才询问。
+        if (await flushAutoSave()) {
+          await window_.destroy();
+          return;
+        }
         if (await guardUnsaved()) {
           await window_.destroy();
         }

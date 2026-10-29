@@ -151,8 +151,7 @@ fn rename_in(root: &Path, rel: &str, new_name: &str) -> Result<Entry, AppError> 
     fs_path::validate_name(new_name)?;
 
     let source = fs_path::resolve_in_workspace(root, &clean)?;
-    let meta = fs::symlink_metadata(&source)
-        .map_err(|_| AppError::NotFound(clean.clone()))?;
+    let meta = fs::symlink_metadata(&source).map_err(|_| AppError::NotFound(clean.clone()))?;
     if meta.file_type().is_symlink() {
         return Err(AppError::InvalidPath("不支持操作符号链接".into()));
     }
@@ -245,10 +244,7 @@ pub fn rename_entry(
 }
 
 #[tauri::command]
-pub fn delete_entry(
-    rel_path: String,
-    state: State<'_, WorkspaceState>,
-) -> Result<(), AppError> {
+pub fn delete_entry(rel_path: String, state: State<'_, WorkspaceState>) -> Result<(), AppError> {
     let root = state.root()?;
     delete_in(&root, &rel_path)
 }

@@ -2,6 +2,7 @@ mod commands;
 mod error;
 mod fs_path;
 mod images;
+mod recovery;
 mod watcher;
 
 use commands::workspace::WorkspaceState;
@@ -29,6 +30,11 @@ pub fn run() {
             commands::file::create_file,
             commands::file::rename_entry,
             commands::file::delete_entry,
+            commands::recovery::save_recovery,
+            commands::recovery::list_recoveries,
+            commands::recovery::delete_recovery,
+            commands::recovery::clear_recovery,
+            commands::image_asset::save_image_asset,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

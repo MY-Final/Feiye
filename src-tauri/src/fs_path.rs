@@ -93,12 +93,14 @@ pub fn validate_name(name: &str) -> Result<(), AppError> {
         return Err(AppError::InvalidPath("名称不能以 . 开头".into()));
     }
     if name.ends_with(' ') || name.ends_with('.') {
-        return Err(AppError::InvalidPath(
-            "名称不能以空格或句点结尾".into(),
-        ));
+        return Err(AppError::InvalidPath("名称不能以空格或句点结尾".into()));
     }
 
-    let stem = name.split('.').next().unwrap_or_default().to_ascii_uppercase();
+    let stem = name
+        .split('.')
+        .next()
+        .unwrap_or_default()
+        .to_ascii_uppercase();
     if RESERVED_NAMES.contains(&stem.as_str()) {
         return Err(AppError::InvalidPath("名称是系统保留名".into()));
     }

@@ -7,6 +7,11 @@ import { EditorView, keymap } from "@codemirror/view";
 import type { ResolvedImage } from "../../lib/images";
 import { formatKeymap } from "./format-keymap";
 import { readFormatState, type FormatState } from "./formatting";
+import {
+  handleEditorDragOver,
+  handleEditorDrop,
+  handleEditorPaste,
+} from "./image-insert";
 import { createLivePreview } from "./live-preview";
 import { mathMarkdownExtension } from "./live-preview/math-extension";
 
@@ -135,6 +140,12 @@ export function createEditorState(
       }),
       EditorView.lineWrapping,
       editorTheme,
+      // 粘贴 / 拖入图片时保存到文档旁的 assets/ 并插入相对路径。
+      EditorView.domEventHandlers({
+        paste: (event, view) => handleEditorPaste(event, view),
+        drop: (event, view) => handleEditorDrop(event, view),
+        dragover: (event) => handleEditorDragOver(event),
+      }),
       editorModeCompartment.of(editorModeExtension(options.mode, options)),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {

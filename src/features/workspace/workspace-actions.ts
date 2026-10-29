@@ -12,9 +12,15 @@ import {
   type Entry,
 } from "../../lib/tauri";
 import { useDocumentStore, type ViewMode } from "../../stores/document";
+import { useOutlineStore } from "../../stores/outline";
 import { useUiStore } from "../../stores/ui";
 import { useWorkspaceStore } from "../../stores/workspace";
+import { resetAutoSave } from "../editor/autosave";
 import { getEditorText, setEditorDocument } from "../editor/editor-bridge";
+import {
+  clearRecoverySnapshot,
+  promptPendingRecoveries,
+} from "../editor/recovery";
 import { guardUnsaved } from "../editor/save";
 import {
   clearPreview,
@@ -24,8 +30,10 @@ import {
 const MARKDOWN_NAME = /\.(md|markdown|mdx)$/i;
 
 function resetDocument(): void {
+  resetAutoSave();
   setEditorDocument("");
   useDocumentStore.getState().clearDocument();
+  useOutlineStore.getState().clear();
   clearPreview();
 }
 
@@ -51,6 +59,7 @@ export async function openWorkspaceAt(path: string): Promise<void> {
     resetDocument();
     await useWorkspaceStore.getState().loadDir("");
     await setSetting("lastWorkspace", info.root);
+    void promptPendingRecoveries();
   } catch (error) {
     toastError("打开工作区失败", error);
   }
@@ -64,6 +73,7 @@ export async function restoreLastWorkspace(): Promise<void> {
     const info = await apiOpenWorkspace(last);
     useWorkspaceStore.getState().setWorkspace(info);
     await useWorkspaceStore.getState().loadDir("");
+    await promptPendingRecoveries();
   } catch {
     await setSetting("lastWorkspace", null);
   }
@@ -146,9 +156,11 @@ export async function renameEntry(entry: Entry): Promise<void> {
 
     const doc = useDocumentStore.getState();
     if (doc.path === entry.relPath) {
+      void clearRecoverySnapshot(entry.relPath);
       doc.renameActive(renamed.relPath, renamed.name);
     } else if (entry.isDir && doc.path && isWithin(doc.path, entry.relPath)) {
       // 当前文档所在目录被改名，路径已失效，直接关闭文档。
+      void clearRecoverySnapshot(doc.path);
       resetDocument();
     }
 
@@ -182,6 +194,7 @@ export async function deleteEntry(entry: Entry): Promise<void> {
 
     const doc = useDocumentStore.getState();
     if (doc.path && isWithin(doc.path, entry.relPath)) {
+      void clearRecoverySnapshot(doc.path);
       resetDocument();
     }
   } catch (error) {

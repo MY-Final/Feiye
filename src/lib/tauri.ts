@@ -24,6 +24,21 @@ export interface FileMeta {
   size: number;
 }
 
+export interface RecoverySnapshot {
+  id: string;
+  workspaceRoot: string;
+  relPath: string;
+  name: string;
+  content: string;
+  savedAt: number;
+  baseModifiedMs: number | null;
+}
+
+export interface ImageAsset {
+  relPath: string;
+  markdownPath: string;
+}
+
 export interface AppError {
   code:
     | "no-workspace"
@@ -100,6 +115,44 @@ export function renameEntry(
 
 export function deleteEntry(relPath: string): Promise<void> {
   return invoke<void>("delete_entry", { relPath });
+}
+
+export function saveRecovery(
+  relPath: string,
+  name: string,
+  content: string,
+  baseModifiedMs: number | null,
+): Promise<RecoverySnapshot> {
+  return invoke<RecoverySnapshot>("save_recovery", {
+    relPath,
+    name,
+    content,
+    baseModifiedMs,
+  });
+}
+
+export function listRecoveries(): Promise<RecoverySnapshot[]> {
+  return invoke<RecoverySnapshot[]>("list_recoveries");
+}
+
+export function deleteRecovery(id: string): Promise<void> {
+  return invoke<void>("delete_recovery", { id });
+}
+
+export function clearRecovery(relPath: string): Promise<void> {
+  return invoke<void>("clear_recovery", { relPath });
+}
+
+export function saveImageAsset(
+  relPath: string,
+  data: string,
+  baseName: string,
+): Promise<ImageAsset> {
+  return invoke<ImageAsset>("save_image_asset", {
+    relPath,
+    data,
+    baseName,
+  });
 }
 
 export async function pickWorkspaceFolder(): Promise<string | null> {

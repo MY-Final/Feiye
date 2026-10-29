@@ -99,6 +99,58 @@ export function getEditorText(): string | null {
   return view?.state.doc.toString() ?? null;
 }
 
+export function getEditorView(): EditorView | null {
+  return view;
+}
+
+export function getEditorScroller(): HTMLElement | null {
+  return view?.scrollDOM ?? null;
+}
+
+export interface EditorScrollMetrics {
+  scrollTop: number;
+  scrollHeight: number;
+  clientHeight: number;
+  paddingTop: number;
+  headingTops: number[];
+}
+
+/** 供分栏滚动同步使用：标题在编辑器滚动内容中的纵坐标。 */
+export function getEditorScrollMetrics(
+  positions: number[],
+): EditorScrollMetrics | null {
+  const editor = view;
+  if (!editor) return null;
+  const paddingTop = editor.documentPadding.top;
+  return {
+    scrollTop: editor.scrollDOM.scrollTop,
+    scrollHeight: editor.scrollDOM.scrollHeight,
+    clientHeight: editor.scrollDOM.clientHeight,
+    paddingTop,
+    headingTops: positions.map((position) => {
+      const target = Math.max(0, Math.min(position, editor.state.doc.length));
+      return paddingTop + editor.lineBlockAt(target).top;
+    }),
+  };
+}
+
+export function setEditorScrollTop(top: number): void {
+  if (!view) return;
+  view.scrollDOM.scrollTop = top;
+}
+
+/** 把光标移动到指定文档位置，并滚动到视口上方。 */
+export function jumpToEditorPosition(position: number, focus = true): boolean {
+  if (!view) return false;
+  const target = Math.max(0, Math.min(position, view.state.doc.length));
+  view.dispatch({
+    selection: { anchor: target },
+    effects: EditorView.scrollIntoView(target, { y: "start", yMargin: 24 }),
+  });
+  if (focus) view.focus();
+  return true;
+}
+
 export function focusEditor(): void {
   view?.focus();
 }

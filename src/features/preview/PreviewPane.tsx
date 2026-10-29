@@ -8,12 +8,15 @@ import { useWorkspaceStore } from "../../stores/workspace";
 import "./preview.css";
 import type { PreviewResult } from "./preview-protocol";
 import { setPreviewListener } from "./preview-controller";
+import { attachSplitScrollSync } from "./scroll-sync";
 
 export function PreviewPane() {
   const [result, setResult] = useState<PreviewResult>({ html: "" });
+  const paneRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const root = useWorkspaceStore((state) => state.root);
   const docPath = useDocumentStore((state) => state.path);
+  const viewMode = useDocumentStore((state) => state.viewMode);
 
   // 本地图片走工作区作用域的 feiyeimg 协议；远程图片保持原样。
   const html = useMemo(
@@ -61,6 +64,27 @@ export function PreviewPane() {
       body.removeEventListener("error", onImageError, true);
     };
   }, []);
+
+  // 给标题补上稳定锚点，供大纲跳转和滚动同步使用。
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (!body) return;
+    body
+      .querySelectorAll<HTMLElement>("h1, h2, h3, h4, h5, h6")
+      .forEach((heading, index) => {
+        heading.id = `preview-heading-${index}`;
+        heading.dataset.headingIndex = String(index);
+      });
+  }, [html]);
+
+  // 分栏模式：按标题锚点同步编辑区与预览区滚动。
+  useEffect(() => {
+    if (viewMode !== "split") return;
+    const pane = paneRef.current;
+    const body = bodyRef.current;
+    if (!pane || !body) return;
+    return attachSplitScrollSync(pane, body);
+  }, [viewMode, html]);
 
   // 给预览里的每段代码挂一个复制按钮。HTML 由 Worker 生成，
   // 这里在每次渲染后补齐按钮，不改动 Markdown 管线。
@@ -118,7 +142,7 @@ export function PreviewPane() {
   }, [html]);
 
   return (
-    <div className="preview-pane">
+    <div className="preview-pane" ref={paneRef}>
       {result.error ? (
         <div className="preview-error" role="alert">
           预览失败：{result.error}

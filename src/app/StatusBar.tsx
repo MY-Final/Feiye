@@ -23,14 +23,36 @@ export function StatusBar() {
   const hasWorkspace = useWorkspaceStore((state) => Boolean(state.root));
   const docPath = useDocumentStore((state) => state.path);
   const dirty = useDocumentStore((state) => state.dirty);
+  const saving = useDocumentStore((state) => state.saving);
+  const saveBlocked = useDocumentStore((state) => state.saveBlocked);
   const savedModifiedMs = useDocumentStore((state) => state.savedModifiedMs);
   const cursor = useDocumentStore((state) => state.cursor);
   const stats = useDocumentStore((state) => state.stats);
 
   const savedAt =
     savedModifiedMs !== null ? formatSavedAt(savedModifiedMs) : "";
-  const saveLabel = dirty ? "未保存" : savedAt ? `已保存 ${savedAt}` : "已保存";
-  const saveKey = dirty ? "dirty" : `saved-${savedModifiedMs ?? 0}`;
+  const saveLabel = saving
+    ? "保存中…"
+    : dirty
+      ? saveBlocked
+        ? "保存暂停"
+        : "待保存"
+      : savedAt
+        ? `已保存 ${savedAt}`
+        : "已保存";
+  const saveKey = saving
+    ? "saving"
+    : dirty
+      ? saveBlocked ?? "dirty"
+      : `saved-${savedModifiedMs ?? 0}`;
+  const saveTitle = [
+    savedModifiedMs !== null
+      ? new Date(savedModifiedMs).toLocaleString("zh-CN")
+      : null,
+    saveBlocked,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <footer className="statusbar">
@@ -51,12 +73,10 @@ export function StatusBar() {
             </span>
             <span>UTF-8</span>
             <span
-              className={`status-save${dirty ? " status-dirty" : ""}`}
-              title={
-                savedModifiedMs !== null
-                  ? new Date(savedModifiedMs).toLocaleString("zh-CN")
-                  : undefined
-              }
+              className={`status-save${dirty ? " status-dirty" : ""}${
+                saveBlocked ? " status-blocked" : ""
+              }`}
+              title={saveTitle || undefined}
             >
               <span key={saveKey} className="status-save-text">
                 {saveLabel}

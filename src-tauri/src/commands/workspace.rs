@@ -110,8 +110,8 @@ pub fn list_dir(
 
 fn list_children(root: &Path, rel: &str) -> Result<Vec<Entry>, AppError> {
     let dir = fs_path::resolve_in_workspace(root, rel)?;
-    let dir = dunce::canonicalize(&dir)
-        .map_err(|_| AppError::NotFound(format!("目录不存在：{rel}")))?;
+    let dir =
+        dunce::canonicalize(&dir).map_err(|_| AppError::NotFound(format!("目录不存在：{rel}")))?;
 
     if !dir.starts_with(root) {
         return Err(AppError::OutsideWorkspace);
@@ -142,6 +142,10 @@ fn list_children(root: &Path, rel: &str) -> Result<Vec<Entry>, AppError> {
             if IGNORED_DIRS.contains(&name.as_str()) {
                 continue;
             }
+            // 图片粘贴生成的 assets/ 只存放资源；除非里面有 Markdown，否则不占用文件树。
+            if name == "assets" && !has_markdown_child(&item.path()) {
+                continue;
+            }
             entries.push(Entry {
                 rel_path: fs_path::join_rel(&clean, &name),
                 name,
@@ -163,6 +167,16 @@ fn list_children(root: &Path, rel: &str) -> Result<Vec<Entry>, AppError> {
     });
 
     Ok(entries)
+}
+
+fn has_markdown_child(dir: &Path) -> bool {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return false;
+    };
+    entries.filter_map(Result::ok).any(|entry| {
+        entry.file_type().is_ok_and(|kind| kind.is_file())
+            && fs_path::is_markdown(&entry.file_name().to_string_lossy())
+    })
 }
 
 #[cfg(test)]
@@ -204,5 +218,21 @@ mod tests {
 
         assert!(list_children(&root, "..").is_err());
         assert!(list_children(&root, "../").is_err());
+    }
+
+    #[test]
+    fn hides_image_only_assets_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = dunce::canonicalize(temp.path()).unwrap();
+        fs::create_dir(root.join("assets")).unwrap();
+        fs::write(root.join("assets/photo.png"), [1, 2, 3]).unwrap();
+
+        assert!(list_children(&root, "").unwrap().is_empty());
+
+        fs::write(root.join("assets/note.md"), "# note").unwrap();
+        let entries = list_children(&root, "").unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].name, "assets");
+        assert!(entries[0].is_dir);
     }
 }
