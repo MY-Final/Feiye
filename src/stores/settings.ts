@@ -6,9 +6,19 @@ import { isViewMode } from "../lib/view-modes";
 import type { ViewMode } from "./document";
 
 export type DefaultView = "last" | ViewMode;
+export type FontFamily = "system" | "serif" | "kai";
+
+/** 正文字体栈；标题始终使用衬线，保持界面气质。 */
+export const FONT_FAMILY_STACKS: Record<FontFamily, string> = {
+  system: "var(--font-ui)",
+  serif:
+    '"Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "STSong", SimSun, Georgia, "Times New Roman", serif',
+  kai: '"LXGW WenKai", "Kaiti SC", "STKaiti", "KaiTi", serif',
+};
 
 export interface Preferences {
   theme: "system" | "light" | "dark";
+  fontFamily: FontFamily;
   fontSize: number;
   lineHeight: number;
   editorWidth: number;
@@ -20,6 +30,7 @@ export interface Preferences {
 
 export const DEFAULT_PREFERENCES: Preferences = {
   theme: "system",
+  fontFamily: "system",
   fontSize: 16,
   lineHeight: 1.8,
   editorWidth: 900,
@@ -53,6 +64,10 @@ function isDefaultView(value: unknown): value is DefaultView {
   return value === "last" || isViewMode(value);
 }
 
+function isFontFamily(value: unknown): value is FontFamily {
+  return value === "system" || value === "serif" || value === "kai";
+}
+
 /** 把外部读到的任意值收敛为合法偏好，用于加载与写入前校验。 */
 export function normalizePreferences(value: unknown): Preferences {
   const source =
@@ -64,6 +79,9 @@ export function normalizePreferences(value: unknown): Preferences {
     theme: isThemeMode(source.theme)
       ? source.theme
       : DEFAULT_PREFERENCES.theme,
+    fontFamily: isFontFamily(source.fontFamily)
+      ? source.fontFamily
+      : DEFAULT_PREFERENCES.fontFamily,
     fontSize: clampNumber(
       source.fontSize,
       PREFERENCE_LIMITS.fontSize.min,

@@ -9,6 +9,7 @@ import {
   PREFERENCE_LIMITS,
   useSettingsStore,
   type DefaultView,
+  type FontFamily,
   type Preferences,
 } from "../../stores/settings";
 import { useUiStore } from "../../stores/ui";
@@ -28,6 +29,12 @@ const THEME_OPTIONS: { value: Preferences["theme"]; label: string }[] = [
   { value: "system", label: "跟随系统" },
   { value: "light", label: "浅色" },
   { value: "dark", label: "深色" },
+];
+
+const FONT_FAMILY_OPTIONS: { value: FontFamily; label: string }[] = [
+  { value: "system", label: "系统默认" },
+  { value: "serif", label: "宋体 / 衬线" },
+  { value: "kai", label: "楷体" },
 ];
 
 const AUTO_SAVE_OPTIONS = [
@@ -204,6 +211,26 @@ export function SettingsDialog() {
                     ariaLabel="主题"
                     onChange={(theme) => update({ theme })}
                   />
+                </Row>
+
+                <Row
+                  label="正文字体"
+                  hint="编辑区与预览同步；标题保持衬线"
+                >
+                  <select
+                    className="settings-select"
+                    value={preferences.fontFamily}
+                    aria-label="正文字体"
+                    onChange={(event) =>
+                      update({ fontFamily: event.target.value as FontFamily })
+                    }
+                  >
+                    {FONT_FAMILY_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
                 </Row>
 
                 <Row label="正文字号" hint="编辑区与预览同步生效">
