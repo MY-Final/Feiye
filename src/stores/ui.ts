@@ -32,11 +32,15 @@ export interface PromptRequest {
 
 interface UiStore {
   sidebarVisible: boolean;
+  settingsOpen: boolean;
   toasts: ToastItem[];
   confirm: ConfirmRequest | null;
   prompt: PromptRequest | null;
   toggleSidebar(): void;
   setSidebarVisible(visible: boolean): void;
+  openSettings(): void;
+  closeSettings(): void;
+  toggleSettings(): void;
   toast(message: string, kind?: ToastKind): void;
   dismissToast(id: number): void;
   ask(options: Omit<ConfirmRequest, "resolve">): Promise<string>;
@@ -49,6 +53,7 @@ let toastId = 0;
 
 export const useUiStore = create<UiStore>((set, get) => ({
   sidebarVisible: true,
+  settingsOpen: false,
   toasts: [],
   confirm: null,
   prompt: null,
@@ -59,6 +64,18 @@ export const useUiStore = create<UiStore>((set, get) => ({
 
   setSidebarVisible(visible) {
     set({ sidebarVisible: visible });
+  },
+
+  openSettings() {
+    set({ settingsOpen: true });
+  },
+
+  closeSettings() {
+    set({ settingsOpen: false });
+  },
+
+  toggleSettings() {
+    set((state) => ({ settingsOpen: !state.settingsOpen }));
   },
 
   toast(message, kind = "info") {

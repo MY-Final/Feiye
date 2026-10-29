@@ -5,8 +5,10 @@ import { DialogHost } from "../components/Dialog";
 import { ToastHost } from "../components/Toast";
 import { EditorPane } from "../features/editor/EditorPane";
 import { flushAutoSave } from "../features/editor/autosave";
+import { refreshEditorLayout } from "../features/editor/editor-bridge";
 import { guardUnsaved, saveActiveDocument } from "../features/editor/save";
 import { PreviewPane } from "../features/preview/PreviewPane";
+import { SettingsDialog } from "../features/settings/SettingsDialog";
 import { WorkspaceSidebar } from "../features/workspace/WorkspaceSidebar";
 import {
   chooseWorkspace,
@@ -19,6 +21,7 @@ import { APP_NAME, APP_TAGLINE } from "../lib/app-info";
 import { getSetting, setSetting } from "../lib/tauri";
 import { isViewMode } from "../lib/view-modes";
 import { useDocumentStore } from "../stores/document";
+import { flushPreferences, useSettingsStore } from "../stores/settings";
 import { useUiStore } from "../stores/ui";
 import { useWorkspaceStore } from "../stores/workspace";
 import {
@@ -35,7 +38,7 @@ let bootstrapped = false;
 
 function dialogOpen(): boolean {
   const ui = useUiStore.getState();
-  return Boolean(ui.confirm || ui.prompt);
+  return Boolean(ui.confirm || ui.prompt || ui.settingsOpen);
 }
 
 function isTextEntry(target: EventTarget | null): boolean {
@@ -50,6 +53,7 @@ export default function App() {
   const docPath = useDocumentStore((state) => state.path);
   const viewMode = useDocumentStore((state) => state.viewMode);
   const sidebarVisible = useUiStore((state) => state.sidebarVisible);
+  const preferences = useSettingsStore((state) => state.preferences);
   const [splitRatio, setSplitRatio] = useState(DEFAULT_SPLIT_RATIO);
 
   // 启动时恢复上次的视图模式和工作区（StrictMode 下只执行一次）。
@@ -62,8 +66,13 @@ export default function App() {
         getSetting<unknown>("viewMode"),
         getSetting<unknown>("splitRatio"),
       ]);
-      if (isViewMode(savedMode)) {
-        useDocumentStore.getState().setViewMode(savedMode);
+      const preferences = useSettingsStore.getState().preferences;
+      const preferredView =
+        preferences.defaultView === "last"
+          ? savedMode
+          : preferences.defaultView;
+      if (isViewMode(preferredView)) {
+        useDocumentStore.getState().setViewMode(preferredView);
       }
       if (typeof savedRatio === "number") {
         setSplitRatio(clampSplitRatio(savedRatio));
@@ -80,6 +89,7 @@ export default function App() {
 
     void window_
       .onCloseRequested(async (event) => {
+        await flushPreferences();
         if (!useDocumentStore.getState().dirty) return;
         event.preventDefault();
         // 先给自动保存一次落盘机会；冲突或 I/O 失败时才询问。
@@ -106,6 +116,29 @@ export default function App() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
+
+      const ui = useUiStore.getState();
+      const mod = event.ctrlKey || event.metaKey;
+
+      // 设置面板优先处理 Ctrl+, 与 Esc，避免被 dialogOpen 提前拦截。
+      if (mod && (event.key === "," || event.code === "Comma")) {
+        if (ui.confirm || ui.prompt) return;
+        event.preventDefault();
+        ui.toggleSettings();
+        return;
+      }
+
+      if (
+        event.key === "Escape" &&
+        ui.settingsOpen &&
+        !ui.confirm &&
+        !ui.prompt
+      ) {
+        event.preventDefault();
+        ui.closeSettings();
+        return;
+      }
+
       if (dialogOpen()) return;
 
       if (event.key === "F2") {
@@ -148,6 +181,17 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  // 字号、行高、行宽或行号变化后，让 CodeMirror 重新测量排版指标。
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => refreshEditorLayout());
+    return () => cancelAnimationFrame(frame);
+  }, [
+    preferences.fontSize,
+    preferences.lineHeight,
+    preferences.editorWidth,
+    preferences.lineNumbers,
+  ]);
+
   const hasWorkspace = Boolean(root);
 
   return (
@@ -159,8 +203,15 @@ export default function App() {
         {hasWorkspace && sidebarVisible ? <WorkspaceSidebar /> : null}
 
         <main
-          className={`workspace-main mode-${viewMode}`}
-          style={{ "--split-ratio": splitRatio } as CSSProperties}
+          className={`workspace-main mode-${viewMode}${preferences.lineNumbers ? "" : " hide-line-numbers"}`}
+          style={
+            {
+              "--split-ratio": splitRatio,
+              "--editor-font-size": `${preferences.fontSize}px`,
+              "--editor-line-height": String(preferences.lineHeight),
+              "--editor-measure": `min(${preferences.editorWidth}px, 100% - 80px)`,
+            } as CSSProperties
+          }
         >
           {hasWorkspace ? (
             <>
@@ -220,6 +271,7 @@ export default function App() {
 
       <StatusBar />
 
+      <SettingsDialog />
       <DialogHost />
       <ToastHost />
     </div>

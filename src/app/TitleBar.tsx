@@ -20,6 +20,16 @@ function FolderIcon() {
   );
 }
 
+function SettingsIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <circle cx="8" cy="8" r="4.7" />
+      <circle cx="8" cy="8" r="2" />
+      <path d="M8 1.7v1.6M8 12.7v1.6M1.7 8h1.6M12.7 8h1.6M3.55 3.55l1.15 1.15M11.3 11.3l1.15 1.15M12.45 3.55l-1.15 1.15M4.7 11.3l-1.15 1.15" />
+    </svg>
+  );
+}
+
 function MinimizeIcon() {
   return (
     <svg viewBox="0 0 12 12" aria-hidden="true">
@@ -55,6 +65,7 @@ export function TitleBar() {
   const dirty = useDocumentStore((state) => state.dirty);
   const sidebarVisible = useUiStore((state) => state.sidebarVisible);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
+  const toggleSettings = useUiStore((state) => state.toggleSettings);
   const controls = useWindowControls();
 
   return (
@@ -93,6 +104,16 @@ export function TitleBar() {
           onClick={() => void chooseWorkspace()}
         >
           <FolderIcon />
+        </button>
+
+        <button
+          type="button"
+          className="icon-btn"
+          title="偏好设置 (Ctrl+,)"
+          aria-label="偏好设置"
+          onClick={toggleSettings}
+        >
+          <SettingsIcon />
         </button>
       </div>
 

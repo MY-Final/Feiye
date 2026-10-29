@@ -1,13 +1,14 @@
 import { useDocumentStore } from "../../stores/document";
+import { useSettingsStore } from "../../stores/settings";
 import { snapshotActiveDocument } from "./recovery";
 import { saveActiveDocument } from "./save";
 
-/** 停止输入后写入源文件的等待时间。 */
-const AUTO_SAVE_DELAY_MS = 1800;
-/** 第一次恢复副本的等待时间。 */
+/** 第一次恢复副本的等待上限；更短的恢复间隔直接采用设置值。 */
 const RECOVERY_FIRST_DELAY_MS = 900;
-/** 持续输入时恢复副本的刷新间隔。 */
-const RECOVERY_REPEAT_MS = 4000;
+
+function recoveryFirstDelay(recoveryInterval: number): number {
+  return Math.min(RECOVERY_FIRST_DELAY_MS, recoveryInterval);
+}
 
 let autoSaveTimer: number | null = null;
 let recoveryTimer: number | null = null;
@@ -37,10 +38,14 @@ function scheduleAutoSave(): void {
   autoSaveTimer = window.setTimeout(() => {
     autoSaveTimer = null;
     void flushAutoSave();
-  }, AUTO_SAVE_DELAY_MS);
+  }, useSettingsStore.getState().preferences.autoSaveDelay);
 }
 
-function scheduleRecovery(delay = RECOVERY_FIRST_DELAY_MS): void {
+function scheduleRecovery(
+  delay = recoveryFirstDelay(
+    useSettingsStore.getState().preferences.recoveryInterval,
+  ),
+): void {
   if (recoveryTimer !== null) return;
 
   recoveryTimer = window.setTimeout(async () => {
@@ -58,7 +63,9 @@ function scheduleRecovery(delay = RECOVERY_FIRST_DELAY_MS): void {
     }
 
     if (useDocumentStore.getState().dirty) {
-      scheduleRecovery(RECOVERY_REPEAT_MS);
+      scheduleRecovery(
+        useSettingsStore.getState().preferences.recoveryInterval,
+      );
     }
   }, delay);
 }
@@ -110,6 +117,21 @@ export function resetAutoSave(): void {
   clearRecoveryTimer();
 }
 
+/** 自动保存或恢复节奏变化后，按新设置重排尚未触发的计时器。 */
+export function resyncAutoSave(): void {
+  const hadAutoSave = autoSaveTimer !== null;
+  clearAutoSaveTimer();
+  if (hadAutoSave) {
+    scheduleAutoSave();
+  }
+
+  const hadRecovery = recoveryTimer !== null;
+  clearRecoveryTimer();
+  if (hadRecovery) {
+    scheduleRecovery();
+  }
+}
+
 function init(): void {
   if (initialized) return;
   initialized = true;
@@ -121,6 +143,17 @@ function init(): void {
     // 手动保存成功后解除“自动保存暂停”，后续输入会正常自动保存。
     if (previous.dirty && !state.dirty) {
       clearAutoSaveTimer();
+    }
+  });
+
+  useSettingsStore.subscribe((state, previous) => {
+    if (
+      state.preferences.autoSaveDelay !==
+        previous.preferences.autoSaveDelay ||
+      state.preferences.recoveryInterval !==
+        previous.preferences.recoveryInterval
+    ) {
+      resyncAutoSave();
     }
   });
 

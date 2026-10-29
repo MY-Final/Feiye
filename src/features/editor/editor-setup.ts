@@ -1,8 +1,10 @@
 import { basicSetup } from "codemirror";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
+import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { languages } from "@codemirror/language-data";
 import { Compartment, EditorState, Prec, type Extension } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
+import { tags as t } from "@lezer/highlight";
 
 import type { ResolvedImage } from "../../lib/images";
 import { formatKeymap } from "./format-keymap";
@@ -31,6 +33,85 @@ export interface EditorOptions {
 }
 
 export const editorModeCompartment = new Compartment();
+
+// 语法配色只引用 CSS 变量，切换明暗主题时无需重建编辑器。
+const editorHighlightStyle = HighlightStyle.define([
+  {
+    tag: [
+      t.heading1,
+      t.heading2,
+      t.heading3,
+      t.heading4,
+      t.heading5,
+      t.heading6,
+      t.heading,
+    ],
+    color: "var(--syn-heading)",
+    fontWeight: "600",
+  },
+  { tag: t.strong, fontWeight: "600" },
+  { tag: t.emphasis, fontStyle: "italic" },
+  { tag: t.strikethrough, textDecoration: "line-through" },
+  { tag: [t.link, t.url], color: "var(--syn-link)" },
+  {
+    tag: t.monospace,
+    color: "var(--syn-string)",
+    fontFamily: "var(--font-mono)",
+  },
+  {
+    tag: [t.quote, t.comment, t.lineComment, t.blockComment, t.docComment],
+    color: "var(--syn-comment)",
+  },
+  { tag: [t.list, t.contentSeparator], color: "var(--syn-meta)" },
+  {
+    tag: [
+      t.string,
+      t.docString,
+      t.character,
+      t.attributeValue,
+      t.regexp,
+      t.escape,
+    ],
+    color: "var(--syn-string)",
+  },
+  {
+    tag: [t.number, t.integer, t.float, t.bool, t.atom, t.null],
+    color: "var(--syn-number)",
+  },
+  {
+    tag: [
+      t.keyword,
+      t.controlKeyword,
+      t.operatorKeyword,
+      t.definitionKeyword,
+      t.moduleKeyword,
+      t.self,
+    ],
+    color: "var(--syn-keyword)",
+  },
+  {
+    tag: [t.typeName, t.className, t.namespace, t.tagName],
+    color: "var(--syn-type)",
+  },
+  {
+    tag: [t.variableName, t.propertyName, t.attributeName, t.labelName],
+    color: "var(--syn-variable)",
+  },
+  {
+    tag: [t.function(t.variableName), t.function(t.propertyName)],
+    color: "var(--syn-function)",
+  },
+  { tag: [t.operator, t.derefOperator], color: "var(--syn-operator)" },
+  {
+    tag: [t.punctuation, t.bracket, t.separator],
+    color: "var(--syn-punctuation)",
+  },
+  {
+    tag: [t.meta, t.processingInstruction, t.annotation, t.documentMeta],
+    color: "var(--syn-meta)",
+  },
+  { tag: t.invalid, color: "var(--syn-invalid)" },
+]);
 
 const editorTheme = EditorView.theme({
   "&": {
@@ -133,6 +214,7 @@ export function createEditorState(
     doc,
     extensions: [
       basicSetup,
+      syntaxHighlighting(editorHighlightStyle),
       markdown({
         base: markdownLanguage,
         codeLanguages: languages,

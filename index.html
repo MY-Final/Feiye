@@ -5,6 +5,22 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>扉页 · Feiye</title>
+    <script>
+      // 首屏主题：与 src/lib/theme.ts 的 THEME_CACHE_KEY 保持一致，避免暗色下闪白。
+      (function () {
+        try {
+          var mode = localStorage.getItem("feiye.theme") || "system";
+          var dark =
+            mode === "dark" ||
+            (mode === "system" &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.dataset.theme = dark ? "dark" : "light";
+          document.documentElement.style.colorScheme = dark ? "dark" : "light";
+        } catch (error) {
+          document.documentElement.dataset.theme = "light";
+        }
+      })();
+    </script>
   </head>
 
   <body>

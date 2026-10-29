@@ -11,6 +11,7 @@
   --accent: #2f5561;
   --accent-strong: #24434d;
   --accent-soft: rgba(47, 85, 97, 0.1);
+  --on-accent: #fbfbf8;
   --danger: #a63d34;
   --danger-soft: #f5e9e6;
   --danger-line: #e4c9c4;
@@ -20,6 +21,22 @@
   --editor-selection: rgba(47, 85, 97, 0.18);
   --overlay-shadow: 0 18px 48px rgba(20, 24, 22, 0.18);
   --overlay-shadow-soft: 0 8px 24px rgba(20, 24, 22, 0.12);
+
+  /* 语法高亮：冷纸上的低饱和配色，与靛青主色协调 */
+  --syn-heading: #24434d;
+  --syn-keyword: #8c3a52;
+  --syn-string: #356649;
+  --syn-number: #9a5a2a;
+  --syn-comment: #7a8077;
+  --syn-type: #6b4a87;
+  --syn-function: #2f5f8a;
+  --syn-variable: #2f5561;
+  --syn-property: #3f5a6b;
+  --syn-operator: #7a5c3e;
+  --syn-punctuation: #8a8f86;
+  --syn-link: #2c6f7b;
+  --syn-meta: #7d7136;
+  --syn-invalid: #a63d34;
 
   --font-ui: "Segoe UI Variable Text", "Segoe UI", -apple-system,
     "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei",
@@ -40,7 +57,7 @@
   --radius-md: 4px;
   --radius-lg: 6px;
 
-  color-scheme: light dark;
+  color-scheme: light;
   font-family: var(--font-ui);
   font-size: 15px;
   line-height: 1.65;
@@ -50,29 +67,46 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #151817;
-    --bg-elevated: #1a1e1d;
-    --bg-sunken: #111413;
-    --text: #e7e8e2;
-    --text-muted: #a0a69e;
-    --text-faint: #7c837a;
-    --line: #2b312e;
-    --line-strong: #3b433f;
-    --accent: #8fb4bc;
-    --accent-strong: #b0cdd3;
-    --accent-soft: rgba(143, 180, 188, 0.14);
-    --danger: #da8a80;
-    --danger-soft: rgba(166, 61, 52, 0.16);
-    --danger-line: #5a3833;
-    --code-bg: #1b201e;
-    --table-stripe: #181c1a;
-    --editor-active-line: rgba(255, 255, 255, 0.03);
-    --editor-selection: rgba(143, 180, 188, 0.22);
-    --overlay-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
-    --overlay-shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.38);
-  }
+/* 主题由 JS 解析后写到 data-theme，系统模式下会随系统变化重新解析。 */
+:root[data-theme="dark"] {
+  --bg: #151817;
+  --bg-elevated: #1a1e1d;
+  --bg-sunken: #111413;
+  --text: #e7e8e2;
+  --text-muted: #a0a69e;
+  --text-faint: #7c837a;
+  --line: #2b312e;
+  --line-strong: #3b433f;
+  --accent: #8fb4bc;
+  --accent-strong: #b0cdd3;
+  --accent-soft: rgba(143, 180, 188, 0.14);
+  --on-accent: #111817;
+  --danger: #da8a80;
+  --danger-soft: rgba(166, 61, 52, 0.16);
+  --danger-line: #5a3833;
+  --code-bg: #1b201e;
+  --table-stripe: #181c1a;
+  --editor-active-line: rgba(255, 255, 255, 0.03);
+  --editor-selection: rgba(143, 180, 188, 0.22);
+  --overlay-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+  --overlay-shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.38);
+
+  --syn-heading: #a8c6cc;
+  --syn-keyword: #e0a0b4;
+  --syn-string: #a3c9a0;
+  --syn-number: #e3b57e;
+  --syn-comment: #7c857c;
+  --syn-type: #c4a7e0;
+  --syn-function: #8fb8dc;
+  --syn-variable: #b8c7c4;
+  --syn-property: #9fb6c4;
+  --syn-operator: #cbb28f;
+  --syn-punctuation: #7f877f;
+  --syn-link: #8fc8d4;
+  --syn-meta: #c9bd7e;
+  --syn-invalid: #da8a80;
+
+  color-scheme: dark;
 }
 
 *,
