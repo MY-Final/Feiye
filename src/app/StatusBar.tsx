@@ -1,4 +1,5 @@
 import { useDocumentStore } from "../stores/document";
+import { useEditorStore } from "../stores/editor";
 import { useWorkspaceStore } from "../stores/workspace";
 
 function formatSavedAt(ms: number): string {
@@ -28,6 +29,7 @@ export function StatusBar() {
   const savedModifiedMs = useDocumentStore((state) => state.savedModifiedMs);
   const cursor = useDocumentStore((state) => state.cursor);
   const stats = useDocumentStore((state) => state.stats);
+  const selectedWords = useEditorStore((state) => state.selectedWords);
 
   const savedAt =
     savedModifiedMs !== null ? formatSavedAt(savedModifiedMs) : "";
@@ -65,6 +67,11 @@ export function StatusBar() {
             <span>
               {cursor.line}:{cursor.column}
             </span>
+            {selectedWords > 0 ? (
+              <span className="status-stat" title="当前选区的字数（不含空白）">
+                选中 {selectedWords.toLocaleString("zh-CN")} 字
+              </span>
+            ) : null}
             <span
               className="status-stat"
               title={`${stats.chars.toLocaleString("zh-CN")} 个字符（不含空白）`}

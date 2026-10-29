@@ -19,6 +19,25 @@
 
 <!-- 从这里开始追加 -->
 
+## 第 5 轮 · 2026-10-29 20:13
+
+**用户需求**：翻译和校对时经常框选一段文字，想知道选中的到底有多少字；现在状态栏只有全文总字数，得全选复制到别处才能数。希望选中文字时，状态栏直接显示选区字数。
+
+**产品经理**：写作工具的基础信息，契合「为写作服务」；不新增面板，只在状态栏多一个数字，符合「安静」原则。结论：**做**。
+
+**前端**：`stores/editor.ts` 增加 `selectedWords`；`EditorPane` 在现有 `onCursor` 回调里用 `countTextStats` 统计选区；`StatusBar` 在选中时显示「选中 N 字」。风险：选区很大时每次选区变化都要统计，但只在 `docChanged || selectionSet` 且非空时计算，可接受。工作量 **S**。
+
+**后端**：无改动。工作量 **S**。
+
+**裁决**：做。
+
+**改动**：`src/stores/editor.ts`、`src/features/editor/EditorPane.tsx`、`src/app/StatusBar.tsx`。
+
+**构建**：通过（`bun run build`，1.38s）。
+
+**备注**：本轮另评估过「拖入图片保留原文件名」，需要改 Rust 的 `sanitize_base_name`。本机 `cargo check` 在编译依赖 `memchr` / `windows` 时 rustc 直接崩溃（`STATUS_STACK_BUFFER_OVERRUN`），无法验证 Rust 改动，已回滚并延后。
+
+
 ## 第 4 轮 · 2026-10-29 20:05
 
 **用户需求**：侧栏固定 240px，我的文件夹和文件名比较长，标题经常被截断成省略号；写长文档时又希望侧栏窄一点、正文宽一点。希望侧栏右边缘能拖动调宽，双击回到默认宽度。

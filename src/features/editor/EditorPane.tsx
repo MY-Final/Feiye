@@ -66,6 +66,13 @@ export function EditorPane() {
         onStats: scheduleStats,
         onCursor(line, column) {
           useDocumentStore.getState().setCursor(line, column);
+          const view = getEditorView();
+          const range = view?.state.selection.main;
+          const words =
+            view && range && !range.empty
+              ? countTextStats(view.state.sliceDoc(range.from, range.to)).words
+              : 0;
+          useEditorStore.getState().setSelectedWords(words);
         },
         onFormatState(state) {
           useEditorStore.getState().setFormat(state);
