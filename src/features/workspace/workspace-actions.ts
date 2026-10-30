@@ -530,6 +530,10 @@ export async function changeViewMode(mode: ViewMode): Promise<void> {
     const text = getEditorText();
     if (text !== null) requestPreview(text, true);
   }
+  // 切回可编辑的视图后焦点交给正文，Ctrl+E 来回按也能直接接着写。
+  if (doc.path && mode !== "preview") {
+    requestAnimationFrame(() => getEditorView()?.focus());
+  }
 }
 
 /** 在当前位置新建一篇 Markdown，并打开它。 */

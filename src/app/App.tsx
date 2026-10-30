@@ -31,7 +31,7 @@ import { APP_NAME, APP_TAGLINE } from "../lib/app-info";
 import { baseName, parentRel } from "../lib/paths";
 import { getSetting, isAppError, readFile, setSetting } from "../lib/tauri";
 import { isViewMode } from "../lib/view-modes";
-import { useDocumentStore } from "../stores/document";
+import { useDocumentStore, type ViewMode } from "../stores/document";
 import {
   flushPreferences,
   FONT_FAMILY_STACKS,
@@ -51,6 +51,9 @@ import { Toolbar } from "./Toolbar";
 import "./App.css";
 
 let bootstrapped = false;
+
+/** Ctrl+E 切到阅读时记下当前的编辑态，再按一次还原回去。 */
+let lastEditingMode: ViewMode = "source";
 
 /** 回到窗口时刷新文件树的最小间隔，避免反复 Alt-Tab 时频繁读盘。 */
 const TREE_REFRESH_INTERVAL = 2000;
@@ -198,6 +201,19 @@ export default function App() {
           event.preventDefault();
           void chooseWorkspace();
           break;
+        case "e": {
+          // 阅读 / 编辑快速切换；分栏状态会被记住，切回来还原。
+          if (!useDocumentStore.getState().path) break;
+          event.preventDefault();
+          const current = useDocumentStore.getState().viewMode;
+          if (current === "preview") {
+            void changeViewMode(lastEditingMode);
+          } else {
+            lastEditingMode = current;
+            void changeViewMode("preview");
+          }
+          break;
+        }
         case "b":
           // 编辑器内 Ctrl+B 是加粗，已由 keymap preventDefault。
           event.preventDefault();

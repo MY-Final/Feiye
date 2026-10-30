@@ -122,6 +122,7 @@ const SHORTCUT_GROUPS: { title: string; items: [string, string][] }[] = [
   {
     title: "视图与查找",
     items: [
+      ["Ctrl + E", "阅读 / 编辑快速切换，切回时还原分栏"],
       ["Ctrl + F", "查找与替换（预览模式下自动切到分栏）"],
       ["Ctrl + = / Ctrl + -", "放大 / 缩小正文字号"],
       ["Ctrl + ,", "偏好设置"],
