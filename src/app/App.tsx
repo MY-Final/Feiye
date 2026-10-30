@@ -19,6 +19,7 @@ import {
 import { PreviewPane } from "../features/preview/PreviewPane";
 import { CommandPalette } from "../features/commands/CommandPalette";
 import { HistoryDialog } from "../features/history/HistoryDialog";
+import { SplitPane } from "../features/split/SplitPane";
 import { TabBar } from "../features/tabs/TabBar";
 import { SettingsDialog } from "../features/settings/SettingsDialog";
 import { WorkspaceSidebar } from "../features/workspace/WorkspaceSidebar";
@@ -49,6 +50,7 @@ import {
   PREFERENCE_LIMITS,
   useSettingsStore,
 } from "../stores/settings";
+import { useTabsStore } from "../stores/tabs";
 import { useUiStore } from "../stores/ui";
 import { useWorkspaceStore } from "../stores/workspace";
 import {
@@ -232,6 +234,18 @@ export default function App() {
       }
 
       if (dialogOpen()) return;
+
+      // 分屏对照：Ctrl+\，开关右侧另一篇笔记的预览。
+      if (mod && event.key === "\\") {
+        event.preventDefault();
+        const ui = useUiStore.getState();
+        if (!ui.splitOpen && useTabsStore.getState().tabs.length < 2) {
+          ui.toast("先打开至少两篇笔记再分屏对照");
+          return;
+        }
+        ui.toggleSplitPreview();
+        return;
+      }
 
       // Ctrl+Tab / Ctrl+Shift+Tab 在已打开的标签之间切换；Ctrl+W 关闭当前标签。
       if (mod && event.key === "Tab") {
@@ -585,6 +599,7 @@ export default function App() {
         <div className="main-column">
           {/* 专注模式只留正文：标签栏也一并收起，退出后原样回来。 */}
           {zenMode ? null : <TabBar />}
+          <div className="main-row">
           <main
           className={`workspace-main mode-${viewMode}${preferences.lineNumbers ? "" : " hide-line-numbers"}`}
           style={
@@ -724,8 +739,10 @@ export default function App() {
             </div>
           )}
           </main>
+          <SplitPane />
+          </div>
+          </div>
         </div>
-      </div>
 
       <StatusBar />
 

@@ -19,6 +19,7 @@ import {
   useSettingsStore,
 } from "../../stores/settings";
 import { useDocumentStore } from "../../stores/document";
+import { useTabsStore } from "../../stores/tabs";
 import { useUiStore } from "../../stores/ui";
 import { useWorkspaceStore } from "../../stores/workspace";
 import "./commands.css";
@@ -115,6 +116,22 @@ export function CommandPalette() {
         hint: "写到当前笔记同目录",
         keywords: "export html 导出",
         run: () => exportActiveAsHtml(),
+      },
+      {
+        id: "split-preview",
+        title: "分屏对照",
+        hint: "右侧并排预览另一篇已打开的笔记",
+        shortcut: "Ctrl+\\",
+        keywords: "split 分屏 对照 并排",
+        run: () => {
+          if (useTabsStore.getState().tabs.length < 2) {
+            useUiStore
+              .getState()
+              .toast("先打开至少两篇笔记再分屏对照");
+            return;
+          }
+          useUiStore.getState().toggleSplitPreview();
+        },
       },
       {
         id: "history",
@@ -236,6 +253,7 @@ export function CommandPalette() {
       if (command.id === "refresh-tree") return Boolean(root);
       if (command.id === "search-workspace") return Boolean(root);
       if (command.id === "history") return hasDoc;
+      if (command.id === "split-preview") return Boolean(root);
       return true;
     });
   }, [docPath, root, historyLength, forwardLength]);

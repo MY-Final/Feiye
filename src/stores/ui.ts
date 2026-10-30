@@ -52,6 +52,9 @@ interface UiStore {
   searchRequest: number;
   /** 文档历史（保存快照）面板。 */
   historyOpen: boolean;
+  /** 分屏对照：右侧并排预览另一篇笔记。 */
+  splitOpen: boolean;
+  splitPath: string | null;
   toasts: ToastItem[];
   confirm: ConfirmRequest | null;
   prompt: PromptRequest | null;
@@ -66,6 +69,9 @@ interface UiStore {
   openSearchPanel(): void;
   openHistory(): void;
   closeHistory(): void;
+  toggleSplitPreview(): void;
+  closeSplitPreview(): void;
+  setSplitPath(path: string | null): void;
   toast(
     message: string,
     kind?: ToastKind,
@@ -114,6 +120,8 @@ export const useUiStore = create<UiStore>((set, get) => ({
   paletteOpen: false,
   searchRequest: 0,
   historyOpen: false,
+  splitOpen: false,
+  splitPath: null,
   toasts: [],
   confirm: null,
   prompt: null,
@@ -174,6 +182,18 @@ export const useUiStore = create<UiStore>((set, get) => ({
 
   closeHistory() {
     set({ historyOpen: false });
+  },
+
+  toggleSplitPreview() {
+    set((state) => ({ splitOpen: !state.splitOpen }));
+  },
+
+  closeSplitPreview() {
+    set({ splitOpen: false });
+  },
+
+  setSplitPath(path) {
+    set({ splitPath: path });
   },
 
   toast(message, kind = "info", action, actionTitle) {
