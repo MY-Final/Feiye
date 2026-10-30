@@ -24,7 +24,10 @@ import { useDocumentStore, type ViewMode } from "../../stores/document";
 import { useOutlineStore } from "../../stores/outline";
 import { useUiStore } from "../../stores/ui";
 import { useWorkspaceStore } from "../../stores/workspace";
-import { resetAutoSave } from "../editor/autosave";
+import {
+  noteDocumentChange,
+  resetAutoSave,
+} from "../editor/autosave";
 import { captureActiveCursor, restoreCursorFor } from "../editor/cursor-memory";
 import {
   getEditorText,
@@ -268,11 +271,15 @@ export async function saveDocumentAs(): Promise<void> {
     const created = await apiCreateFile(parent, ensureMarkdownName(name.trim()));
     const meta = await apiWriteFile(created.relPath, text, null);
 
-    // 内容已写入新文件：当前文档改指向它，保留光标与正文，视为已保存。
+    // 写入期间用户可能继续输入：只有编辑器内容仍等于写入内容时才算已保存，
+    // 否则保持脏状态并重新排自动保存，避免关闭时静默丢掉这段新输入。
+    const latest = getEditorText();
+    const stillDirty = latest !== null && latest !== text;
     const oldPath = doc.path;
     useDocumentStore.getState().renameActive(created.relPath, created.name);
-    useDocumentStore.getState().markSaved(meta.modifiedMs);
+    useDocumentStore.getState().markSaved(meta.modifiedMs, stillDirty);
     resetAutoSave();
+    if (stillDirty) noteDocumentChange();
     await clearRecoverySnapshot(oldPath);
     void setSetting("lastDocument", created.relPath);
 
