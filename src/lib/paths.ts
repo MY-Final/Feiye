@@ -43,7 +43,11 @@ export function relativeLinkPath(
     .replace(/%/g, "%25")
     .replace(/ /g, "%20")
     .replace(/\(/g, "%28")
-    .replace(/\)/g, "%29");
+    .replace(/\)/g, "%29")
+    // `#` / `?` 会被解析成锚点或查询串，文件名里出现时必须转义，
+    // 否则「C# 入门.md」这类笔记的链接会指向错误路径。
+    .replace(/#/g, "%23")
+    .replace(/\?/g, "%3F");
 }
 
 /**
