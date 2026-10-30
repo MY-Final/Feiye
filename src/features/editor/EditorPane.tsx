@@ -66,12 +66,18 @@ function openEditorLink(href: string): void {
   const current = useDocumentStore.getState().path;
   const relPath = current ? resolveRelLink(href, current) : null;
   if (relPath && MARKDOWN_LINK.test(relPath)) {
-    // `笔记.md#标题` 打开后还要定位到目标标题。
     const hash = href.indexOf("#");
+    const fragment = hash >= 0 ? href.slice(hash + 1) : undefined;
+    // 带文件名的自链接（如 `本文.md#小节`）直接在本文档内跳转。
+    if (current === relPath) {
+      if (fragment) openEditorAnchor(fragment);
+      return;
+    }
+    // `笔记.md#标题` 打开后还要定位到目标标题。
     void openFile(
       { relPath, name: baseName(relPath), isDir: false },
       false,
-      hash >= 0 ? href.slice(hash + 1) : undefined,
+      fragment,
     );
   }
 }

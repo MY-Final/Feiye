@@ -99,12 +99,21 @@ export function PreviewPane() {
       const current = useDocumentStore.getState().path;
       const relPath = current ? resolveRelLink(href, current) : null;
       if (relPath && /\.(md|markdown|mdx)$/i.test(relPath)) {
-        // 链接带 `#标题` 时，打开后继续定位到那一节。
         const hash = href.indexOf("#");
+        const fragment = hash >= 0 ? href.slice(hash + 1) : undefined;
+        // 带文件名的自链接（如 `本文.md#小节`）不重新打开，直接滚动。
+        if (current === relPath) {
+          if (fragment) {
+            const index = findHeadingByAnchor(body, fragment);
+            if (index >= 0) scrollPreviewToHeading(index);
+          }
+          return;
+        }
+        // 链接带 `#标题` 时，打开后继续定位到那一节。
         void openFile(
           { relPath, name: baseName(relPath), isDir: false },
           false,
-          hash >= 0 ? href.slice(hash + 1) : undefined,
+          fragment,
         );
       }
     };
