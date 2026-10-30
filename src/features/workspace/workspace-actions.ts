@@ -561,7 +561,7 @@ export async function renameEntry(entry: Entry): Promise<void> {
     }
 
     if (entry.isDir) {
-      const { root, name, expanded, setWorkspace } =
+      const { root, name, expanded, setWorkspace, history, forward } =
         useWorkspaceStore.getState();
       if (root && name) {
         // 展开状态里的路径跟着改名换前缀，重建后再恢复，
@@ -576,6 +576,8 @@ export async function renameEntry(entry: Entry): Promise<void> {
           .sort((a, b) => a.split("/").length - b.split("/").length);
 
         setWorkspace({ root, name });
+        // 重建文件树只为刷新展开状态，会话内的浏览历史与前进栈不能跟着清空。
+        useWorkspaceStore.setState({ history, forward });
         await useWorkspaceStore.getState().loadDir("");
         await useWorkspaceStore.getState().expandDirs(openDirs);
       }
@@ -634,7 +636,7 @@ export async function moveEntry(
 
     if (entry.isDir) {
       // 整个目录换了前缀，展开状态要重映射后再重建，免得树收起来。
-      const { root, name, expanded, setWorkspace } =
+      const { root, name, expanded, setWorkspace, history, forward } =
         useWorkspaceStore.getState();
       if (root && name) {
         const remap = (path: string) =>
@@ -649,6 +651,8 @@ export async function moveEntry(
           openDirs.push(targetParent);
         }
         setWorkspace({ root, name });
+        // 重建文件树只为刷新展开状态，会话内的浏览历史与前进栈不能跟着清空。
+        useWorkspaceStore.setState({ history, forward });
         await useWorkspaceStore.getState().loadDir("");
         await useWorkspaceStore.getState().expandDirs(openDirs);
       }
