@@ -26,7 +26,13 @@ import { useUiStore } from "../../stores/ui";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { resetAutoSave } from "../editor/autosave";
 import { captureActiveCursor, restoreCursorFor } from "../editor/cursor-memory";
-import { getEditorText, setEditorDocument } from "../editor/editor-bridge";
+import {
+  getEditorText,
+  getEditorView,
+  jumpToEditorPosition,
+  setEditorDocument,
+} from "../editor/editor-bridge";
+import { readOutline } from "../editor/outline";
 import {
   clearRecoverySnapshot,
   migrateRecoverySnapshot,
@@ -37,6 +43,10 @@ import {
   clearPreview,
   requestPreview,
 } from "../preview/preview-controller";
+import {
+  normalizeAnchor,
+  scrollPreviewToHeading,
+} from "../preview/preview-scroll";
 
 const MARKDOWN_NAME = /\.(md|markdown|mdx)$/i;
 const HAS_EXTENSION = /\.[^./\\]+$/;
@@ -145,9 +155,30 @@ export async function restoreLastWorkspace(): Promise<void> {
   }
 }
 
+/** 跨笔记链接带 `#标题` 时，打开后定位到对应标题。 */
+function jumpToAnchorInOpenDocument(fragment: string): void {
+  const view = getEditorView();
+  if (!view) return;
+
+  const target = normalizeAnchor(fragment);
+  if (!target) return;
+
+  const headings = readOutline(view.state);
+  const index = headings.findIndex(
+    (heading) => normalizeAnchor(heading.text) === target,
+  );
+  if (index < 0) return;
+
+  jumpToEditorPosition(headings[index].from);
+  if (useDocumentStore.getState().viewMode === "split") {
+    scrollPreviewToHeading(index);
+  }
+}
+
 export async function openFile(
   entry: Entry,
   silent = false,
+  anchor?: string,
 ): Promise<void> {
   if (entry.isDir) return;
   if (useDocumentStore.getState().path === entry.relPath) return;
@@ -167,6 +198,7 @@ export async function openFile(
     useWorkspaceStore.getState().noteRecent(entry.relPath);
     await expandAncestors(entry.relPath);
     await restoreCursorFor(entry.relPath);
+    if (anchor) jumpToAnchorInOpenDocument(anchor);
   } catch (error) {
     if (silent) {
       void setSetting("lastDocument", null);

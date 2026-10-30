@@ -99,7 +99,13 @@ export function PreviewPane() {
       const current = useDocumentStore.getState().path;
       const relPath = current ? resolveRelLink(href, current) : null;
       if (relPath && /\.(md|markdown|mdx)$/i.test(relPath)) {
-        void openFile({ relPath, name: baseName(relPath), isDir: false });
+        // 链接带 `#标题` 时，打开后继续定位到那一节。
+        const hash = href.indexOf("#");
+        void openFile(
+          { relPath, name: baseName(relPath), isDir: false },
+          false,
+          hash >= 0 ? href.slice(hash + 1) : undefined,
+        );
       }
     };
 

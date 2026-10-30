@@ -66,7 +66,13 @@ function openEditorLink(href: string): void {
   const current = useDocumentStore.getState().path;
   const relPath = current ? resolveRelLink(href, current) : null;
   if (relPath && MARKDOWN_LINK.test(relPath)) {
-    void openFile({ relPath, name: baseName(relPath), isDir: false });
+    // `笔记.md#标题` 打开后还要定位到目标标题。
+    const hash = href.indexOf("#");
+    void openFile(
+      { relPath, name: baseName(relPath), isDir: false },
+      false,
+      hash >= 0 ? href.slice(hash + 1) : undefined,
+    );
   }
 }
 
