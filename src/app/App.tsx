@@ -48,13 +48,6 @@ function dialogOpen(): boolean {
   return Boolean(ui.confirm || ui.prompt || ui.settingsOpen);
 }
 
-function isTextEntry(target: EventTarget | null): boolean {
-  return (
-    target instanceof HTMLElement &&
-    Boolean(target.closest("input, textarea, select, [contenteditable='true']"))
-  );
-}
-
 export default function App() {
   const root = useWorkspaceStore((state) => state.root);
   const recent = useWorkspaceStore((state) => state.recent);
@@ -152,7 +145,8 @@ export default function App() {
       if (dialogOpen()) return;
 
       if (event.key === "F2") {
-        if (isTextEntry(event.target)) return;
+        // 正文是可编辑区域，光标在里面时也要响应，才和工具栏的 F2 提示一致。
+        // 重命名输入框等对话框场景已由上面的 dialogOpen 拦截。
         event.preventDefault();
         void renameActiveDocument();
         return;
