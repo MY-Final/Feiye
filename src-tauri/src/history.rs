@@ -144,6 +144,21 @@ pub fn push_snapshot(
     Ok(true)
 }
 
+/// 文档或文件夹被删除后，按相对路径移除其历史快照目录；不存在视为已清理。
+/// 清理失败（权限、占用）不返回错误：删除本身已经完成，不因历史残留回滚。
+pub fn clear_documents(dir: &Path, root: &Path, rel_paths: &[String]) -> usize {
+    let mut removed = 0;
+    for rel_path in rel_paths {
+        let Ok(doc_dir) = document_dir(dir, root, rel_path) else {
+            continue;
+        };
+        if doc_dir.is_dir() && fs::remove_dir_all(&doc_dir).is_ok() {
+            removed += 1;
+        }
+    }
+    removed
+}
+
 pub fn list_history(
     dir: &Path,
     root: &Path,
@@ -224,6 +239,23 @@ mod tests {
         assert_eq!(list.len(), MAX_HISTORY);
         let newest = read_history(&data, &root, "a.md", &list[0].id).unwrap();
         assert_eq!(newest.content, format!("version {}", MAX_HISTORY + 2));
+    }
+
+    #[test]
+    fn clears_only_target_documents() {
+        let (_root_dir, root, _data_dir, data) = workspace();
+        push_snapshot(&data, &root, "a.md", "a").unwrap();
+        push_snapshot(&data, &root, "notes/b.md", "b").unwrap();
+        push_snapshot(&data, &root, "notes/c.md", "c").unwrap();
+
+        let removed = clear_documents(&data, &root, &["notes/b.md".into()]);
+        assert_eq!(removed, 1);
+        assert!(list_history(&data, &root, "notes/b.md").unwrap().is_empty());
+        assert_eq!(list_history(&data, &root, "notes/c.md").unwrap().len(), 1);
+        assert_eq!(list_history(&data, &root, "a.md").unwrap().len(), 1);
+
+        assert_eq!(clear_documents(&data, &root, &["notes/b.md".into()]), 0);
+        assert_eq!(clear_documents(&data, &root, &["../a.md".into()]), 0);
     }
 
     #[test]

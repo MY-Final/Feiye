@@ -4,11 +4,12 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 
 use super::workspace::{Entry, WorkspaceState};
 use crate::error::AppError;
 use crate::fs_path;
+use crate::history;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -459,10 +460,69 @@ pub fn move_entry(
     move_in(&root, &rel_path, &new_parent)
 }
 
+/// 收集删除后要清历史快照的文档（文件夹含子目录），删除前先记下来。
+fn collect_history_paths(root: &Path, rel: &str) -> Vec<String> {
+    let Ok(path) = fs_path::resolve_in_workspace(root, rel) else {
+        return Vec::new();
+    };
+    let Ok(meta) = fs::symlink_metadata(&path) else {
+        return Vec::new();
+    };
+    if !meta.file_type().is_dir() {
+        return if fs_path::is_markdown(rel) {
+            vec![rel.to_string()]
+        } else {
+            Vec::new()
+        };
+    }
+
+    // 大目录不至于把删除拖太久；超出上限的文档历史留待下次清理。
+    const LIMIT: usize = 2000;
+    let mut paths = Vec::new();
+    let mut queue = vec![(path, rel.to_string())];
+    while let Some((dir, base)) = queue.pop() {
+        if paths.len() >= LIMIT {
+            break;
+        }
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let Ok(kind) = entry.file_type() else {
+                continue;
+            };
+            let name = entry.file_name().to_string_lossy().to_string();
+            let child = fs_path::join_rel(&base, &name);
+            if kind.is_dir() {
+                queue.push((entry.path(), child));
+            } else if kind.is_file() && fs_path::is_markdown(&name) {
+                paths.push(child);
+            }
+        }
+    }
+    paths
+}
+
+/// 删除成功后再清快照；定位不到应用数据目录或清理失败都不影响删除结果。
+fn clear_history_for(app: &AppHandle, root: &Path, docs: &[String]) {
+    let Ok(data) = app.path().app_data_dir() else {
+        return;
+    };
+    history::clear_documents(&data.join("history"), root, docs);
+}
+
 #[tauri::command]
-pub fn delete_entry(rel_path: String, state: State<'_, WorkspaceState>) -> Result<(), AppError> {
+pub fn delete_entry(
+    rel_path: String,
+    app: AppHandle,
+    state: State<'_, WorkspaceState>,
+) -> Result<(), AppError> {
     let root = state.root()?;
-    delete_in(&root, &rel_path)
+    let clean = fs_path::normalize_rel(&rel_path)?;
+    let docs = collect_history_paths(&root, &clean);
+    delete_in(&root, &clean)?;
+    clear_history_for(&app, &root, &docs);
+    Ok(())
 }
 
 #[cfg(test)]
@@ -474,6 +534,24 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let root = dunce::canonicalize(temp.path()).unwrap();
         (temp, root)
+    }
+
+    #[test]
+    fn collects_history_paths_for_files_and_folders() {
+        let (_temp, root) = workspace();
+        fs::create_dir_all(root.join("dir/sub")).unwrap();
+        fs::write(root.join("dir/a.md"), "").unwrap();
+        fs::write(root.join("dir/sub/b.markdown"), "").unwrap();
+        fs::write(root.join("dir/skip.txt"), "").unwrap();
+        fs::write(root.join("note.md"), "").unwrap();
+
+        assert_eq!(collect_history_paths(&root, "note.md"), vec!["note.md"]);
+        assert!(collect_history_paths(&root, "note.txt").is_empty());
+        assert!(collect_history_paths(&root, "../x.md").is_empty());
+
+        let mut folder = collect_history_paths(&root, "dir");
+        folder.sort();
+        assert_eq!(folder, vec!["dir/a.md", "dir/sub/b.markdown"]);
     }
 
     #[test]
