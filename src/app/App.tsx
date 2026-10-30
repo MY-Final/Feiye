@@ -25,7 +25,7 @@ import {
 } from "../features/workspace/workspace-actions";
 import { APP_NAME, APP_TAGLINE } from "../lib/app-info";
 import { baseName, parentRel } from "../lib/paths";
-import { getSetting, readFile, setSetting } from "../lib/tauri";
+import { getSetting, isAppError, readFile, setSetting } from "../lib/tauri";
 import { isViewMode } from "../lib/view-modes";
 import { useDocumentStore } from "../stores/document";
 import { flushPreferences, FONT_FAMILY_STACKS, useSettingsStore } from "../stores/settings";
@@ -197,6 +197,8 @@ export default function App() {
   useEffect(() => {
     let checking = false;
     let lastSeen: number | null = null;
+    // 同一个路径只提醒一次，避免每次切回窗口都弹框。
+    let missingPrompted: string | null = null;
 
     const checkExternalChange = async () => {
       if (checking) return;
@@ -221,8 +223,28 @@ export default function App() {
           ],
         });
         if (choice === "reload") await reloadActiveDocument();
-      } catch {
-        // 文件被删除或暂时无法读取时保持现状。
+      } catch (error) {
+        // 文件在应用外被移动或删除：编辑器里的内容还在，但状态栏还写着「已保存」，
+        // 不提醒的话容易以为磁盘上仍有这篇笔记，关掉应用就真丢了。
+        if (
+          isAppError(error) &&
+          error.code === "not-found" &&
+          missingPrompted !== doc.path
+        ) {
+          missingPrompted = doc.path;
+          const latest = useDocumentStore.getState();
+          if (latest.path !== doc.path) return;
+          const choice = await useUiStore.getState().ask({
+            title: "文件已不在磁盘上",
+            message: `「${latest.name ?? doc.path}」可能已被移动或删除。编辑器里的内容仍然保留，可以另存一份。`,
+            buttons: [
+              { label: "另存为…", value: "save-as", tone: "primary" },
+              { label: "保留", value: "keep" },
+            ],
+          });
+          if (choice === "save-as") await saveDocumentAs();
+        }
+        // 其余读取失败（权限、占用）保持现状，下次聚焦再试。
       } finally {
         checking = false;
       }
