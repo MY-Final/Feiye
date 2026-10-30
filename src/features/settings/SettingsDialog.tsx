@@ -449,6 +449,30 @@ export function SettingsDialog() {
                     </output>
                   </div>
                 </Row>
+
+                <div className="settings-custom-css">
+                  <label
+                    className="settings-custom-css-label"
+                    htmlFor="settings-custom-css"
+                  >
+                    自定义 CSS
+                  </label>
+                  <p className="settings-custom-css-hint">
+                    作用于编辑器与预览，只保存在本机；留空即关闭。例如
+                    <code>.markdown-body h1 {"{"} color: #8a4f26; {"}"}</code>
+                  </p>
+                  <textarea
+                    id="settings-custom-css"
+                    className="settings-custom-css-input"
+                    rows={6}
+                    spellCheck={false}
+                    value={preferences.customCss}
+                    placeholder="/* 在这里写自定义样式 */"
+                    onChange={(event) =>
+                      update({ customCss: event.target.value })
+                    }
+                  />
+                </div>
               </section>
             ) : null}
 

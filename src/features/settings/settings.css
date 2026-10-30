@@ -406,3 +406,51 @@
   font-size: 12.5px;
   color: var(--text);
 }
+
+
+.settings-custom-css {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.settings-custom-css-label {
+  display: block;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.settings-custom-css-hint {
+  margin: 4px 0 8px;
+  color: var(--text-faint);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.settings-custom-css-hint code {
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--bg-sunken);
+  font-size: 11px;
+}
+
+.settings-custom-css-input {
+  display: block;
+  width: 100%;
+  min-height: 110px;
+  padding: 8px 10px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.settings-custom-css-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}

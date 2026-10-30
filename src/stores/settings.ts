@@ -2,7 +2,9 @@ import { create } from "zustand";
 
 import {
   applyAccent,
+  applyCustomCss,
   applyTheme,
+  CUSTOM_CSS_LIMIT,
   isAccentPreset,
   isThemeMode,
   watchSystemTheme,
@@ -35,6 +37,8 @@ export interface Preferences {
   lineNumbers: boolean;
   hideFileExtensions: boolean;
   defaultView: DefaultView;
+  /** 用户自定义 CSS，作用于编辑器与预览；空字符串表示关闭。 */
+  customCss: string;
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -49,6 +53,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   lineNumbers: true,
   hideFileExtensions: false,
   defaultView: "last",
+  customCss: "",
 };
 
 export const PREFERENCE_LIMITS = {
@@ -140,6 +145,10 @@ export function normalizePreferences(value: unknown): Preferences {
     defaultView: isDefaultView(source.defaultView)
       ? source.defaultView
       : DEFAULT_PREFERENCES.defaultView,
+    customCss:
+      typeof source.customCss === "string"
+        ? source.customCss.slice(0, CUSTOM_CSS_LIMIT)
+        : DEFAULT_PREFERENCES.customCss,
   };
 }
 
@@ -195,6 +204,7 @@ export function loadPreferences(): Promise<void> {
     useSettingsStore.setState({ preferences, loaded: true });
     applyTheme(preferences.theme);
     applyAccent(preferences.accent);
+    applyCustomCss(preferences.customCss);
 
     watchSystemTheme(() => {
       if (useSettingsStore.getState().preferences.theme === "system") {
@@ -220,6 +230,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     if (next.accent !== current.accent) {
       applyAccent(next.accent);
     }
+    if (next.customCss !== current.customCss) {
+      applyCustomCss(next.customCss);
+    }
     schedulePersist(next);
   },
 
@@ -228,6 +241,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     set({ preferences: next });
     applyTheme(next.theme);
     applyAccent(next.accent);
+    applyCustomCss(next.customCss);
     schedulePersist(next);
   },
 }));

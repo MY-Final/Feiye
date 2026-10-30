@@ -58,3 +58,29 @@ export function watchSystemTheme(onChange: () => void): () => void {
   media.addEventListener("change", onChange);
   return () => media.removeEventListener("change", onChange);
 }
+
+
+const CUSTOM_CSS_ID = "feiye-custom-css";
+
+/** 用户自定义 CSS 的上限，防止误粘贴超大内容拖慢界面。 */
+export const CUSTOM_CSS_LIMIT = 20000;
+
+/**
+ * 把用户样式注入页面（编辑器与预览都生效）；内容为空则移除。
+ * 样式只存在本机偏好里，不写进工作区。
+ */
+export function applyCustomCss(css: string): void {
+  const current = document.getElementById(CUSTOM_CSS_ID) as
+    | HTMLStyleElement
+    | null;
+  if (!css.trim()) {
+    current?.remove();
+    return;
+  }
+  const style = current ?? document.createElement("style");
+  if (!current) {
+    style.id = CUSTOM_CSS_ID;
+    document.head.appendChild(style);
+  }
+  style.textContent = css.slice(0, CUSTOM_CSS_LIMIT);
+}
