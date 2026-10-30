@@ -1,5 +1,6 @@
 import { useDocumentStore } from "../../stores/document";
 import { useSettingsStore } from "../../stores/settings";
+import { isEditorComposing } from "./composition";
 import { snapshotActiveDocument } from "./recovery";
 import { saveActiveDocument } from "./save";
 
@@ -41,6 +42,11 @@ function scheduleAutoSave(): void {
 
   autoSaveTimer = window.setTimeout(() => {
     autoSaveTimer = null;
+    if (isEditorComposing()) {
+      // 组词还没结束：过一会再试，等 compositionend 后自然落盘。
+      scheduleAutoSave();
+      return;
+    }
     void flushAutoSave();
   }, delay);
 }
@@ -56,6 +62,10 @@ function scheduleRecovery(
     recoveryTimer = null;
     const doc = useDocumentStore.getState();
     if (!doc.path || !doc.dirty) return;
+    if (isEditorComposing()) {
+      scheduleRecovery();
+      return;
+    }
 
     if (!recoveryRunning) {
       recoveryRunning = true;
