@@ -10,6 +10,7 @@ import {
 import { ContextMenu, type MenuAction } from "../../components/Menu";
 import { copyText } from "../../lib/clipboard";
 import { OutlinePanel } from "../outline/OutlinePanel";
+import { MoveDialog } from "./MoveDialog";
 import { isWithin, parentRel } from "../../lib/paths";
 import { getSetting, setSetting, type Entry } from "../../lib/tauri";
 import { useDocumentStore } from "../../stores/document";
@@ -47,7 +48,10 @@ function canDropInto(dragged: Entry, target: Entry): boolean {
   return true;
 }
 
-function buildMenuActions(entry: Entry | null): MenuAction[] {
+function buildMenuActions(
+  entry: Entry | null,
+  onMove: (entry: Entry) => void,
+): MenuAction[] {
   const parent = entry
     ? entry.isDir
       ? entry.relPath
@@ -110,6 +114,13 @@ function buildMenuActions(entry: Entry | null): MenuAction[] {
   }
 
   if (entry) {
+    actions.push({
+      // 键盘也能移动：不依赖拖拽，选一个目标文件夹即可。
+      label: "移动到…",
+      onSelect: () => {
+        onMove(entry);
+      },
+    });
     actions.push({
       label: "重命名",
       onSelect: () => {
@@ -427,6 +438,7 @@ export function WorkspaceSidebar() {
   const [refreshing, setRefreshing] = useState(false);
   // 拖动时高亮当前可放下的目录，松手前就知道会落到哪。
   const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [moveTarget, setMoveTarget] = useState<Entry | null>(null);
   const [width, setWidth] = useState<number>(SIDEBAR_WIDTH.default);
   const widthRef = useRef<number>(SIDEBAR_WIDTH.default);
   const resizeStart = useRef<{ x: number; width: number } | null>(null);
@@ -798,8 +810,14 @@ export function WorkspaceSidebar() {
         <ContextMenu
           x={menu.x}
           y={menu.y}
-          actions={buildMenuActions(menu.entry)}
+          actions={buildMenuActions(menu.entry, (entry) => setMoveTarget(entry))}
           onClose={() => setMenu(null)}
+        />
+      ) : null}
+      {moveTarget ? (
+        <MoveDialog
+          entry={moveTarget}
+          onClose={() => setMoveTarget(null)}
         />
       ) : null}
     </aside>
