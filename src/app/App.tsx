@@ -227,13 +227,27 @@ export default function App() {
           }
           break;
         }
-        case "b":
+        case "b": {
           // 编辑器内 Ctrl+B 是加粗，已由 keymap preventDefault。
           event.preventDefault();
-          if (useWorkspaceStore.getState().root) {
-            useUiStore.getState().toggleSidebar();
+          if (!useWorkspaceStore.getState().root) break;
+          const {
+            zenMode,
+            toggleZenMode,
+            toggleSidebar,
+            sidebarVisible,
+            setSidebarVisible,
+          } = useUiStore.getState();
+          if (zenMode) {
+            // 专注模式里侧栏本来就收起，再按开关侧栏显得没反应：
+            // 这里直接退出专注，并把侧栏打开，符合按键的字面意思。
+            toggleZenMode();
+            if (!sidebarVisible) setSidebarVisible(true);
+            break;
           }
+          toggleSidebar();
           break;
+        }
         // 正文太小 / 太大时不用开设置，直接按键调字号。
         case "=":
         case "+":
