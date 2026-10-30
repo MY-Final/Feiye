@@ -1028,6 +1028,14 @@ body.is-resizing-split * {
   color: var(--text);
 }
 
+/* 拖拽时把能放下的目录画出来：虚线是"松手就会进这里"。 */
+.tree-row.drop-target {
+  background: var(--accent-soft);
+  color: var(--text);
+  outline: 1px dashed var(--accent);
+  outline-offset: -1px;
+}
+
 .tree-caret {
   display: inline-flex;
   align-items: center;

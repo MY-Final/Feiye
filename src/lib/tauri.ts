@@ -120,6 +120,13 @@ export function renameEntry(
   return invoke<Entry>("rename_entry", { relPath, newName });
 }
 
+export function moveEntry(
+  relPath: string,
+  newParent: string,
+): Promise<Entry> {
+  return invoke<Entry>("move_entry", { relPath, newParent });
+}
+
 export function deleteEntry(relPath: string): Promise<void> {
   return invoke<void>("delete_entry", { relPath });
 }

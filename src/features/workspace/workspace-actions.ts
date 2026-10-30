@@ -12,6 +12,7 @@ import {
   describeError,
   getSetting,
   listDir,
+  moveEntry as apiMoveEntry,
   openWorkspace as apiOpenWorkspace,
   pickWorkspaceFolder,
   readFile,
@@ -519,6 +520,85 @@ export async function renameEntry(entry: Entry): Promise<void> {
     }
   } catch (error) {
     toastError("重命名失败", error);
+  }
+}
+
+/**
+ * 把文件 / 文件夹拖到另一个目录下。
+ * 和改名共用同一套迁移：最近打开、光标记录、恢复副本、当前文档路径都要跟着走。
+ */
+export async function moveEntry(
+  entry: Entry,
+  targetParent: string,
+): Promise<void> {
+  if (targetParent === parentRel(entry.relPath)) return;
+
+  if (entry.isDir && isWithin(targetParent, entry.relPath)) {
+    useUiStore.getState().toast("不能把文件夹移动到它自己里面", "error");
+    return;
+  }
+
+  const conflict = existingNameError(targetParent, entry.name, entry.relPath);
+  if (conflict) {
+    useUiStore.getState().toast(conflict, "error");
+    return;
+  }
+
+  try {
+    const moved = await apiMoveEntry(entry.relPath, targetParent);
+    const oldParent = parentRel(entry.relPath);
+    await useWorkspaceStore.getState().refreshDir(oldParent);
+    // 根目录的 key 是空字符串，也要刷新，否则拖回根目录后树里看不到。
+    await useWorkspaceStore.getState().refreshDir(targetParent);
+
+    useWorkspaceStore.getState().updateRecent(entry.relPath, moved.relPath);
+    migrateCursor(entry.relPath, moved.relPath);
+
+    const doc = useDocumentStore.getState();
+    if (doc.path === entry.relPath) {
+      const oldPath = doc.path;
+      doc.renameActive(moved.relPath, moved.name);
+      void rememberLastDocument(moved.relPath);
+      void migrateRecoverySnapshot(oldPath, moved.relPath);
+    } else if (entry.isDir && doc.path && isWithin(doc.path, entry.relPath)) {
+      // 当前文档就在被拖走的文件夹里：保持打开，只换路径前缀。
+      const oldPath = doc.path;
+      const nextPath = `${moved.relPath}${oldPath.slice(entry.relPath.length)}`;
+      doc.renameActive(nextPath, doc.name ?? baseName(nextPath));
+      void rememberLastDocument(nextPath);
+      void migrateRecoverySnapshot(oldPath, nextPath);
+    }
+
+    if (entry.isDir) {
+      // 整个目录换了前缀，展开状态要重映射后再重建，免得树收起来。
+      const { root, name, expanded, setWorkspace } =
+        useWorkspaceStore.getState();
+      if (root && name) {
+        const remap = (path: string) =>
+          path === entry.relPath || path.startsWith(`${entry.relPath}/`)
+            ? `${moved.relPath}${path.slice(entry.relPath.length)}`
+            : path;
+        const openDirs = Object.entries(expanded)
+          .filter(([, open]) => open)
+          .map(([path]) => remap(path))
+          .sort((a, b) => a.split("/").length - b.split("/").length);
+        if (targetParent && !openDirs.includes(targetParent)) {
+          openDirs.push(targetParent);
+        }
+        setWorkspace({ root, name });
+        await useWorkspaceStore.getState().loadDir("");
+        await useWorkspaceStore.getState().expandDirs(openDirs);
+      }
+    } else if (targetParent) {
+      // 目标文件夹原本是收起的就展开，拖完马上能看到结果。
+      await useWorkspaceStore.getState().expandDir(targetParent);
+    }
+
+    useUiStore
+      .getState()
+      .toast(targetParent ? `已移动到 ${targetParent}` : "已移动到根目录");
+  } catch (error) {
+    toastError("移动失败", error);
   }
 }
 

@@ -31,6 +31,7 @@ pub fn run() {
             commands::file::create_folder,
             commands::file::reveal_entry,
             commands::file::rename_entry,
+            commands::file::move_entry,
             commands::file::delete_entry,
             commands::recovery::save_recovery,
             commands::recovery::list_recoveries,

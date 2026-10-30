@@ -10,7 +10,7 @@ import {
 import { ContextMenu, type MenuAction } from "../../components/Menu";
 import { copyText } from "../../lib/clipboard";
 import { OutlinePanel } from "../outline/OutlinePanel";
-import { parentRel } from "../../lib/paths";
+import { isWithin, parentRel } from "../../lib/paths";
 import { getSetting, setSetting, type Entry } from "../../lib/tauri";
 import { useDocumentStore } from "../../stores/document";
 import { useOutlineStore } from "../../stores/outline";
@@ -23,6 +23,7 @@ import {
   createFolderIn,
   createMarkdownFile,
   deleteEntry,
+  moveEntry,
   openFile,
   renameEntry,
   revealEntry,
@@ -32,6 +33,18 @@ interface MenuState {
   x: number;
   y: number;
   entry: Entry | null;
+}
+
+/** 正在拖的文件 / 文件夹：dragstart 记下来，drop 时直接用，省得从 dataTransfer 猜。 */
+let draggedEntry: Entry | null = null;
+
+/** 拖到这一行时能不能放下：不能拖回原目录，也不能把文件夹拖进它自己里面。 */
+function canDropInto(dragged: Entry, target: Entry): boolean {
+  if (!target.isDir) return false;
+  if (dragged.relPath === target.relPath) return false;
+  if (parentRel(dragged.relPath) === target.relPath) return false;
+  if (dragged.isDir && isWithin(target.relPath, dragged.relPath)) return false;
+  return true;
 }
 
 function buildMenuActions(entry: Entry | null): MenuAction[] {
@@ -188,10 +201,18 @@ function CollapseIcon() {
 interface TreeNodeProps {
   entry: Entry;
   depth: number;
+  dropTarget: string | null;
+  onDropTarget(path: string | null): void;
   onMenuAt(x: number, y: number, entry: Entry): void;
 }
 
-function TreeNode({ entry, depth, onMenuAt }: TreeNodeProps) {
+function TreeNode({
+  entry,
+  depth,
+  dropTarget,
+  onDropTarget,
+  onMenuAt,
+}: TreeNodeProps) {
   const expanded = useWorkspaceStore((state) =>
     Boolean(state.expanded[entry.relPath]),
   );
@@ -222,9 +243,41 @@ function TreeNode({ entry, depth, onMenuAt }: TreeNodeProps) {
       <button
         type="button"
         ref={rowRef}
-        className={`tree-row${active ? " active" : ""}`}
+        className={`tree-row${active ? " active" : ""}${
+          entry.isDir && dropTarget === entry.relPath ? " drop-target" : ""
+        }`}
         style={{ paddingLeft: indent }}
         title={entry.name}
+        draggable
+        onDragStart={(event) => {
+          draggedEntry = entry;
+          event.dataTransfer.effectAllowed = "move";
+          // 自定义类型只是兜底：同一应用内拖动优先用上面的变量。
+          event.dataTransfer.setData("application/x-feiye-entry", entry.relPath);
+        }}
+        onDragEnd={() => {
+          draggedEntry = null;
+          onDropTarget(null);
+        }}
+        onDragOver={(event) => {
+          const dragged = draggedEntry;
+          if (!dragged || !canDropInto(dragged, entry)) return;
+          // 只有 preventDefault 过的地方才允许放下。
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+          if (dropTarget !== entry.relPath) onDropTarget(entry.relPath);
+        }}
+        onDragLeave={() => {
+          if (dropTarget === entry.relPath) onDropTarget(null);
+        }}
+        onDrop={(event) => {
+          const dragged = draggedEntry;
+          onDropTarget(null);
+          if (!dragged || !canDropInto(dragged, entry)) return;
+          event.preventDefault();
+          draggedEntry = null;
+          void moveEntry(dragged, entry.relPath);
+        }}
         role="treeitem"
         aria-level={depth + 1}
         aria-selected={active}
@@ -321,6 +374,8 @@ function TreeNode({ entry, depth, onMenuAt }: TreeNodeProps) {
               key={child.relPath}
               entry={child}
               depth={depth + 1}
+              dropTarget={dropTarget}
+              onDropTarget={onDropTarget}
               onMenuAt={onMenuAt}
             />
           ))}
@@ -370,6 +425,8 @@ export function WorkspaceSidebar() {
   const [tab, setTab] = useState<SidebarTab>("files");
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  // 拖动时高亮当前可放下的目录，松手前就知道会落到哪。
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [width, setWidth] = useState<number>(SIDEBAR_WIDTH.default);
   const widthRef = useRef<number>(SIDEBAR_WIDTH.default);
   const resizeStart = useRef<{ x: number; width: number } | null>(null);
@@ -669,12 +726,36 @@ export function WorkspaceSidebar() {
             // 点击空白区域关闭右键菜单。
             if (event.target === event.currentTarget && menu) setMenu(null);
           }}
+          onDragOver={(event) => {
+            // 树里的空白区域当作根目录：把文件拖出子目录时不用再找落点。
+            if (!draggedEntry) return;
+            const target = event.target as HTMLElement;
+            if (target.closest(".tree-row")) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "move";
+          }}
+          onDragLeave={(event) => {
+            if (event.target === event.currentTarget) setDropTarget(null);
+          }}
+          onDrop={(event) => {
+            if (!draggedEntry) return;
+            const target = event.target as HTMLElement;
+            if (target.closest(".tree-row")) return;
+            event.preventDefault();
+            const dragged = draggedEntry;
+            draggedEntry = null;
+            setDropTarget(null);
+            if (parentRel(dragged.relPath) === "") return;
+            void moveEntry(dragged, "");
+          }}
         >
           {children?.map((entry) => (
             <TreeNode
               key={entry.relPath}
               entry={entry}
               depth={0}
+              dropTarget={dropTarget}
+              onDropTarget={setDropTarget}
               onMenuAt={openMenuAt}
             />
           ))}
