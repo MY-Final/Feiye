@@ -11,6 +11,7 @@ import {
   deleteEntry as apiDeleteEntry,
   describeError,
   getSetting,
+  isAppError,
   listDir,
   moveEntry as apiMoveEntry,
   openWorkspace as apiOpenWorkspace,
@@ -152,6 +153,16 @@ export async function rememberWorkspace(path: string): Promise<void> {
   );
 }
 
+/** 库已不在（被删 / 被移走）时从最近列表摘掉，下次点菜单不再撞同一个错。 */
+export async function forgetWorkspace(path: string): Promise<void> {
+  const raw = await getSetting<unknown>(RECENT_WORKSPACES_KEY);
+  if (!Array.isArray(raw)) return;
+  const next = raw.filter(
+    (item): item is string => typeof item === "string" && item !== path,
+  );
+  await setSetting(RECENT_WORKSPACES_KEY, next.length > 0 ? next : null);
+}
+
 /** 「最近工作区」菜单：去掉当前库，只列可以切过去的路径。 */
 export async function listRecentWorkspaces(): Promise<string[]> {
   const raw = await getSetting<unknown>(RECENT_WORKSPACES_KEY);
@@ -173,7 +184,10 @@ export async function chooseWorkspace(): Promise<void> {
   }
 }
 
-export async function openWorkspaceAt(path: string): Promise<void> {
+export async function openWorkspaceAt(
+  path: string,
+  fromRecent = false,
+): Promise<void> {
   if (!(await guardUnsaved())) return;
 
   try {
@@ -204,7 +218,16 @@ export async function openWorkspaceAt(path: string): Promise<void> {
 
     void promptPendingRecoveries();
   } catch (error) {
-    toastError("打开工作区失败", error);
+    // 从「最近工作区」点进来的库已经不存在：摘掉过期路径再提示，
+    // 否则这个点不开的条目会在菜单里一直留着。取消未保存提示不走这里。
+    const gone = fromRecent && isAppError(error) && error.code === "not-found";
+    if (gone) await forgetWorkspace(path);
+    useUiStore.getState().toast(
+      gone
+        ? `打开工作区失败：${describeError(error)}（已从最近工作区移除）`
+        : `打开工作区失败：${describeError(error)}`,
+      "error",
+    );
   }
 }
 

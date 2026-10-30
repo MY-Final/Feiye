@@ -239,7 +239,7 @@ export function TitleBar() {
           onClose={() => setRecentMenu(null)}
           actions={recentMenu.paths.map((path) => ({
             label: `切换到 ${folderName(path)}`,
-            onSelect: () => void openWorkspaceAt(path),
+            onSelect: () => void openWorkspaceAt(path, true),
           }))}
         />
       ) : null}
