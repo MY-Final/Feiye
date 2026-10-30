@@ -32,7 +32,7 @@ import {
   migrateRecoverySnapshot,
   promptPendingRecoveries,
 } from "../editor/recovery";
-import { guardUnsaved } from "../editor/save";
+import { guardUnsaved, saveActiveDocument } from "../editor/save";
 import {
   clearPreview,
   requestPreview,
@@ -354,21 +354,31 @@ export async function deleteEntry(entry: Entry): Promise<void> {
   const deletingActive = Boolean(
     doc.path && isWithin(doc.path, entry.relPath),
   );
-  const message =
-    deletingActive && doc.dirty
-      ? `「${entry.name}」里有正在编辑的笔记，还有未保存的修改。移到回收站后，这些修改不会写入文件，会直接丢失。确定继续吗？`
-      : `确定将「${entry.name}」移到回收站吗？此操作可以在系统回收站中撤销。`;
+  const hasUnsaved = deletingActive && doc.dirty;
 
   const choice = await useUiStore.getState().ask({
     title: "删除",
-    message,
-    buttons: [
-      { label: "移到回收站", value: "delete", tone: "danger" },
-      { label: "取消", value: "cancel" },
-    ],
+    message: hasUnsaved
+      ? `「${entry.name}」里有正在编辑的笔记，还有未保存的修改。可以直接删掉，也可以先保存再删除——保存后的内容会随文件一起进回收站。`
+      : `确定将「${entry.name}」移到回收站吗？此操作可以在系统回收站中撤销。`,
+    buttons: hasUnsaved
+      ? [
+          { label: "保存后删除", value: "save-delete", tone: "primary" },
+          { label: "直接删除", value: "delete", tone: "danger" },
+          { label: "取消", value: "cancel" },
+        ]
+      : [
+          { label: "移到回收站", value: "delete", tone: "danger" },
+          { label: "取消", value: "cancel" },
+        ],
   });
 
-  if (choice !== "delete") return;
+  if (choice === "save-delete") {
+    // 保存失败（冲突、IO 错误或用户取消重载）时放弃删除，避免内容真的丢掉。
+    if (!(await saveActiveDocument())) return;
+  } else if (choice !== "delete") {
+    return;
+  }
 
   try {
     await apiDeleteEntry(entry.relPath);
