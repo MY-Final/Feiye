@@ -9,6 +9,7 @@ import {
   pickWorkspaceFolder,
   readFile,
   renameEntry as apiRenameEntry,
+  revealEntry as apiRevealEntry,
   setSetting,
   type Entry,
 } from "../../lib/tauri";
@@ -190,6 +191,14 @@ export async function createFolderIn(parent: string): Promise<void> {
     await workspace.expandDir(created.relPath);
   } catch (error) {
     toastError("新建文件夹失败", error);
+  }
+}
+
+export async function revealEntry(entry: Entry | null): Promise<void> {
+  try {
+    await apiRevealEntry(entry?.relPath ?? "");
+  } catch (error) {
+    toastError("打开资源管理器失败", error);
   }
 }
 

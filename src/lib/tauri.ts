@@ -124,6 +124,10 @@ export function deleteEntry(relPath: string): Promise<void> {
   return invoke<void>("delete_entry", { relPath });
 }
 
+export function revealEntry(relPath: string): Promise<void> {
+  return invoke<void>("reveal_entry", { relPath });
+}
+
 export function saveRecovery(
   relPath: string,
   name: string,

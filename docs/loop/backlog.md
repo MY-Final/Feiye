@@ -19,6 +19,22 @@
 
 <!-- 从这里开始追加 -->
 
+## 第 1 轮 · 2026-10-30 08:55
+
+**用户需求**：写完一篇笔记想在资源管理器里看看它在磁盘上的位置、顺手把配图放进去，现在只能自己从文件夹一层层找过去；文件树右键只有新建 / 重命名 / 删除。希望右键笔记或文件夹时能「在资源管理器中显示」，直接定位到那一项。
+
+**产品经理**：桌面编辑器的基本动作，属于文件树右键菜单的自然补全；不新增面板、不引入依赖，也不触碰「暂不做」。结论：**做**。
+
+**前端**：`lib/tauri.ts` 新增 `revealEntry` 封装；`workspace-actions.ts` 新增调用与失败 toast；`WorkspaceSidebar` 右键菜单加「在资源管理器中显示」，空白处右键定位工作区根目录。风险：根目录传空路径由后端解析为根；失败不打断编辑。工作量 **S**。
+
+**后端**：`commands/file.rs` 新增 `reveal_entry`：复用 `resolve_in_workspace` 做边界与符号链接校验，抽 `reveal_target` 校验目标存在，再调已有的 `tauri_plugin_opener::reveal_item_in_dir`（不新增依赖、不改 capabilities）；`lib.rs` 注册命令并补充单测。风险：目标被外部删除时返回 NotFound；跨平台定位由插件处理。工作量 **S**。
+
+**裁决**：做。
+
+**改动**：`src/lib/tauri.ts`、`src/features/workspace/workspace-actions.ts`、`src/features/workspace/WorkspaceSidebar.tsx`、`src-tauri/src/commands/file.rs`、`src-tauri/src/lib.rs`。
+
+**构建**：通过（`bun run build` 0.71s；`cargo test` 30 项全通过，含新增 `resolves_reveal_targets_inside_workspace`）。未在真机点开资源管理器做手动验证，路径解析由单测覆盖。
+
 ## 第 13 轮 · 2026-10-30 07:29
 
 **用户需求**：长文开头写了目录，用 `[第二章](#第二章--编辑内核)` 这种文档内锚点互相跳转。源码里点不动，切到预览点上去也没有任何反应——预览给每个标题重新编号成内部锚点，自己写的 `#章节` 链接全都悬空。希望点目录能直接滚到对应标题。

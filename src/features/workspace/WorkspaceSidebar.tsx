@@ -20,6 +20,7 @@ import {
   deleteEntry,
   openFile,
   renameEntry,
+  revealEntry,
 } from "./workspace-actions";
 
 interface MenuState {
@@ -46,6 +47,12 @@ function buildMenuActions(entry: Entry | null): MenuAction[] {
       label: "新建文件夹",
       onSelect: () => {
         void createFolderIn(parent);
+      },
+    },
+    {
+      label: "在资源管理器中显示",
+      onSelect: () => {
+        void revealEntry(entry);
       },
     },
   ];

@@ -168,6 +168,19 @@ fn create_folder_in(root: &Path, parent_rel: &str, name: &str) -> Result<Entry, 
     })
 }
 
+/// 校验并返回「在资源管理器中显示」的目标；只接受工作区内已存在的路径。
+fn reveal_target(root: &Path, rel: &str) -> Result<std::path::PathBuf, AppError> {
+    let path = fs_path::resolve_in_workspace(root, rel)?;
+    if !path.exists() {
+        return Err(AppError::NotFound(if rel.is_empty() {
+            root.display().to_string()
+        } else {
+            rel.to_string()
+        }));
+    }
+    Ok(path)
+}
+
 fn rename_in(root: &Path, rel: &str, new_name: &str) -> Result<Entry, AppError> {
     let clean = fs_path::normalize_rel(rel)?;
     if clean.is_empty() {
@@ -267,6 +280,14 @@ pub fn create_folder(
 ) -> Result<Entry, AppError> {
     let root = state.root()?;
     create_folder_in(&root, &parent_rel_path, &name)
+}
+
+#[tauri::command]
+pub fn reveal_entry(rel_path: String, state: State<'_, WorkspaceState>) -> Result<(), AppError> {
+    let root = state.root()?;
+    let path = reveal_target(&root, &rel_path)?;
+    tauri_plugin_opener::reveal_item_in_dir(&path)
+        .map_err(|err| AppError::Io(format!("无法打开资源管理器：{err}")))
 }
 
 #[tauri::command]
@@ -373,6 +394,22 @@ mod tests {
         assert!(create_folder_in(&root, "", "bad/name").is_err());
         assert!(create_folder_in(&root, "", "..").is_err());
         assert!(create_folder_in(&root, "missing", "x").is_err());
+    }
+
+    #[test]
+    fn resolves_reveal_targets_inside_workspace() {
+        let (_temp, root) = workspace();
+        fs::write(root.join("a.md"), "x").unwrap();
+        fs::create_dir(root.join("sub")).unwrap();
+
+        assert_eq!(reveal_target(&root, "").unwrap(), root);
+        assert_eq!(reveal_target(&root, "a.md").unwrap(), root.join("a.md"));
+        assert_eq!(reveal_target(&root, "sub").unwrap(), root.join("sub"));
+        assert!(matches!(
+            reveal_target(&root, "missing.md"),
+            Err(AppError::NotFound(_))
+        ));
+        assert!(reveal_target(&root, "../escape").is_err());
     }
 
     #[test]
