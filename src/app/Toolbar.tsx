@@ -153,9 +153,16 @@ export async function copyActiveAsHtml(): Promise<void> {
     if (inlined > 0) notes.push(`${inlined} 张本地图片已内联`);
     if (localImages > 0) notes.push(`${localImages} 张本地图片在应用外可能无法显示`);
     const warning = notes.length > 0 ? `（${notes.join("；")}）` : "";
+    const fromSelection = useSelection || usePreviewSelection;
+    const plain = useSelection
+      ? selected
+      : usePreviewSelection
+        ? (window.getSelection()?.toString() ?? "")
+        : "";
+    const size = plain.replace(/\s+/g, "").length;
     const okMessage =
-      (useSelection || usePreviewSelection
-        ? "所选内容已复制为 HTML，可直接粘贴到邮件或公众号草稿"
+      (fromSelection
+        ? `所选内容（${size} 字）已复制为 HTML，可直接粘贴到邮件或公众号草稿`
         : "HTML 已复制，可直接粘贴到邮件或公众号草稿") + warning;
     useUiStore
       .getState()
