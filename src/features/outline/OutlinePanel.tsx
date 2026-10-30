@@ -1,4 +1,9 @@
-import { useEffect, useMemo, useRef } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 
 import { jumpToEditorPosition } from "../editor/editor-bridge";
 import { scrollPreviewToHeading } from "../preview/preview-scroll";
@@ -68,18 +73,44 @@ export function OutlinePanel() {
     }
   };
 
+  // 和文件树一致的键盘习惯：↑↓ 换行、Home / End 到首尾；
+  // 跳转沿用按钮原生的 Enter / 空格点击。
+  const handleKeys = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    const item = (event.target as Element | null)?.closest<HTMLElement>(
+      "[data-outline-index]",
+    );
+    if (!item) return;
+
+    const index = Number(item.dataset.outlineIndex);
+    let next: number | null = null;
+    if (event.key === "ArrowDown") next = index + 1;
+    else if (event.key === "ArrowUp") next = index - 1;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = headings.length - 1;
+    if (next === null) return;
+
+    // 越界时也不让页面自己滚动，焦点留在最后一项。
+    event.preventDefault();
+    listRef.current
+      ?.querySelector<HTMLElement>(`[data-outline-index="${next}"]`)
+      ?.focus();
+  };
+
   return (
     <div
       className="outline-list"
       ref={listRef}
       role="tree"
       aria-label="文档大纲"
+      onKeyDown={handleKeys}
     >
       {headings.map((heading, index) => (
         <button
           key={heading.id}
           type="button"
           role="treeitem"
+          aria-level={heading.level}
           className={`outline-item${index === activeIndex ? " active" : ""}`}
           data-outline-index={index}
           style={{ paddingLeft: 10 + (heading.level - 1) * 13 }}
