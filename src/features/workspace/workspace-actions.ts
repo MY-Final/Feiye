@@ -235,7 +235,8 @@ export async function openFile(
 
 export async function createMarkdownFile(parent: string): Promise<void> {
   const name = await useUiStore.getState().askInput({
-    title: "新建 Markdown 文件",
+    // 从文件树右键新建时，标题里带上目标目录，避免建到别的文件夹里。
+    title: parent ? `新建 Markdown · ${parent}` : "新建 Markdown 文件",
     label: "文件名",
     initialValue: nextAvailableName(parent, "未命名", ".md"),
     confirmLabel: "创建",
@@ -315,7 +316,7 @@ export async function saveDocumentAs(): Promise<void> {
 
 export async function createFolderIn(parent: string): Promise<void> {
   const name = await useUiStore.getState().askInput({
-    title: "新建文件夹",
+    title: parent ? `新建文件夹 · ${parent}` : "新建文件夹",
     label: "文件夹名称",
     initialValue: nextAvailableName(parent, "新建文件夹", ""),
     confirmLabel: "创建",
