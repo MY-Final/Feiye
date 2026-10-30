@@ -644,37 +644,53 @@ export function PreviewPane() {
       button.textContent = "复制";
       button.title = "复制代码";
       button.setAttribute("aria-label", "复制代码");
-      let resetTimer: number | null = null;
+      wrapper.append(button);
+    }
 
-      button.addEventListener("mousedown", (event) => {
-        event.preventDefault();
-      });
-      button.addEventListener("click", () => {
-        if (resetTimer !== null) {
-          window.clearTimeout(resetTimer);
-          resetTimer = null;
-        }
-        const raw = pre.textContent ?? "";
-        const text = raw.endsWith("\n") ? raw.slice(0, -1) : raw;
-        void copyText(text).then((copied) => {
-          if (!button.isConnected) return;
-          button.textContent = copied ? "已复制" : "复制失败";
-          button.classList.toggle("is-copied", copied);
-          button.setAttribute(
-            "aria-label",
-            copied ? "已复制代码" : "复制代码失败",
-          );
-          resetTimer = window.setTimeout(() => {
+    // 几千个代码块逐个挂监听会拖慢注入：在预览容器上委托一次，
+    // 按钮只留标记，按块更新后新按钮同样生效。
+    const resetTimers = new WeakMap<Element, number>();
+    const buttonOf = (target: EventTarget | null) =>
+      target instanceof Element
+        ? target.closest<HTMLButtonElement>(".preview-code-copy")
+        : null;
+
+    const onMouseDown = (event: MouseEvent) => {
+      if (buttonOf(event.target)) event.preventDefault();
+    };
+    const onClick = (event: MouseEvent) => {
+      const button = buttonOf(event.target);
+      if (!button || !body.contains(button)) return;
+      const pre = button
+        .closest(".preview-code-block")
+        ?.querySelector("pre");
+      if (!pre) return;
+      const previous = resetTimers.get(button);
+      if (previous !== undefined) window.clearTimeout(previous);
+      const raw = pre.textContent ?? "";
+      const text = raw.endsWith("\n") ? raw.slice(0, -1) : raw;
+      void copyText(text).then((copied) => {
+        if (!button.isConnected) return;
+        button.textContent = copied ? "已复制" : "复制失败";
+        button.classList.toggle("is-copied", copied);
+        button.setAttribute("aria-label", copied ? "已复制代码" : "复制代码失败");
+        resetTimers.set(
+          button,
+          window.setTimeout(() => {
             button.textContent = "复制";
             button.classList.remove("is-copied");
             button.setAttribute("aria-label", "复制代码");
-            resetTimer = null;
-          }, 1500);
-        });
+            resetTimers.delete(button);
+          }, 1500),
+        );
       });
-
-      wrapper.append(button);
-    }
+    };
+    body.addEventListener("mousedown", onMouseDown);
+    body.addEventListener("click", onClick);
+    return () => {
+      body.removeEventListener("mousedown", onMouseDown);
+      body.removeEventListener("click", onClick);
+    };
   }, [html, previewVisible]);
 
   const lightboxImage = lightbox ? lightbox.images[lightbox.index] : null;
