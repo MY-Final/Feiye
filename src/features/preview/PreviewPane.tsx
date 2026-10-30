@@ -210,6 +210,17 @@ export function PreviewPane() {
     setLightbox(null);
   }, [docPath]);
 
+  // 浮层是预览面板的子节点，滚轮会穿透到后面的正文：放大看图时把它挡住，
+  // 关掉浮层后阅读位置才不会被悄悄挪走。
+  useEffect(() => {
+    if (!lightbox) return;
+    const pane = paneRef.current;
+    if (!pane) return;
+    const blockWheel = (event: WheelEvent) => event.preventDefault();
+    pane.addEventListener("wheel", blockWheel, { passive: false });
+    return () => pane.removeEventListener("wheel", blockWheel);
+  }, [lightbox]);
+
   // 给标题补上稳定锚点，供大纲跳转和滚动同步使用。
   useEffect(() => {
     const body = bodyRef.current;
