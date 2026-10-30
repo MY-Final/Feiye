@@ -55,6 +55,13 @@ function buildMenuActions(entry: Entry | null): MenuAction[] {
       },
     },
     {
+      // 外面改过文件时，右键就地刷新，不用再去右上角找按钮。
+      label: "刷新文件树",
+      onSelect: () => {
+        void useWorkspaceStore.getState().refreshTree();
+      },
+    },
+    {
       label: "在资源管理器中显示",
       onSelect: () => {
         void revealEntry(entry);
