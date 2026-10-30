@@ -56,7 +56,10 @@ async function restoreExpanded(root: string): Promise<void> {
 
   const expanded: Record<string, boolean> = {};
   for (const path of paths) expanded[path] = true;
-  useWorkspaceStore.setState({ expanded });
+  // 与当前状态合并：目录改名后会先把展开状态改成新路径，不能被旧列表覆盖。
+  useWorkspaceStore.setState((state) => ({
+    expanded: { ...expanded, ...state.expanded },
+  }));
   await Promise.all(
     paths.map((path) => useWorkspaceStore.getState().loadDir(path, true)),
   );
@@ -120,6 +123,8 @@ interface WorkspaceStore {
   toggleDir(relPath: string): Promise<void>;
   invalidateDir(relPath: string): void;
   expandDir(relPath: string): Promise<void>;
+  /** 批量展开目录并只持久化一次；用于目录改名后恢复展开状态。 */
+  expandDirs(relPaths: string[]): Promise<void>;
   collapseAll(): void;
 }
 
@@ -237,6 +242,17 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     if (!get().children[relPath]) {
       await get().loadDir(relPath);
     }
+  },
+
+  async expandDirs(relPaths) {
+    if (relPaths.length === 0) return;
+    const expanded = { ...get().expanded };
+    for (const relPath of relPaths) expanded[relPath] = true;
+    set({ expanded });
+    persistExpanded(get().root, expanded);
+    await Promise.all(
+      relPaths.map((relPath) => get().loadDir(relPath, true)),
+    );
   },
 
   invalidateDir(relPath) {

@@ -385,10 +385,23 @@ export async function renameEntry(entry: Entry): Promise<void> {
     }
 
     if (entry.isDir) {
-      const { root, name, setWorkspace } = useWorkspaceStore.getState();
+      const { root, name, expanded, setWorkspace } =
+        useWorkspaceStore.getState();
       if (root && name) {
+        // 展开状态里的路径跟着改名换前缀，重建后再恢复，
+        // 避免改完目录整个树收起、当前文档被藏起来。
+        const remap = (path: string) =>
+          path === entry.relPath || path.startsWith(`${entry.relPath}/`)
+            ? `${renamed.relPath}${path.slice(entry.relPath.length)}`
+            : path;
+        const openDirs = Object.entries(expanded)
+          .filter(([, open]) => open)
+          .map(([path]) => remap(path))
+          .sort((a, b) => a.split("/").length - b.split("/").length);
+
         setWorkspace({ root, name });
         await useWorkspaceStore.getState().loadDir("");
+        await useWorkspaceStore.getState().expandDirs(openDirs);
       }
     }
   } catch (error) {
