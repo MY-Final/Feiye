@@ -364,6 +364,7 @@ function clampSidebarWidth(value: number): number {
 export function WorkspaceSidebar() {
   const children = useWorkspaceStore((state) => state.children[""]);
   const rootLoading = useWorkspaceStore((state) => Boolean(state.loading[""]));
+  const rootFailed = useWorkspaceStore((state) => Boolean(state.failed[""]));
   const refreshTree = useWorkspaceStore((state) => state.refreshTree);
   const headingCount = useOutlineStore((state) => state.headings.length);
   const [tab, setTab] = useState<SidebarTab>("files");
@@ -674,6 +675,19 @@ export function WorkspaceSidebar() {
 
           {!children && rootLoading ? (
             <div className="tree-hint">加载中…</div>
+          ) : null}
+
+          {!children && !rootLoading && rootFailed ? (
+            <div className="tree-hint tree-hint-empty">
+              <p>读取工作区目录失败</p>
+              <button
+                type="button"
+                className="tree-hint-action"
+                onClick={() => void handleRefresh()}
+              >
+                重试
+              </button>
+            </div>
           ) : null}
 
           {children && children.length === 0 ? (
