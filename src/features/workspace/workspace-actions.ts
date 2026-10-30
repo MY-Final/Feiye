@@ -1,3 +1,5 @@
+import { invoke } from "@tauri-apps/api/core";
+
 import { copyText } from "../../lib/clipboard";
 import {
   baseName,
@@ -193,6 +195,39 @@ export async function listRecentWorkspaces(): Promise<string[]> {
   );
 }
 
+/** 「最近工作区」每次启动只校验一次，别让菜单每次打开都去读盘。 */
+let recentWorkspacesPruned = false;
+
+/**
+ * 启动后清理一次「最近工作区」：以前会话留下、如今已被删除 / 移走的库，
+ * 不等用户点一次才消失。只按路径 stat 一条命令，不扫目录、不阻塞首屏。
+ */
+export async function pruneRecentWorkspaces(): Promise<void> {
+  if (recentWorkspacesPruned) return;
+  recentWorkspacesPruned = true;
+  const raw = await getSetting<unknown>(RECENT_WORKSPACES_KEY);
+  if (!Array.isArray(raw)) return;
+  const paths = raw.filter(
+    (item): item is string => typeof item === "string",
+  );
+  if (paths.length === 0) return;
+  const exists = await Promise.all(
+    paths.map((path) =>
+      invoke<boolean>("dir_exists", { path }).catch(() => true),
+    ),
+  );
+  const gone = new Set(paths.filter((_, index) => !exists[index]));
+  if (gone.size === 0) return;
+  // 校验期间用户可能又切了库：重读一次，只摘确认失效的，别覆盖新记录。
+  const latest = await getSetting<unknown>(RECENT_WORKSPACES_KEY);
+  if (!Array.isArray(latest)) return;
+  const next = latest.filter(
+    (item): item is string => typeof item === "string" && !gone.has(item),
+  );
+  if (next.length === latest.length) return;
+  await setSetting(RECENT_WORKSPACES_KEY, next.length > 0 ? next : null);
+}
+
 export async function chooseWorkspace(): Promise<void> {
   try {
     const path = await pickWorkspaceFolder(
@@ -283,7 +318,11 @@ export async function restoreLastWorkspace(): Promise<void> {
   const requestId = ++workspaceOpenSeq;
   let pausedHere = false;
   const last = await getSetting<string>("lastWorkspace");
-  if (!last || requestId !== workspaceOpenSeq) return;
+  if (!last || requestId !== workspaceOpenSeq) {
+    // 没有上次的库也要清理历史失效条目，别让它们一直留在最近菜单里。
+    if (!last) void pruneRecentWorkspaces();
+    return;
+  }
 
   try {
     const info = await apiOpenWorkspace(last);
@@ -327,6 +366,8 @@ export async function restoreLastWorkspace(): Promise<void> {
       if (requestId === workspaceOpenSeq) resumeTabsSave();
       else releaseTabsSave();
     }
+    // 启动恢复结束（含失败）后在后台校验最近工作区，不拖慢恢复本身。
+    void pruneRecentWorkspaces();
   }
 }
 

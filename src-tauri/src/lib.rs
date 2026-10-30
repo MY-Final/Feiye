@@ -24,6 +24,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::workspace::open_workspace,
+            commands::workspace::dir_exists,
             commands::workspace::current_workspace,
             commands::workspace::close_workspace,
             commands::workspace::list_dir,
