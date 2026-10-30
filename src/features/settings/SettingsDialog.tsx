@@ -291,7 +291,8 @@ export function SettingsDialog() {
             role="tablist"
             aria-label="设置分类"
             onKeyDown={(event) => {
-              if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+              const keys = ["ArrowLeft", "ArrowRight", "Home", "End"];
+              if (!keys.includes(event.key)) return;
               const tabs = Array.from(
                 event.currentTarget.querySelectorAll<HTMLElement>(
                   "[role='tab']",
@@ -301,7 +302,12 @@ export function SettingsDialog() {
               if (index < 0) return;
               event.preventDefault();
               const delta = event.key === "ArrowRight" ? 1 : -1;
-              const target = tabs[(index + delta + tabs.length) % tabs.length];
+              const target =
+                event.key === "Home"
+                  ? tabs[0]
+                  : event.key === "End"
+                    ? tabs[tabs.length - 1]
+                    : tabs[(index + delta + tabs.length) % tabs.length];
               target?.focus();
               target?.click();
             }}

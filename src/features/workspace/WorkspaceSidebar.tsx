@@ -550,8 +550,9 @@ export function WorkspaceSidebar() {
           role="tablist"
           aria-label="侧栏内容"
           onKeyDown={(event) => {
-            // 标签之间用左右方向键切换，和设置面板的习惯一致。
-            if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+            // 标签之间用左右方向键切换，Home / End 到首尾，和设置面板一致。
+            const keys = ["ArrowLeft", "ArrowRight", "Home", "End"];
+            if (!keys.includes(event.key)) return;
             const tabs = Array.from(
               event.currentTarget.querySelectorAll<HTMLElement>("[role='tab']"),
             );
@@ -559,7 +560,12 @@ export function WorkspaceSidebar() {
             if (index < 0) return;
             event.preventDefault();
             const delta = event.key === "ArrowRight" ? 1 : -1;
-            const target = tabs[(index + delta + tabs.length) % tabs.length];
+            const target =
+              event.key === "Home"
+                ? tabs[0]
+                : event.key === "End"
+                  ? tabs[tabs.length - 1]
+                  : tabs[(index + delta + tabs.length) % tabs.length];
             target?.focus();
             target?.click();
           }}

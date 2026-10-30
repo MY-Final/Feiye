@@ -19,6 +19,24 @@
 
 <!-- 从这里开始追加 -->
 
+## 第 122 轮 · 2026-10-30 15:12
+**用户需求**：设置里有五个分类，用方向键一个个挪太慢；按 Home / End 想直接到第一个或最后一个，没有反应。
+
+**产品经理**：做。上一轮给标签页补了左右方向键，Home / End 是同一套键盘约定的另一半；补上之后侧栏的文件 / 大纲两个标签也不吃亏。
+
+**前端**：影响 `src/features/settings/SettingsDialog.tsx` 与 `src/features/workspace/WorkspaceSidebar.tsx`（标签页按键扩展 Home / End）。风险：焦点不在标签上时不拦截。工作量 S。
+
+**后端**：无改动。工作量 0。
+
+**裁决**：做
+
+**改动**：`src/features/settings/SettingsDialog.tsx`、`src/features/workspace/WorkspaceSidebar.tsx`
+
+**构建**：通过（bun run build，517ms）
+
+---
+
+
 ## 第 121 轮 · 2026-10-30 15:09
 **用户需求**：设置了「隐藏扩展名」，文件树和「最近打开」都只剩标题，可窗口标题 / 任务栏里还挂着 `.md`，同一篇笔记三个地方三种写法。
 
