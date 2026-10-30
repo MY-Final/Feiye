@@ -119,7 +119,21 @@ export async function openWorkspaceAt(path: string): Promise<void> {
     resetDocument();
     await useWorkspaceStore.getState().loadDir("");
     await setSetting("lastWorkspace", info.root);
-    // 每个工作区各自记着上次打开的文档，切换时不清空。
+
+    // 每个工作区各自记着上次打开的文档：切换过来时直接打开它，
+    // 和启动时一样；文件已不在时静默跳过。
+    const lastDocument = await recallLastDocument(info.root);
+    if (lastDocument) {
+      await openFile(
+        {
+          relPath: lastDocument,
+          name: baseName(lastDocument),
+          isDir: false,
+        },
+        true,
+      );
+    }
+
     void promptPendingRecoveries();
   } catch (error) {
     toastError("打开工作区失败", error);
