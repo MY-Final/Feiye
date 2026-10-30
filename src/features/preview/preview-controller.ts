@@ -1,3 +1,4 @@
+import { useDocumentStore } from "../../stores/document";
 import type { PreviewRequest, PreviewResponse, PreviewResult } from "./preview-protocol";
 
 const DEBOUNCE_MS = 200;
@@ -12,7 +13,7 @@ type PreviewSource = string | (() => string);
 let worker: Worker | null = null;
 let latestId = 0;
 /** 最近一次真正发给 Worker 的文本，回来时用它作为缓存键。 */
-let posted: { id: number; markdown: string } | null = null;
+let posted: { id: number; markdown: string; docKey: string } | null = null;
 let timer: number | null = null;
 let pending: PreviewSource | null = null;
 let pendingLength = 0;
@@ -20,23 +21,50 @@ let listener: ((result: PreviewResult) => void) | null = null;
 let lastResult: PreviewResult = { html: "" };
 
 /**
- * 按 Markdown 全文缓存渲染结果：切回刚看过的笔记时不再让 Worker 整篇解析。
- * 键就是文本本身，所以外部修改、撤销、重新读盘后内容不同必然换一份；
- * Worker 输出的 HTML 只由 Markdown 决定（主题走 CSS 变量），同一文本可安全复用。
- * 只缓存成功结果，并按「文本 + HTML」总量限制，避免多篇长文把内存撑大。
+ * 按「文档 + 全文」缓存渲染结果：切回刚看过的笔记时不再让 Worker 整篇解析。
+ * 每篇笔记只留最近一次的结果——输入时的中间版本只对撤销有用，却会把别的
+ * 笔记挤出缓存；命中前再核对全文，外部修改、撤销、重新读盘后内容不同必然
+ * 重新解析。Worker 输出的 HTML 只由 Markdown 决定（主题走 CSS 变量），同一
+ * 文本可安全复用。只缓存成功结果，并按「文本 + HTML + 图表」总量限制。
  */
-const resultCache = new Map<string, PreviewResult>();
+interface CacheEntry {
+  markdown: string;
+  result: PreviewResult;
+  weight: number;
+}
+
+const resultCache = new Map<string, CacheEntry>();
 const RESULT_CACHE_ENTRIES = 6;
 const RESULT_CACHE_WEIGHT = 12_000_000;
 
-function cacheResult(markdown: string, result: PreviewResult): void {
-  if (!result.html || result.error) return;
-  resultCache.delete(markdown);
-  resultCache.set(markdown, result);
-  let weight = 0;
-  for (const [key, value] of resultCache) {
-    weight += key.length + value.html.length;
+function documentCacheKey(): string {
+  return useDocumentStore.getState().path ?? "";
+}
+
+/** 缓存条目的内存量级：全文 + HTML + Mermaid SVG。 */
+function resultWeight(markdown: string, result: PreviewResult): number {
+  let weight = markdown.length + result.html.length;
+  if (result.mermaid) {
+    for (const svg of Object.values(result.mermaid)) weight += svg.length;
   }
+  return weight;
+}
+
+function cacheResult(
+  docKey: string,
+  markdown: string,
+  result: PreviewResult,
+): void {
+  if (!result.html || result.error) return;
+  // 同一篇笔记只保留最新结果，旧版本不占条目也不占容量。
+  resultCache.delete(docKey);
+  resultCache.set(docKey, {
+    markdown,
+    result,
+    weight: resultWeight(markdown, result),
+  });
+  let weight = 0;
+  for (const value of resultCache.values()) weight += value.weight;
   while (
     resultCache.size > RESULT_CACHE_ENTRIES ||
     weight > RESULT_CACHE_WEIGHT
@@ -45,7 +73,7 @@ function cacheResult(markdown: string, result: PreviewResult): void {
     if (oldest === undefined) break;
     const value = resultCache.get(oldest);
     resultCache.delete(oldest);
-    weight -= oldest.length + (value?.html.length ?? 0);
+    weight -= value?.weight ?? 0;
   }
 }
 
@@ -81,7 +109,7 @@ function ensureWorker(): Worker | null {
         ? { html: "", error: data.error }
         : { html: data.html, mermaid: data.mermaid };
       if (!data.error && posted?.id === data.id) {
-        cacheResult(posted.markdown, lastResult);
+        cacheResult(posted.docKey, posted.markdown, lastResult);
       }
       posted = null;
       listener?.(lastResult);
@@ -141,17 +169,18 @@ function flush(): void {
     return;
   }
 
-  // 同一份文本之前渲染过：直接复用，不再让 Worker 解析整篇。
-  const cached = resultCache.get(markdown);
-  if (cached) {
+  // 同一篇笔记的同一份文本之前渲染过：直接复用，不再让 Worker 解析整篇。
+  const docKey = documentCacheKey();
+  const cached = resultCache.get(docKey);
+  if (cached && cached.markdown === markdown) {
     // Map 按插入顺序迭代；命中后移到末尾，淘汰时才真正按「最久未用」踢人，
     // 否则在两篇大笔记来回切、中间点开别的几篇时，刚看过的反而先被淘汰。
-    resultCache.delete(markdown);
-    resultCache.set(markdown, cached);
+    resultCache.delete(docKey);
+    resultCache.set(docKey, cached);
     // 作废仍在路上的旧请求，避免较晚返回的结果盖掉缓存。
     latestId += 1;
     posted = null;
-    lastResult = cached;
+    lastResult = cached.result;
     listener?.(lastResult);
     return;
   }
@@ -160,7 +189,7 @@ function flush(): void {
   if (!current) return;
 
   const id = ++latestId;
-  posted = { id, markdown };
+  posted = { id, markdown, docKey };
   const request: PreviewRequest = { id, markdown };
   current.postMessage(request);
 }
