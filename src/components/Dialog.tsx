@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useRef,
   useState,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -189,6 +190,17 @@ function PromptDialog({ request }: { request: PromptRequest }) {
 export function DialogHost() {
   const confirm = useUiStore((state) => state.confirm);
   const prompt = useUiStore((state) => state.prompt);
+  const open = Boolean(confirm || prompt);
+  const wasOpen = useRef(false);
+
+  // 对话框关掉后把焦点还给正文：接着敲键盘不用先用鼠标点一下。
+  useEffect(() => {
+    // 设置面板还开着时不抢焦点，否则焦点会跑到遮罩后面的正文里。
+    if (wasOpen.current && !open && !useUiStore.getState().settingsOpen) {
+      document.querySelector<HTMLElement>(".cm-content")?.focus();
+    }
+    wasOpen.current = open;
+  }, [open]);
 
   if (confirm) return <ConfirmDialog request={confirm} />;
   if (prompt) return <PromptDialog key={prompt.title} request={prompt} />;

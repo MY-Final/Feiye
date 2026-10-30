@@ -213,6 +213,11 @@ export function SettingsDialog() {
       cancelAnimationFrame(frame);
       // Esc、齿轮或遮罩关闭时也把待写入的偏好落盘。
       void flushPreferences();
+      // 关掉设置后焦点回到正文，键盘流不断档；还有对话框开着就先不动。
+      const ui = useUiStore.getState();
+      if (!ui.confirm && !ui.prompt) {
+        document.querySelector<HTMLElement>(".cm-content")?.focus();
+      }
     };
   }, [open]);
 
