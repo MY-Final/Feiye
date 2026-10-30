@@ -1,4 +1,5 @@
 import { useEffect, useRef, type MouseEvent as ReactMouseEvent } from "react";
+import { forceParsing } from "@codemirror/language";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { isExternalHref } from "../../lib/links";
@@ -105,6 +106,7 @@ export function EditorPane() {
   const statsTimer = useRef<number | null>(null);
   const outlineTimer = useRef<number | null>(null);
   const viewMode = useDocumentStore((state) => state.viewMode);
+  const docPath = useDocumentStore((state) => state.path);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -208,6 +210,31 @@ export function EditorPane() {
     setEditorMode(viewMode === "wysiwyg" ? "wysiwyg" : "source");
     requestAnimationFrame(() => refreshEditorLayout());
   }, [viewMode]);
+
+  // 纯预览里编辑器不可见，CodeMirror 不会继续后台解析，大纲只覆盖打开时
+  // 解析到的那一小段。切到预览后分片把整篇补完，长文的滚动高亮与标题
+  // 跳转才能覆盖全文；每次只占一小段时间片，避免长文档卡住主线程。
+  useEffect(() => {
+    if (viewMode !== "preview" || !docPath) return;
+    let cancelled = false;
+    let timer: number | null = null;
+    const step = () => {
+      timer = null;
+      if (cancelled) return;
+      const view = getEditorView();
+      if (!view) return;
+      const total = view.state.doc.length;
+      if (total === 0) return;
+      if (!forceParsing(view, total, 24)) {
+        timer = window.setTimeout(step, 16);
+      }
+    };
+    timer = window.setTimeout(step, 0);
+    return () => {
+      cancelled = true;
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [viewMode, docPath]);
 
   return (
     <div
