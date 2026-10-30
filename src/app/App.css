@@ -1180,6 +1180,22 @@ body.is-resizing-split * {
   cursor: pointer;
 }
 
+.status-zen {
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.status-zen:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .status-path-button:hover {
   color: var(--text);
   text-decoration: underline;

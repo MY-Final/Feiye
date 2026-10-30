@@ -31,6 +31,7 @@ export function StatusBar() {
   const dirty = useDocumentStore((state) => state.dirty);
   const saving = useDocumentStore((state) => state.saving);
   const saveBlocked = useDocumentStore((state) => state.saveBlocked);
+  const zenMode = useUiStore((state) => state.zenMode);
   const savedModifiedMs = useDocumentStore((state) => state.savedModifiedMs);
   const cursor = useDocumentStore((state) => state.cursor);
   const stats = useDocumentStore((state) => state.stats);
@@ -138,6 +139,18 @@ export function StatusBar() {
                 </span>
               </span>
             )}
+            {zenMode ? (
+              // 专注模式收起工具栏后，状态栏留一个可见的出口，
+              // 忘了快捷键也能点着退出。
+              <button
+                type="button"
+                className="status-zen"
+                title="退出专注模式（Ctrl + Shift + F）"
+                onClick={() => useUiStore.getState().toggleZenMode()}
+              >
+                专注
+              </button>
+            ) : null}
           </>
         ) : null}
       </span>
