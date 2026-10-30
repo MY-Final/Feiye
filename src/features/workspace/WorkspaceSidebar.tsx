@@ -247,7 +247,21 @@ function TreeNode({ entry, depth, onMenuAt }: TreeNodeProps) {
           } else if (event.key === "Delete") {
             event.preventDefault();
             event.stopPropagation();
-            void deleteEntry(entry);
+            // 删完把焦点留在树里同一位置，接着整理下一篇，不用再点一下。
+            const row = event.currentTarget;
+            const tree = row.closest(".tree");
+            const before = tree
+              ? Array.from(tree.querySelectorAll<HTMLElement>(".tree-row"))
+              : [];
+            const index = before.indexOf(row);
+            void deleteEntry(entry).then(() => {
+              if (!tree?.isConnected) return;
+              const rows = Array.from(
+                tree.querySelectorAll<HTMLElement>(".tree-row"),
+              );
+              if (rows.length === 0) return;
+              rows[Math.min(Math.max(index, 0), rows.length - 1)]?.focus();
+            });
           } else if (
             event.key === "ContextMenu" ||
             (event.shiftKey && event.key === "F10")
