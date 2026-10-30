@@ -131,6 +131,9 @@ function nextAvailableName(
 }
 
 function resetDocument(): void {
+  // 文档被整体清空（切换笔记库、删除当前笔记、关闭最后一个标签）时，
+  // 任何仍在进行的打开都应作废，别让它把旧笔记装回来。
+  openRequestSeq += 1;
   resetAutoSave();
   captureActiveCursor();
   setEditorDocument("");
@@ -332,6 +335,12 @@ export async function collapseAllKeepingActive(): Promise<void> {
   }
 }
 
+/**
+ * 打开请求序号：快速连点两篇笔记时，以最后一次点击为准。
+ * 先发起的读盘即使后返回（或用户点回当前这篇），也不能覆盖后来的选择。
+ */
+let openRequestSeq = 0;
+
 export async function openFile(
   entry: Entry,
   silent = false,
@@ -339,11 +348,17 @@ export async function openFile(
   recordHistory = true,
 ): Promise<void> {
   if (entry.isDir) return;
+  const requestId = ++openRequestSeq;
+  // 点回当前这篇：作废仍在进行的打开，最后点的算数。
   if (useDocumentStore.getState().path === entry.relPath) return;
   if (!(await guardUnsaved())) return;
+  if (requestId !== openRequestSeq) return;
 
   try {
     const file = await readFile(entry.relPath);
+    // 读盘期间又打开了别的笔记：丢弃这次过期结果，
+    // 否则会用旧文档覆盖新选择。
+    if (requestId !== openRequestSeq) return;
     // 成功读到新文档后再记一步浏览历史：取消未保存提示、读盘失败都不留脏记录。
     if (recordHistory) {
       const current = useDocumentStore.getState().path;
@@ -371,7 +386,9 @@ export async function openFile(
     void rememberLastDocument(entry.relPath);
     useWorkspaceStore.getState().noteRecent(entry.relPath);
     await expandAncestors(entry.relPath);
+    if (requestId !== openRequestSeq) return;
     await restoreCursorFor(entry.relPath);
+    if (requestId !== openRequestSeq) return;
     // 从文件树点开笔记后默认就要接着写：把焦点交给正文，
     // 纯预览模式没有可见的编辑区，不抢焦点。
     if (useDocumentStore.getState().viewMode !== "preview") {
@@ -379,6 +396,8 @@ export async function openFile(
     }
     if (anchor) jumpToAnchorInOpenDocument(anchor);
   } catch (error) {
+    // 已过期（后来点了别的笔记）的失败不必提示，也别动标签栏。
+    if (requestId !== openRequestSeq) return;
     if (silent) {
       void rememberLastDocument(null);
       return;

@@ -45,26 +45,32 @@ async function performSave(options: SaveOptions): Promise<boolean> {
     return false;
   }
 
+  const path = doc.path;
+  // 等组词结束期间用户可能已切到别的笔记：此时编辑器正文已不属于 path，
+  // 再读正文就会把新文档的内容写进旧文件。
+  if (useDocumentStore.getState().path !== path) return false;
+
   let text = getEditorText();
   if (text === null) return false;
 
-  const path = doc.path;
   useDocumentStore.getState().setSaving(true);
 
   try {
     let meta = await writeFile(path, text, doc.savedModifiedMs);
 
-    // 写入期间用户继续输入时，尽量把最新内容一并保存。
-    let latest = getEditorText();
+    // 写入期间用户继续输入时，尽量把最新内容一并保存；
+    // 但只有仍停在同一篇时才读编辑器，避免再次串写。
+    const stillSame = () => useDocumentStore.getState().path === path;
+    let latest = stillSame() ? getEditorText() : null;
     if (latest !== null && latest !== text) {
       meta = await writeFile(path, latest, meta.modifiedMs);
       text = latest;
-      latest = getEditorText();
+      latest = stillSame() ? getEditorText() : null;
     }
 
     const current = useDocumentStore.getState();
     const sameDocument = current.path === path;
-    const stillDirty = latest !== text;
+    const stillDirty = latest === null || latest !== text;
 
     if (sameDocument) {
       current.markSaved(meta.modifiedMs, stillDirty);
@@ -135,6 +141,8 @@ async function performSave(options: SaveOptions): Promise<boolean> {
  * 用编辑器当前内容替换磁盘版本。只在显式点击后发生，不是静默覆盖。
  */
 async function overwriteActiveDocument(path: string): Promise<boolean> {
+  // 对话框期间可能已切走：编辑器正文不再属于 path，不能拿来覆盖。
+  if (useDocumentStore.getState().path !== path) return false;
   const text = getEditorText();
   if (text === null) return false;
 
@@ -171,6 +179,8 @@ export async function reloadActiveDocument(): Promise<boolean> {
 
   try {
     const file = await readFile(doc.path);
+    // 读盘期间若已切到别的笔记，别把旧内容重新装回去。
+    if (useDocumentStore.getState().path !== doc.path) return false;
     useDocumentStore.getState().setDocument(doc.path, doc.name, file.modifiedMs);
     setEditorDocument(file.content, doc.path);
     requestPreview(file.content, true);
