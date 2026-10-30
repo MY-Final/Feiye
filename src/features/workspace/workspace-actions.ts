@@ -63,7 +63,7 @@ const MARKDOWN_NAME = /\.(md|markdown|mdx)$/i;
 const HAS_EXTENSION = /\.[^./\\]+$/;
 
 /** 已加载目录里同名文件的提示：输入阶段就告诉用户，省得关掉对话框再重来。 */
-function existingNameError(
+export function existingNameError(
   parent: string,
   name: string,
   selfRel?: string,
@@ -92,7 +92,7 @@ const ILLEGAL_NAME_CHAR = /[<>:"|?*\u0000-\u001f]/;
 const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
 
 /** 文件系统层面的命名限制提前拦下，不要等创建失败才报一句看不懂的错。 */
-function nameCharError(value: string): string | null {
+export function nameCharError(value: string): string | null {
   if (ILLEGAL_NAME_CHAR.test(value)) {
     return '名称不能包含 < > : " | ? * 等字符';
   }

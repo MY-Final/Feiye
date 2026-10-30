@@ -22,6 +22,8 @@ import {
 import { saveActiveDocument } from "../features/editor/save";
 import {
   changeViewMode,
+  existingNameError,
+  nameCharError,
   newDocumentNearActive,
   openNextDocument,
   openPreviousDocument,
@@ -35,7 +37,8 @@ import { useUiStore } from "../stores/ui";
 import { useWorkspaceStore } from "../stores/workspace";
 import { copyHtml } from "../lib/clipboard";
 import { countLocalImages, normalizeImagePath } from "../lib/images";
-import { parentRel } from "../lib/paths";
+import { baseName, parentRel } from "../lib/paths";
+import { describeError, isAppError } from "../lib/tauri";
 import { VIEW_MODES } from "../lib/view-modes";
 
 /** 把预览 HTML 中的工作区图片换成 data URL，超过上限或读取失败时保留原地址。 */
@@ -173,6 +176,59 @@ export async function copyActiveAsHtml(): Promise<void> {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     useUiStore.getState().toast(`生成 HTML 失败：${message}`, "error");
+  }
+}
+
+/** 没写 `.html` 时自动补上，避免导出成没有扩展名的文件。 */
+function ensureHtmlName(value: string): string {
+  return /\.html$/i.test(value) ? value : `${value}.html`;
+}
+
+/** 把整篇笔记导出成同目录下的 `.html` 文件；已存在时后端拒绝，不静默覆盖。 */
+export async function exportActiveAsHtml(): Promise<void> {
+  const ui = useUiStore.getState();
+  const root = useWorkspaceStore.getState().root;
+  const docPath = useDocumentStore.getState().path;
+  if (!root || !docPath) {
+    ui.toast("先打开一篇笔记再导出 HTML");
+    return;
+  }
+  const text = getEditorText();
+  if (text === null) return;
+
+  const parent = parentRel(docPath);
+  const defaultName = `${baseName(docPath).replace(/\.[^./\\]+$/, "") || "笔记"}.html`;
+  const name = await ui.askInput({
+    title: parent ? `导出 HTML · ${parent}` : "导出 HTML",
+    label: "文件名（保存在当前笔记所在目录，自动补 .html）",
+    initialValue: defaultName,
+    confirmLabel: "导出",
+    validate: (value) => {
+      const trimmed = value.trim();
+      if (!trimmed) return "文件名不能为空";
+      if (trimmed.includes("/") || trimmed.includes("\\")) {
+        return "文件名不能包含路径分隔符";
+      }
+      const leaf = ensureHtmlName(trimmed);
+      return nameCharError(leaf) ?? existingNameError(parent, leaf);
+    },
+  });
+  if (!name) return;
+
+  const leaf = ensureHtmlName(name.trim());
+  const rel = parent ? `${parent}/${leaf}` : leaf;
+  try {
+    const rendered = await renderMarkdownToHtml(text);
+    const { html } = await inlineLocalImages(rendered, root, docPath);
+    await invoke("export_html", { relPath: rel, content: html });
+    ui.toast(`已导出 HTML：${rel}`);
+    void useWorkspaceStore.getState().refreshDir(parent);
+  } catch (error) {
+    if (isAppError(error) && error.code === "already-exists") {
+      ui.toast(`「${leaf}」已存在，未覆盖；换个文件名再试`, "error");
+    } else {
+      ui.toast(`导出 HTML 失败：${describeError(error)}`, "error");
+    }
   }
 }
 
@@ -355,6 +411,16 @@ export function Toolbar() {
           onClick={() => void copyActiveAsHtml()}
         >
           复制 HTML
+        </button>
+        <button
+          type="button"
+          className="toolbar-text-btn"
+          title="把整篇笔记导出成当前目录下的 .html 文件（不覆盖已有文件）"
+          disabled={!hasDoc}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => void exportActiveAsHtml()}
+        >
+          导出 HTML…
         </button>
         <button
           type="button"
