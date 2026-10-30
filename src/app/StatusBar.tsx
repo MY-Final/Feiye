@@ -1,5 +1,6 @@
 import { copyText } from "../lib/clipboard";
 import { saveActiveDocument } from "../features/editor/save";
+import { chooseWorkspace } from "../features/workspace/workspace-actions";
 import { useDocumentStore } from "../stores/document";
 import { useEditorStore } from "../stores/editor";
 import { useSettingsStore } from "../stores/settings";
@@ -96,9 +97,19 @@ export function StatusBar() {
           {docPath}
         </button>
       ) : (
-        <span className="status-path">
-          {hasWorkspace ? "未选择文件" : "未打开工作区"}
-        </span>
+        hasWorkspace ? (
+          <span className="status-path">未选择文件</span>
+        ) : (
+          // 空白状态里最该做的就是选个文件夹，直接把它变成入口。
+          <button
+            type="button"
+            className="status-path status-path-button"
+            title="打开文件夹作为工作区（Ctrl+O）"
+            onClick={() => void chooseWorkspace()}
+          >
+            未打开工作区 · 打开文件夹
+          </button>
+        )
       )}
       <span className="status-meta">
         {docPath ? (
