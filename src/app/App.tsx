@@ -6,6 +6,7 @@ import { ToastHost } from "../components/Toast";
 import { EditorPane } from "../features/editor/EditorPane";
 import { flushAutoSave } from "../features/editor/autosave";
 import {
+  getEditorView,
   openEditorSearch,
   refreshEditorLayout,
 } from "../features/editor/editor-bridge";
@@ -345,6 +346,18 @@ export default function App() {
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
+
+  // 从工具栏按钮进入专注模式时焦点还在那个按钮上，按钮随后被收起，
+  // 焦点掉到页面本身，敲键盘没反应；这里把焦点交回正文。
+  useEffect(() => {
+    if (!zenMode) return;
+    const frame = requestAnimationFrame(() => {
+      if (useDocumentStore.getState().viewMode !== "preview") {
+        getEditorView()?.focus();
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [zenMode]);
 
   // 系统任务栏 / Alt-Tab 里也显示当前笔记名，未保存时带圆点。
   useEffect(() => {
