@@ -34,6 +34,7 @@ function findHeadingByAnchor(body: HTMLElement, fragment: string): number {
   );
 }
 import { attachSplitScrollSync } from "./scroll-sync";
+import { wrapImageCaptions } from "./figures";
 import { renderMermaidBlocks, type MermaidTarget } from "./mermaid";
 import { useSettingsStore } from "../../stores/settings";
 
@@ -496,6 +497,12 @@ export function PreviewPane() {
     if (!pane || !body) return;
     return attachSplitScrollSync(pane, body);
   }, [viewMode, html]);
+
+  // 图片的 title 显示成图注；宽高 / 对齐来自 Markdown 的 {width=… align=…}。
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (body) wrapImageCaptions(body);
+  }, [html]);
 
   // ```mermaid 代码块画成图：Worker 只给源码，这里按需懒加载 Mermaid。
   // 先打标记，避免下面给代码块补「复制」按钮时把图表源码也包一层。

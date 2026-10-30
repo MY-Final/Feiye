@@ -34,6 +34,12 @@ const schema: SanitizeSchema = {
       ...(defaultSchema.attributes?.div ?? []),
       ["className", "math", "math-display"],
     ],
+    // 图片的尺寸 / 对齐由 Markdown 里的 {width=… align=…} 决定。
+    img: [
+      ...(defaultSchema.attributes?.img ?? []),
+      "width",
+      ["className", "md-align-left", "md-align-center", "md-align-right"],
+    ],
   },
 };
 
@@ -81,6 +87,9 @@ interface MdastNode {
   lang?: string | null;
   value?: string;
   children?: MdastNode[];
+  data?: {
+    hProperties?: Record<string, string | string[]>;
+  };
 }
 
 /** 收集 ```mermaid 代码块的源码：Worker 里不能画图，交给主线程渲染。 */
@@ -91,11 +100,56 @@ function collectMermaid(node: MdastNode, out: string[]): void {
   for (const child of node.children ?? []) collectMermaid(child, out);
 }
 
+const IMAGE_ATTRS = /^\s*\{([^{}]*)\}\s*$/;
+const WIDTH = /^(?:\d{1,3}%|\d{1,4}px)$/;
+
+/**
+ * 解析图片后的属性块：`![alt](src){width=50% align=center}`。
+ * 只认宽度与对齐两个键，其它一律忽略，避免把任意 HTML 属性带进页面。
+ */
+function parseImageAttrs(source: string): Record<string, string | string[]> | null {
+  const props: Record<string, string | string[]> = {};
+  for (const part of source.trim().split(/\s+/)) {
+    const [key, raw] = part.split("=");
+    const value = (raw ?? "").trim();
+    if (!value) continue;
+    if (key === "width" && WIDTH.test(value)) props.width = value;
+    if (key === "align" && ["left", "center", "right"].includes(value)) {
+      props.className = [`md-align-${value}`];
+    }
+  }
+  return Object.keys(props).length ? props : null;
+}
+
+/**
+ * 属性块在 mdast 里是图片后面的文本节点；取走后图片通过 hProperties
+ * 带上 width / class，交给 rehype 输出成普通属性。
+ */
+function applyImageAttrs(node: MdastNode): void {
+  const children = node.children;
+  if (children) {
+    for (let index = 0; index < children.length - 1; index += 1) {
+      const child = children[index];
+      if (child.type !== "image") continue;
+      const next = children[index + 1];
+      if (next.type !== "text") continue;
+      const match = IMAGE_ATTRS.exec(next.value ?? "");
+      if (!match) continue;
+      const props = parseImageAttrs(match[1]);
+      if (!props) continue;
+      child.data = { ...child.data, hProperties: props };
+      children.splice(index + 1, 1);
+    }
+  }
+  for (const child of node.children ?? []) applyImageAttrs(child);
+}
+
 scope.onmessage = async (event) => {
   const { id, markdown } = event.data;
 
   try {
     const tree = processor.parse(markdown) as unknown as MdastNode;
+    applyImageAttrs(tree);
     const mermaid: string[] = [];
     collectMermaid(tree, mermaid);
     const file = await processor.run(tree as never);

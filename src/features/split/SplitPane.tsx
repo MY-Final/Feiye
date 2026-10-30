@@ -9,6 +9,7 @@ import { useSettingsStore } from "../../stores/settings";
 import { useTabsStore } from "../../stores/tabs";
 import { useUiStore } from "../../stores/ui";
 import { useWorkspaceStore } from "../../stores/workspace";
+import { wrapImageCaptions } from "../preview/figures";
 import { renderMermaidBlocks, type MermaidTarget } from "../preview/mermaid";
 import "./split.css";
 import { renderSplitPreview } from "./split-preview";
@@ -106,6 +107,11 @@ export function SplitPane() {
       cancelled = true;
     };
   }, [open, splitPath, root, tick]);
+
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (body) wrapImageCaptions(body);
+  }, [rendered.html]);
 
   // 对照里的 Mermaid 图表也跟着主题重画。
   useEffect(() => {

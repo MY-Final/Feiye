@@ -145,6 +145,64 @@
   border-radius: var(--radius-sm);
 }
 
+/* 图片宽度 / 对齐：![alt](src){width=60% align=center}；title 作图注。 */
+.markdown-body img.md-align-left {
+  display: block;
+  margin-right: auto;
+}
+
+.markdown-body img.md-align-center {
+  display: block;
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.markdown-body img.md-align-right {
+  display: block;
+  margin-left: auto;
+}
+
+.markdown-body .md-figure {
+  margin: 1.2em 0;
+  text-align: center;
+}
+
+.markdown-body .md-figure img {
+  margin-right: auto;
+  margin-left: auto;
+}
+
+/* figure 内的对齐要和 figure 的居中规则分开：更具体的选择器优先。 */
+.markdown-body .md-figure img.md-align-left {
+  margin-right: auto;
+  margin-left: 0;
+}
+
+.markdown-body .md-figure img.md-align-center {
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.markdown-body .md-figure img.md-align-right {
+  margin-right: 0;
+  margin-left: auto;
+}
+
+.markdown-body .md-figure.md-align-right figcaption {
+  text-align: right;
+}
+
+.markdown-body .md-figure.md-align-left figcaption {
+  text-align: left;
+}
+
+.markdown-body .md-figure figcaption {
+  margin-top: 0.5em;
+  color: var(--text-faint);
+  font-size: 0.82em;
+  line-height: 1.5;
+}
+
 .markdown-body img.preview-image-broken {
   display: inline-block;
   max-width: 100%;
