@@ -28,7 +28,11 @@ import {
   noteDocumentChange,
   resetAutoSave,
 } from "../editor/autosave";
-import { captureActiveCursor, restoreCursorFor } from "../editor/cursor-memory";
+import {
+  captureActiveCursor,
+  migrateCursor,
+  restoreCursorFor,
+} from "../editor/cursor-memory";
 import {
   getEditorText,
   getEditorView,
@@ -371,6 +375,8 @@ export async function renameEntry(entry: Entry): Promise<void> {
     const renamed = await apiRenameEntry(entry.relPath, target);
     await useWorkspaceStore.getState().refreshDir(parentRel(entry.relPath));
     useWorkspaceStore.getState().updateRecent(entry.relPath, renamed.relPath);
+    // 改名后路径变了，光标记录也换到新路径，重新打开时才能接着上次的位置写。
+    migrateCursor(entry.relPath, renamed.relPath);
 
     const doc = useDocumentStore.getState();
     if (doc.path === entry.relPath) {
