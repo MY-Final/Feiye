@@ -11,11 +11,43 @@ type PreviewSource = string | (() => string);
 
 let worker: Worker | null = null;
 let latestId = 0;
+/** 最近一次真正发给 Worker 的文本，回来时用它作为缓存键。 */
+let posted: { id: number; markdown: string } | null = null;
 let timer: number | null = null;
 let pending: PreviewSource | null = null;
 let pendingLength = 0;
 let listener: ((result: PreviewResult) => void) | null = null;
 let lastResult: PreviewResult = { html: "" };
+
+/**
+ * 按 Markdown 全文缓存渲染结果：切回刚看过的笔记时不再让 Worker 整篇解析。
+ * 键就是文本本身，所以外部修改、撤销、重新读盘后内容不同必然换一份；
+ * Worker 输出的 HTML 只由 Markdown 决定（主题走 CSS 变量），同一文本可安全复用。
+ * 只缓存成功结果，并按「文本 + HTML」总量限制，避免多篇长文把内存撑大。
+ */
+const resultCache = new Map<string, PreviewResult>();
+const RESULT_CACHE_ENTRIES = 6;
+const RESULT_CACHE_WEIGHT = 12_000_000;
+
+function cacheResult(markdown: string, result: PreviewResult): void {
+  if (!result.html || result.error) return;
+  resultCache.delete(markdown);
+  resultCache.set(markdown, result);
+  let weight = 0;
+  for (const [key, value] of resultCache) {
+    weight += key.length + value.html.length;
+  }
+  while (
+    resultCache.size > RESULT_CACHE_ENTRIES ||
+    weight > RESULT_CACHE_WEIGHT
+  ) {
+    const oldest = resultCache.keys().next().value;
+    if (oldest === undefined) break;
+    const value = resultCache.get(oldest);
+    resultCache.delete(oldest);
+    weight -= oldest.length + (value?.html.length ?? 0);
+  }
+}
 
 interface PendingExport {
   id: number;
@@ -48,6 +80,10 @@ function ensureWorker(): Worker | null {
       lastResult = data.error
         ? { html: "", error: data.error }
         : { html: data.html, mermaid: data.mermaid };
+      if (!data.error && posted?.id === data.id) {
+        cacheResult(posted.markdown, lastResult);
+      }
+      posted = null;
       listener?.(lastResult);
     };
     worker.onerror = (event) => {
@@ -59,6 +95,7 @@ function ensureWorker(): Worker | null {
         new Error(event.message || "预览 Worker 运行失败"),
       );
       pendingExport = null;
+      posted = null;
       lastResult = { html: "", error: event.message || "预览 Worker 运行失败" };
       listener?.(lastResult);
     };
@@ -104,10 +141,22 @@ function flush(): void {
     return;
   }
 
+  // 同一份文本之前渲染过：直接复用，不再让 Worker 解析整篇。
+  const cached = resultCache.get(markdown);
+  if (cached) {
+    // 作废仍在路上的旧请求，避免较晚返回的结果盖掉缓存。
+    latestId += 1;
+    posted = null;
+    lastResult = cached;
+    listener?.(lastResult);
+    return;
+  }
+
   const current = ensureWorker();
   if (!current) return;
 
   const id = ++latestId;
+  posted = { id, markdown };
   const request: PreviewRequest = { id, markdown };
   current.postMessage(request);
 }
@@ -148,6 +197,7 @@ export function clearPreview(): void {
   pending = null;
   pendingLength = 0;
   latestId += 1;
+  posted = null;
   lastResult = { html: "" };
   listener?.(lastResult);
 }
