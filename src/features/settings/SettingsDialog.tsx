@@ -90,16 +90,13 @@ const SHORTCUT_GROUPS: { title: string; items: [string, string][] }[] = [
       ["Delete", "删除文件树里选中的项（进回收站，需确认）"],
       ["Shift + F10", "在文件树里打开右键菜单"],
       ["Ctrl + O", "打开文件夹"],
-      [
-        "Ctrl + B",
-        "加粗（光标在正文时）；其余位置收起 / 展开侧栏，专注模式下退出专注",
-      ],
     ],
   },
   {
     title: "编辑",
     items: [
       ["Ctrl + Z / Ctrl + Shift + Z", "撤销 / 重做"],
+      ["Ctrl + B", "加粗（光标在正文时）"],
       ["Ctrl + I", "斜体"],
       ["Ctrl + K", "插入链接"],
       ["Tab / Shift + Tab", "增加 / 减少缩进"],
@@ -133,6 +130,7 @@ const SHORTCUT_GROUPS: { title: string; items: [string, string][] }[] = [
       ["Ctrl + F", "查找与替换（预览模式下自动切到分栏）"],
       ["Ctrl + = / Ctrl + -", "放大 / 缩小正文字号"],
       ["Ctrl + ,", "偏好设置"],
+      ["Ctrl + B（光标不在正文）", "收起 / 展开侧栏；专注模式下退出专注"],
       ["Esc", "关闭对话框、查看大图"],
       ["Ctrl + 点击链接", "在应用内打开笔记"],
     ],
