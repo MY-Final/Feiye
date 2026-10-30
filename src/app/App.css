@@ -1122,6 +1122,29 @@ body.is-resizing-split * {
   line-height: 1.6;
 }
 
+/* 空工作区不只是陈述状态，直接给出下一步动作。 */
+.tree-hint-empty {
+  padding-top: 14px;
+  text-align: center;
+}
+
+.tree-hint-empty p {
+  margin: 0 0 8px;
+}
+
+.tree-hint-action {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tree-hint-action:hover {
+  text-decoration: underline;
+}
+
 /* ---------- 状态栏 ---------- */
 
 .statusbar {

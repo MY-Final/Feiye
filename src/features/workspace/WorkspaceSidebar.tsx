@@ -566,8 +566,15 @@ export function WorkspaceSidebar() {
           ) : null}
 
           {children && children.length === 0 ? (
-            <div className="tree-hint">
-              这个文件夹里还没有 Markdown 文件
+            <div className="tree-hint tree-hint-empty">
+              <p>这个文件夹里还没有 Markdown 文件</p>
+              <button
+                type="button"
+                className="tree-hint-action"
+                onClick={() => void createMarkdownFile("")}
+              >
+                新建第一篇
+              </button>
             </div>
           ) : null}
         </div>
