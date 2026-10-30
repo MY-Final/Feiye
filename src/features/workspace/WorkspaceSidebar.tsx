@@ -317,6 +317,18 @@ export function WorkspaceSidebar() {
     void setSetting(SIDEBAR_WIDTH_KEY, widthRef.current);
   };
 
+  // 方向键按 8px 调宽，按住 Shift 一次 32px；Home 回到默认宽度。
+  const keyResize = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const step = event.shiftKey ? 32 : 8;
+    let next: number | null = null;
+    if (event.key === "ArrowLeft") next = widthRef.current - step;
+    else if (event.key === "ArrowRight") next = widthRef.current + step;
+    else if (event.key === "Home") next = SIDEBAR_WIDTH.default;
+    if (next === null) return;
+    event.preventDefault();
+    commitWidth(next);
+  };
+
   const openMenu = (event: MouseEvent, entry: Entry | null) => {
     event.preventDefault();
     setMenu({ x: event.clientX, y: event.clientY, entry });
@@ -411,7 +423,13 @@ export function WorkspaceSidebar() {
         role="separator"
         aria-orientation="vertical"
         aria-label="调整侧栏宽度"
-        title="拖动调整侧栏宽度，双击恢复默认"
+        aria-valuemin={SIDEBAR_WIDTH.min}
+        aria-valuemax={SIDEBAR_WIDTH.max}
+        aria-valuenow={width}
+        // 分隔条可以 Tab 聚焦、用方向键调宽，和分栏分隔条一致。
+        tabIndex={0}
+        title="拖动或左右方向键调整侧栏宽度，双击 / Home 恢复默认"
+        onKeyDown={keyResize}
         onPointerDown={startResize}
         onPointerMove={moveResize}
         onPointerUp={endResize}

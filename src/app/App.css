@@ -780,8 +780,14 @@ body.is-resizing-split * {
 }
 
 .sidebar-resizer:hover::after,
-.sidebar-resizer:active::after {
+.sidebar-resizer:active::after,
+.sidebar-resizer:focus-visible::after {
   background: var(--accent);
+}
+
+/* 分隔条只有 6px 宽，默认的 2px 描边挤在一起很难看，用高亮的细线代替。 */
+.sidebar-resizer:focus-visible {
+  outline: none;
 }
 
 .sidebar-header {
