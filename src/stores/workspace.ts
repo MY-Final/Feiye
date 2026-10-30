@@ -187,6 +187,12 @@ interface WorkspaceStore {
   collapseAll(): void;
 }
 
+/**
+ * 工作区代号：换库（含重建树）时递增。目录读取是异步的，
+ * 先发起的结果可能在切库后才回来，不能写进新库的树里。
+ */
+let workspaceSeq = 0;
+
 const EMPTY_MAPS = {
   children: {} as Record<string, Entry[]>,
   expanded: {} as Record<string, boolean>,
@@ -203,6 +209,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   ...EMPTY_MAPS,
 
   setWorkspace(info) {
+    workspaceSeq += 1;
     set({
       root: info?.root ?? null,
       name: info?.name ?? null,
@@ -309,16 +316,20 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
   async loadDir(relPath, silent = false) {
     if (get().loading[relPath]) return;
+    const seq = workspaceSeq;
     set((state) => ({ loading: { ...state.loading, [relPath]: true } }));
 
     try {
       const entries = await listDir(relPath);
+      // 读取期间切了库：这份目录属于旧库，丢掉而不是写进新库的树。
+      if (seq !== workspaceSeq) return;
       set((state) => ({
         children: { ...state.children, [relPath]: entries },
         loading: { ...state.loading, [relPath]: false },
         failed: { ...state.failed, [relPath]: false },
       }));
     } catch (error) {
+      if (seq !== workspaceSeq) return;
       set((state) => ({
         loading: { ...state.loading, [relPath]: false },
         failed: { ...state.failed, [relPath]: true },

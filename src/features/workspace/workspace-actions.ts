@@ -65,7 +65,12 @@ import {
   scrollPreviewToHeading,
 } from "../preview/preview-scroll";
 import { recallLastDocument, rememberLastDocument } from "./last-document";
-import { pauseTabsSave, recallOpenTabs, resumeTabsSave } from "./tabs-memory";
+import {
+  pauseTabsSave,
+  recallOpenTabs,
+  releaseTabsSave,
+  resumeTabsSave,
+} from "./tabs-memory";
 
 const MARKDOWN_NAME = /\.(md|markdown|mdx)$/i;
 const HAS_EXTENSION = /\.[^./\\]+$/;
@@ -150,6 +155,9 @@ function toastError(prefix: string, error: unknown): void {
 const RECENT_WORKSPACES_KEY = "recentWorkspaces";
 const RECENT_WORKSPACES_LIMIT = 5;
 
+/** 工作区打开序号：连续切库时只让最后一次的后续步骤落地（见 openWorkspaceAt）。 */
+let workspaceOpenSeq = 0;
+
 /** 切换过的笔记库只记路径；切回时重新扫盘，不留任何内容副本。 */
 export async function rememberWorkspace(path: string): Promise<void> {
   const raw = await getSetting<unknown>(RECENT_WORKSPACES_KEY);
@@ -199,12 +207,20 @@ export async function openWorkspaceAt(
   path: string,
   fromRecent = false,
 ): Promise<void> {
+  // 连续切库时只有最后一次的后续步骤生效：先发起的库即使读盘更慢，
+  // 也不能把它的标签、上次文档或最近记录带进后来选中的库。
+  const requestId = ++workspaceOpenSeq;
+  let pausedHere = false;
   if (!(await guardUnsaved())) return;
+  if (requestId !== workspaceOpenSeq) return;
 
   try {
     const info = await apiOpenWorkspace(path);
+    if (requestId !== workspaceOpenSeq) return;
     const savedTabs = await recallOpenTabs(info.root);
+    if (requestId !== workspaceOpenSeq) return;
     pauseTabsSave();
+    pausedHere = true;
     useWorkspaceStore.getState().setWorkspace(info);
     // 换库是重新开始浏览，专注模式不该延续到新库上；退出时照常提示。
     if (useUiStore.getState().zenMode) {
@@ -214,12 +230,14 @@ export async function openWorkspaceAt(
     useTabsStore.getState().clear();
     clearEditorStateCache();
     await useWorkspaceStore.getState().loadDir("");
+    if (requestId !== workspaceOpenSeq) return;
     await setSetting("lastWorkspace", info.root);
     await rememberWorkspace(info.root);
 
     // 每个工作区各自记着上次打开的文档：切换过来时直接打开它，
     // 和启动时一样；文件已不在时静默跳过。
     const lastDocument = await recallLastDocument(info.root);
+    if (requestId !== workspaceOpenSeq) return;
     const active = lastDocument ?? savedTabs[0] ?? null;
     restoreSavedTabs(savedTabs, active);
     if (active) {
@@ -235,6 +253,8 @@ export async function openWorkspaceAt(
 
     void promptPendingRecoveries();
   } catch (error) {
+    // 切库期间又选了别的库：这次失败与当前库无关，不提示也不动画面上的人。
+    if (requestId !== workspaceOpenSeq) return;
     // 从「最近工作区」点进来的库已经不存在：摘掉过期路径再提示，
     // 否则这个点不开的条目会在菜单里一直留着。取消未保存提示不走这里。
     const gone = fromRecent && isAppError(error) && error.code === "not-found";
@@ -246,7 +266,11 @@ export async function openWorkspaceAt(
       "error",
     );
   } finally {
-    resumeTabsSave();
+    // 被后来的切库取代时只放开自己的暂停，不写盘，避免把旧库的中间态记下。
+    if (pausedHere) {
+      if (requestId === workspaceOpenSeq) resumeTabsSave();
+      else releaseTabsSave();
+    }
   }
 }
 
@@ -261,19 +285,27 @@ async function expandAncestors(relPath: string): Promise<void> {
 }
 
 export async function restoreLastWorkspace(): Promise<void> {
+  // 启动恢复期间用户已经手动切库：这份恢复作废，别把旧库又装回来。
+  const requestId = ++workspaceOpenSeq;
+  let pausedHere = false;
   const last = await getSetting<string>("lastWorkspace");
-  if (!last) return;
+  if (!last || requestId !== workspaceOpenSeq) return;
 
   try {
     const info = await apiOpenWorkspace(last);
+    if (requestId !== workspaceOpenSeq) return;
     const savedTabs = await recallOpenTabs(info.root);
+    if (requestId !== workspaceOpenSeq) return;
     pauseTabsSave();
+    pausedHere = true;
     useWorkspaceStore.getState().setWorkspace(info);
     await useWorkspaceStore.getState().loadDir("");
+    if (requestId !== workspaceOpenSeq) return;
     await rememberWorkspace(info.root);
 
     // 恢复这个工作区上次打开的文档；文件已不存在时静默清除记录，不打扰启动。
     const lastDocument = await recallLastDocument(last);
+    if (requestId !== workspaceOpenSeq) return;
     const active = lastDocument ?? savedTabs[0] ?? null;
     restoreSavedTabs(savedTabs, active);
     if (active) {
@@ -289,9 +321,13 @@ export async function restoreLastWorkspace(): Promise<void> {
 
     await promptPendingRecoveries();
   } catch {
-    await setSetting("lastWorkspace", null);
+    if (requestId === workspaceOpenSeq) await setSetting("lastWorkspace", null);
   } finally {
-    resumeTabsSave();
+    // 被后来的切库取代时只放开自己的暂停，不写盘，避免把旧库的中间态记下。
+    if (pausedHere) {
+      if (requestId === workspaceOpenSeq) resumeTabsSave();
+      else releaseTabsSave();
+    }
   }
 }
 
