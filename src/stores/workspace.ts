@@ -211,10 +211,14 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
   /** 重新读取根目录与所有已展开的目录。 */
   async refreshTree() {
-    const { expanded, children } = get();
-    const dirs = [""];
+    const { expanded, children, loading } = get();
+    const dirs: string[] = loading[""] ? [] : [""];
     for (const [relPath, open] of Object.entries(expanded)) {
-      if (open && children[relPath]) dirs.push(relPath);
+      // 正在加载的目录跳过：refreshDir 会先清空子项，
+      // 与进行中的 loadDir 撞车会留下空目录。
+      if (open && children[relPath] && !loading[relPath]) {
+        dirs.push(relPath);
+      }
     }
     await Promise.all(dirs.map((relPath) => get().refreshDir(relPath)));
   },

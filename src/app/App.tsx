@@ -43,6 +43,10 @@ import "./App.css";
 
 let bootstrapped = false;
 
+/** 回到窗口时刷新文件树的最小间隔，避免反复 Alt-Tab 时频繁读盘。 */
+const TREE_REFRESH_INTERVAL = 2000;
+let lastTreeRefresh = 0;
+
 function dialogOpen(): boolean {
   const ui = useUiStore.getState();
   return Boolean(ui.confirm || ui.prompt || ui.settingsOpen);
@@ -225,8 +229,15 @@ export default function App() {
     };
 
     const onVisible = () => {
-      if (document.visibilityState === "visible") {
-        void checkExternalChange();
+      if (document.visibilityState !== "visible") return;
+      void checkExternalChange();
+
+      // 从外部回到窗口时顺带刷新文件树，外面新建 / 改名的笔记能直接出现。
+      const now = Date.now();
+      const workspace = useWorkspaceStore.getState();
+      if (workspace.root && now - lastTreeRefresh >= TREE_REFRESH_INTERVAL) {
+        lastTreeRefresh = now;
+        void workspace.refreshTree();
       }
     };
     window.addEventListener("focus", onVisible);
