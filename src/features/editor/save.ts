@@ -266,6 +266,10 @@ export async function guardUnsaved(): Promise<boolean> {
   }
 
   const path = useDocumentStore.getState().path;
+  // 用户已明确放弃这份修改：马上清掉脏标记与「保存暂停」，否则紧接着
+  // 打开相邻标签 / 切换工作区 / 关窗口时还会再问一次；脏标记不清，
+  // 恢复副本定时器也可能在离开前把已放弃的内容又写回一份。
+  useDocumentStore.getState().markDirty(false);
   if (path) {
     await discardRecoveryForPath(path);
   }
