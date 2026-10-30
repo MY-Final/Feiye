@@ -53,6 +53,32 @@ interface UiStore {
 
 let toastId = 0;
 
+/** 每条提示的自动消失计时器，悬停暂停和手动关闭都要能取消它。 */
+const toastTimers = new Map<number, number>();
+
+function armToastTimer(id: number, kind: ToastKind): void {
+  window.clearTimeout(toastTimers.get(id));
+  toastTimers.set(
+    id,
+    window.setTimeout(
+      () => {
+        useUiStore.getState().dismissToast(id);
+      },
+      kind === "error" ? 6000 : 3000,
+    ),
+  );
+}
+
+/** 鼠标停在提示上时暂停倒计时，看清楚再让它走。 */
+export function pauseToast(id: number): void {
+  window.clearTimeout(toastTimers.get(id));
+  toastTimers.delete(id);
+}
+
+export function resumeToast(id: number, kind: ToastKind): void {
+  armToastTimer(id, kind);
+}
+
 export const useUiStore = create<UiStore>((set, get) => ({
   sidebarVisible: true,
   settingsOpen: false,
@@ -82,11 +108,24 @@ export const useUiStore = create<UiStore>((set, get) => ({
 
   toast(message, kind = "info") {
     const id = ++toastId;
-    set((state) => ({ toasts: [...state.toasts, { id, message, kind }] }));
-    window.setTimeout(() => get().dismissToast(id), kind === "error" ? 6000 : 3000);
+    set((state) => {
+      const next = [...state.toasts, { id, message, kind }];
+      // 最多同时留 3 条：连着操作几次也不会堆成一列糊住状态栏，
+      // 被挤掉的旧提示计时器一并清掉。
+      while (next.length > 3) {
+        const dropped = next.shift();
+        if (!dropped) break;
+        window.clearTimeout(toastTimers.get(dropped.id));
+        toastTimers.delete(dropped.id);
+      }
+      return { toasts: next };
+    });
+    armToastTimer(id, kind);
   },
 
   dismissToast(id) {
+    window.clearTimeout(toastTimers.get(id));
+    toastTimers.delete(id);
     set((state) => ({ toasts: state.toasts.filter((item) => item.id !== id) }));
   },
 
