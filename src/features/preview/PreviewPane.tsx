@@ -513,9 +513,10 @@ export function PreviewPane() {
             {lightboxStatus ? (
               <span className="image-lightbox-count">{lightboxStatus}</span>
             ) : null}
-            {zoom === 1 ? (
-              <span className="image-lightbox-hint">滚轮缩放 · Esc 关闭</span>
-            ) : null}
+            {/* 放大以后操作提示也留着：不然只看到百分比，不知道怎么缩回去。 */}
+            <span className="image-lightbox-hint">
+              {zoom === 1 ? "滚轮缩放 · Esc 关闭" : "滚轮可调回 100% · Esc 关闭"}
+            </span>
           </div>
         </div>
       ) : null}
