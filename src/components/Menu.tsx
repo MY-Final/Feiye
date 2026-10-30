@@ -8,6 +8,9 @@ export interface MenuAction {
   label: string;
   danger?: boolean;
   onSelect(): void;
+  /** 行尾的次要动作（例如从最近列表移除）；不传则与普通菜单项一致。 */
+  onRemove?(): void;
+  removeTitle?: string;
 }
 
 interface ContextMenuProps {
@@ -83,18 +86,30 @@ export function ContextMenu({ x, y, actions, onClose }: ContextMenuProps) {
       onKeyDown={onKeyDown}
     >
       {actions.map((action) => (
-        <button
-          key={action.label}
-          type="button"
-          role="menuitem"
-          className={`context-menu-item ${action.danger ? "danger" : ""}`}
-          onClick={() => {
-            onClose();
-            action.onSelect();
-          }}
-        >
-          {action.label}
-        </button>
+        <div className="context-menu-row" key={action.label}>
+          <button
+            type="button"
+            role="menuitem"
+            className={`context-menu-item ${action.danger ? "danger" : ""}`}
+            onClick={() => {
+              onClose();
+              action.onSelect();
+            }}
+          >
+            {action.label}
+          </button>
+          {action.onRemove ? (
+            <button
+              type="button"
+              className="context-menu-remove"
+              title={action.removeTitle ?? "移除"}
+              aria-label={action.removeTitle ?? "移除"}
+              onClick={() => action.onRemove?.()}
+            >
+              ×
+            </button>
+          ) : null}
+        </div>
       ))}
     </div>
   );

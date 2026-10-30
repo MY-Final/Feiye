@@ -3,6 +3,7 @@ import { useState, type MouseEvent } from "react";
 import { ContextMenu } from "../components/Menu";
 import {
   chooseWorkspace,
+  forgetWorkspace,
   listRecentWorkspaces,
   openWorkspaceAt,
 } from "../features/workspace/workspace-actions";
@@ -104,6 +105,20 @@ export function TitleBar() {
       return;
     }
     setRecentMenu({ x: rect.left, y: rect.bottom + 4, paths });
+  };
+
+  // 只想清掉菜单里的一条记录，不必先切过去；只改设置里的路径列表。
+  const removeRecent = async (path: string) => {
+    await forgetWorkspace(path);
+    const remaining = recentMenu?.paths.filter((item) => item !== path) ?? [];
+    setRecentMenu(
+      remaining.length > 0 && recentMenu
+        ? { ...recentMenu, paths: remaining }
+        : null,
+    );
+    useUiStore
+      .getState()
+      .toast(`已从最近工作区移除：${folderName(path)}`);
   };
 
   return (
@@ -240,6 +255,8 @@ export function TitleBar() {
           actions={recentMenu.paths.map((path) => ({
             label: `切换到 ${folderName(path)}`,
             onSelect: () => void openWorkspaceAt(path, true),
+            onRemove: () => void removeRecent(path),
+            removeTitle: "从最近工作区移除",
           }))}
         />
       ) : null}

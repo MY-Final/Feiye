@@ -1402,6 +1402,38 @@ body.is-resizing-split * {
   color: var(--danger);
 }
 
+.context-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.context-menu-row .context-menu-item {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}
+
+.context-menu-remove {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.context-menu-remove:hover {
+  background: var(--bg-sunken);
+  color: var(--danger);
+}
+
 /* ---------- Toast ---------- */
 
 .toast-host {
