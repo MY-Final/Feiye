@@ -52,6 +52,23 @@ function markdownNameError(value: string): string | null {
   return MARKDOWN_NAME.test(value) ? null : "只支持 .md / .markdown / .mdx";
 }
 
+/** 在已加载的同级条目里找一个不重名的默认名称，避免连续新建时撞名。 */
+function nextAvailableName(
+  parent: string,
+  base: string,
+  extension: string,
+): string {
+  const siblings = useWorkspaceStore.getState().children[parent] ?? [];
+  const taken = new Set(siblings.map((entry) => entry.name.toLowerCase()));
+  let candidate = `${base}${extension}`;
+  let index = 2;
+  while (taken.has(candidate.toLowerCase())) {
+    candidate = `${base} ${index}${extension}`;
+    index += 1;
+  }
+  return candidate;
+}
+
 function resetDocument(): void {
   resetAutoSave();
   captureActiveCursor();
@@ -165,7 +182,7 @@ export async function createMarkdownFile(parent: string): Promise<void> {
   const name = await useUiStore.getState().askInput({
     title: "新建 Markdown 文件",
     label: "文件名",
-    initialValue: "未命名.md",
+    initialValue: nextAvailableName(parent, "未命名", ".md"),
     confirmLabel: "创建",
     validate: (value) => {
       const trimmed = value.trim();
@@ -239,7 +256,7 @@ export async function createFolderIn(parent: string): Promise<void> {
   const name = await useUiStore.getState().askInput({
     title: "新建文件夹",
     label: "文件夹名称",
-    initialValue: "新建文件夹",
+    initialValue: nextAvailableName(parent, "新建文件夹", ""),
     confirmLabel: "创建",
     validate: (value) => {
       const trimmed = value.trim();
