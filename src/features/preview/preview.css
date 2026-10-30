@@ -347,6 +347,18 @@
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
 }
 
+/* 放大后拖动图片看边角；拖拽过程中关掉动画，否则指针会追不上。 */
+.image-lightbox img.is-zoomed {
+  cursor: grab;
+  touch-action: none;
+}
+
+.image-lightbox img.is-dragging {
+  cursor: grabbing;
+  transition: none;
+  user-select: none;
+}
+
 /* 同篇文档有多张图时，左右两边的翻页按钮和底部的张数提示；滚轮可缩放。 */
 .image-lightbox-nav {
   position: absolute;

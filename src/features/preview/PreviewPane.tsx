@@ -44,6 +44,17 @@ export function PreviewPane() {
   } | null>(null);
   // 截图里的字常常很小，浮层里用滚轮放大看细节。
   const [zoom, setZoom] = useState(1);
+  // 放大后图片会超出屏幕，按住拖动才能看到边角。
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
+  const panStart = useRef<{
+    x: number;
+    y: number;
+    panX: number;
+    panY: number;
+  } | null>(null);
+  // 拖完那一次不算点击，别让浮层跟着关掉。
+  const panMoved = useRef(false);
   const paneRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const lightboxRef = useRef<HTMLDivElement>(null);
@@ -72,6 +83,7 @@ export function PreviewPane() {
         )
       : [];
     setZoom(1);
+    setPan({ x: 0, y: 0 });
     const found = images.findIndex((image) => image.src === src);
     // 链接指向的图片可能没在正文里出现，单独补一张即可。
     setLightbox(
@@ -216,7 +228,17 @@ export function PreviewPane() {
   useEffect(() => {
     setLightbox(null);
     setZoom(1);
+    setPan({ x: 0, y: 0 });
   }, [docPath]);
+
+  // 翻到另一张图、或缩回 100% 时回到居中，免得新图从上一张的偏移位置开始。
+  useEffect(() => {
+    setPan({ x: 0, y: 0 });
+  }, [lightbox?.index]);
+
+  useEffect(() => {
+    if (zoom === 1) setPan({ x: 0, y: 0 });
+  }, [zoom]);
 
   // 浮层打开时把焦点收进来，关闭后还回去：读屏和键盘都不会停在背后的正文上。
   useEffect(() => {
@@ -470,12 +492,57 @@ export function PreviewPane() {
           aria-label={lightboxImage.alt || "图片预览"}
           tabIndex={-1}
           onKeyDown={trapTab}
-          onClick={() => setLightbox(null)}
+          onClick={() => {
+            if (panMoved.current) {
+              panMoved.current = false;
+              return;
+            }
+            setLightbox(null);
+          }}
         >
           <img
             src={lightboxImage.src}
             alt={lightboxImage.alt}
-            style={{ transform: `scale(${zoom})` }}
+            draggable={false}
+            className={`${zoom > 1 ? "is-zoomed" : ""}${
+              dragging ? " is-dragging" : ""
+            }`}
+            style={{
+              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+            }}
+            onPointerDown={(event) => {
+              if (zoom <= 1) return;
+              event.preventDefault();
+              event.currentTarget.setPointerCapture(event.pointerId);
+              panStart.current = {
+                x: event.clientX,
+                y: event.clientY,
+                panX: pan.x,
+                panY: pan.y,
+              };
+              panMoved.current = false;
+              setDragging(true);
+            }}
+            onPointerMove={(event) => {
+              const start = panStart.current;
+              if (!start) return;
+              const dx = event.clientX - start.x;
+              const dy = event.clientY - start.y;
+              if (Math.abs(dx) + Math.abs(dy) > 3) panMoved.current = true;
+              setPan({ x: start.panX + dx, y: start.panY + dy });
+            }}
+            onPointerUp={(event) => {
+              if (!panStart.current) return;
+              panStart.current = null;
+              setDragging(false);
+              if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                event.currentTarget.releasePointerCapture(event.pointerId);
+              }
+            }}
+            onPointerCancel={() => {
+              panStart.current = null;
+              setDragging(false);
+            }}
           />
           {lightbox.images.length > 1 ? (
             <>
@@ -515,7 +582,9 @@ export function PreviewPane() {
             ) : null}
             {/* 放大以后操作提示也留着：不然只看到百分比，不知道怎么缩回去。 */}
             <span className="image-lightbox-hint">
-              {zoom === 1 ? "滚轮缩放 · Esc 关闭" : "滚轮可调回 100% · Esc 关闭"}
+              {zoom === 1
+                ? "滚轮缩放 · Esc 关闭"
+                : "拖动平移 · 滚轮可调回 100% · Esc 关闭"}
             </span>
           </div>
         </div>
