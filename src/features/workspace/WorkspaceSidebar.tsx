@@ -220,6 +220,19 @@ function TreeNode({ entry, depth, onMenu }: TreeNodeProps) {
           }
         }}
         onContextMenu={(event) => onMenu(event, entry)}
+        // 和文件管理器一致：F2 / Delete 针对的是获得焦点这一行，
+        // 而不是编辑器里打开的那篇；删除仍走确认框。
+        onKeyDown={(event) => {
+          if (event.key === "F2") {
+            event.preventDefault();
+            event.stopPropagation();
+            void renameEntry(entry);
+          } else if (event.key === "Delete") {
+            event.preventDefault();
+            event.stopPropagation();
+            void deleteEntry(entry);
+          }
+        }}
       >
         <span className="tree-caret">
           {entry.isDir ? <ChevronIcon open={expanded} /> : null}
