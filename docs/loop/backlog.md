@@ -19,6 +19,25 @@
 
 <!-- 从这里开始追加 -->
 
+## 第 144 轮 · 2026-10-30 15:22
+**用户需求**：工具栏的「复制 HTML」很好用，但我一直是键盘写作，手不离键盘；翻设置里的快捷键表也找不到它，好像这个功能只能用鼠标点。
+
+**产品经理**：做。给已有动作补快捷键并写进快捷键表，不新增界面或数据结构，符合「快、安静」；选 Ctrl+Shift+E：E 对应导出 / 复制，且现有应用快捷键、CodeMirror 格式键位与浏览器默认都未占用（Ctrl+Shift+C 在 WebView2 / Edge 里是「检查元素」，主动避开）。
+
+**前端**：影响 `src/app/Toolbar.tsx`（导出 `copyActiveAsHtml`，按钮提示补上键位）、`src/app/App.tsx`（`case "e"` 里 Shift 分支调用复制 HTML，无笔记时提示）、`src/features/settings/SettingsDialog.tsx`（「文件」分组加一行）。风险：与 Ctrl+E 共用一个 case，Shift 分支先于视图切换判断；输入框中沿用现有全局快捷键过滤。工作量 S（约 15 行）。
+
+**后端**：无改动。工作量 0。
+
+**裁决**：做
+
+**改动**：`src/app/Toolbar.tsx`、`src/app/App.tsx`、`src/features/settings/SettingsDialog.tsx`
+
+**构建**：通过（bun run build，559ms，含 tsc）。
+
+**验证**：CDP（9222）整页刷新后，打开笔记按 Ctrl+Shift+E，出现提示「HTML 已复制，可直接粘贴到邮件或公众号草稿」；Ctrl+, 打开设置，「文件」分组可见 `Ctrl + Shift + E`。人工复现：打开任意笔记按 Ctrl+Shift+E，粘贴到邮件应保留排版；未打开笔记时按该键应提示「先打开一篇笔记再复制 HTML」。
+
+---
+
 ## 第 143 轮 · 2026-10-30 15:20
 **用户需求**：笔记写完想发到邮件或公众号草稿，现在只能复制 Markdown 源码，或在预览里手动选中文字，代码块、表格和公式的排版一过剪贴板就没了；希望工具栏能一键把当前笔记按预览排版复制成 HTML，直接粘贴就能用。
 

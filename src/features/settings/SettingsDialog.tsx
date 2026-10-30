@@ -86,6 +86,7 @@ const SHORTCUT_GROUPS: { title: string; items: [string, string][] }[] = [
       ["Ctrl + N", "新建 Markdown"],
       ["Ctrl + S", "保存"],
       ["Ctrl + Shift + S", "另存为"],
+      ["Ctrl + Shift + E", "复制 HTML（按预览排版，可直接粘贴到邮件 / 公众号）"],
       ["F2", "重命名当前笔记；文件树里作用于选中的那一行"],
       ["Delete", "删除文件树里选中的项（进回收站，需确认）"],
       ["Shift + F10", "在文件树里打开右键菜单"],

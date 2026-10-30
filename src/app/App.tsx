@@ -52,7 +52,7 @@ import {
 } from "./SplitHandle";
 import { StatusBar } from "./StatusBar";
 import { TitleBar } from "./TitleBar";
-import { Toolbar } from "./Toolbar";
+import { Toolbar, copyActiveAsHtml } from "./Toolbar";
 import "./App.css";
 
 let bootstrapped = false;
@@ -288,6 +288,17 @@ export default function App() {
           void chooseWorkspace();
           break;
         case "e": {
+          // Ctrl+Shift+E 与工具栏「复制 HTML」同一动作：导出 HTML 的第一步。
+          // 用 E 而不是 Ctrl+Shift+C，后者在 WebView2 / Edge 里是「检查元素」。
+          if (event.shiftKey) {
+            event.preventDefault();
+            if (!useDocumentStore.getState().path) {
+              useUiStore.getState().toast("先打开一篇笔记再复制 HTML");
+              break;
+            }
+            void copyActiveAsHtml();
+            break;
+          }
           // 阅读 / 编辑快速切换；分栏状态会被记住，切回来还原。
           if (!useDocumentStore.getState().path) {
             useUiStore.getState().toast("先打开一篇笔记再切换视图");

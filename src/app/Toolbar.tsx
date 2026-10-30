@@ -31,7 +31,7 @@ import { useWorkspaceStore } from "../stores/workspace";
 import { copyHtml } from "../lib/clipboard";
 import { VIEW_MODES } from "../lib/view-modes";
 
-async function copyActiveAsHtml(): Promise<void> {
+export async function copyActiveAsHtml(): Promise<void> {
   const text = getEditorText();
   if (text === null) return;
 
@@ -223,7 +223,7 @@ export function Toolbar() {
         <button
           type="button"
           className="toolbar-text-btn"
-          title="按预览排版复制 HTML，可直接粘贴到邮件或公众号草稿"
+          title="按预览排版复制 HTML (Ctrl+Shift+E)，可直接粘贴到邮件或公众号草稿"
           disabled={!hasDoc}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => void copyActiveAsHtml()}
