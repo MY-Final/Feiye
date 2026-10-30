@@ -236,3 +236,31 @@ export function searchWorkspace(
 ): Promise<SearchHit[]> {
   return invoke<SearchHit[]>("search_workspace", { query, limit });
 }
+
+export interface HistoryEntry {
+  id: string;
+  savedAt: number;
+  size: number;
+}
+
+export interface HistoryRevision {
+  id: string;
+  savedAt: number;
+  content: string;
+}
+
+/** 保存成功后留一份历史快照；内容与上一版相同则后端自动跳过。 */
+export function saveHistory(relPath: string, content: string): Promise<boolean> {
+  return invoke<boolean>("save_history", { relPath, content });
+}
+
+export function listHistory(relPath: string): Promise<HistoryEntry[]> {
+  return invoke<HistoryEntry[]>("list_history", { relPath });
+}
+
+export function readHistory(
+  relPath: string,
+  id: string,
+): Promise<HistoryRevision> {
+  return invoke<HistoryRevision>("read_history", { relPath, id });
+}

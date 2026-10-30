@@ -50,6 +50,8 @@ interface UiStore {
   paletteOpen: boolean;
   /** 侧栏「搜索」标签的打开请求；每 +1 就切过去并聚焦输入框。 */
   searchRequest: number;
+  /** 文档历史（保存快照）面板。 */
+  historyOpen: boolean;
   toasts: ToastItem[];
   confirm: ConfirmRequest | null;
   prompt: PromptRequest | null;
@@ -62,6 +64,8 @@ interface UiStore {
   openPalette(): void;
   closePalette(): void;
   openSearchPanel(): void;
+  openHistory(): void;
+  closeHistory(): void;
   toast(
     message: string,
     kind?: ToastKind,
@@ -109,6 +113,7 @@ export const useUiStore = create<UiStore>((set, get) => ({
   settingsOpen: false,
   paletteOpen: false,
   searchRequest: 0,
+  historyOpen: false,
   toasts: [],
   confirm: null,
   prompt: null,
@@ -161,6 +166,14 @@ export const useUiStore = create<UiStore>((set, get) => ({
       searchRequest: state.searchRequest + 1,
     }));
     void setSetting("sidebarVisible", true);
+  },
+
+  openHistory() {
+    set({ historyOpen: true });
+  },
+
+  closeHistory() {
+    set({ historyOpen: false });
   },
 
   toast(message, kind = "info", action, actionTitle) {

@@ -1,6 +1,7 @@
 mod commands;
 mod error;
 mod fs_path;
+mod history;
 mod images;
 mod recovery;
 mod watcher;
@@ -43,6 +44,9 @@ pub fn run() {
             commands::recovery::list_recoveries,
             commands::recovery::delete_recovery,
             commands::recovery::clear_recovery,
+            commands::history::save_history,
+            commands::history::list_history,
+            commands::history::read_history,
             commands::image_asset::save_image_asset,
             commands::image_asset::read_image_data_url,
         ])

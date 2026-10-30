@@ -18,6 +18,7 @@ import {
 } from "../features/editor/save";
 import { PreviewPane } from "../features/preview/PreviewPane";
 import { CommandPalette } from "../features/commands/CommandPalette";
+import { HistoryDialog } from "../features/history/HistoryDialog";
 import { SettingsDialog } from "../features/settings/SettingsDialog";
 import { WorkspaceSidebar } from "../features/workspace/WorkspaceSidebar";
 import {
@@ -73,7 +74,13 @@ function noteLabel(name: string, hideExt: boolean): string {
 
 function dialogOpen(): boolean {
   const ui = useUiStore.getState();
-  return Boolean(ui.confirm || ui.prompt || ui.settingsOpen || ui.paletteOpen);
+  return Boolean(
+    ui.confirm ||
+      ui.prompt ||
+      ui.settingsOpen ||
+      ui.paletteOpen ||
+      ui.historyOpen,
+  );
 }
 
 export default function App() {
@@ -205,6 +212,19 @@ export default function App() {
         event.preventDefault();
         if (ui.paletteOpen) ui.closePalette();
         else ui.openPalette();
+        return;
+      }
+
+      // 文档历史：Ctrl+Alt+H，随手回看并恢复某个保存过的版本。
+      if (mod && event.altKey && event.key.toLowerCase() === "h") {
+        if (ui.confirm || ui.prompt) return;
+        if (!useDocumentStore.getState().path) {
+          useUiStore.getState().toast("先打开一篇笔记再查看历史");
+          return;
+        }
+        event.preventDefault();
+        if (ui.historyOpen) ui.closeHistory();
+        else ui.openHistory();
         return;
       }
 
@@ -690,6 +710,7 @@ export default function App() {
       <StatusBar />
 
       <SettingsDialog />
+      <HistoryDialog />
       <CommandPalette />
       <DialogHost />
       <ToastHost />

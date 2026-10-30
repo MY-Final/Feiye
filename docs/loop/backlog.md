@@ -19,6 +19,27 @@
 
 <!-- 从这里开始追加 -->
 
+## 第 183 轮 · 2026-10-30 18:58
+**用户需求**：改稿时把一段话越改越远，想找回半小时前的版本 → 撤销历史只管当前会话，切换文档或重启后就没了；希望每次保存都有留档，能看、能恢复，而且不要把历史混进工作区。
+
+**产品经理**：做。README「后续」里的「文档历史与本地快照」。保存快照是本地优先编辑器的兜底能力，直接服务「数据安全」；快照存应用数据目录、不写工作区、不自动覆盖源文件，「恢复」只载入编辑器并标记未保存，符合「安静、可反悔」。
+
+**前端**：新增 `features/history/HistoryDialog.tsx` + `history.css`：左侧版本列表（时间、大小、最新标记）、右侧纯文本预览，恢复前二次确认；恢复时纯预览先切分栏，`setEditorDocument` 载入旧内容后 `markDirty(true)`，提示「按 Ctrl+S 保存后写入磁盘」。`ui` store 增加 `historyOpen` / `openHistory()` / `closeHistory()`；App 绑定 `Ctrl+Alt+H`、计入 `dialogOpen()`、渲染对话框；命令面板新增「版本历史…」；`save.ts` 在两处成功写盘后异步调用 `saveHistory`（失败不影响保存）。风险：恢复不直接写盘，避免绕过未保存守卫与 mtime 校验。工作量 M。
+
+**后端**：新增 `src-tauri/src/history.rs`：按「工作区 + 文档路径」哈希分目录，快照为 `<毫秒时间戳>[-序号].md`；内容与最新快照相同则跳过；每篇只留最近 20 份，超出自动清理；`read_history` 校验编号只允许数字与 `-`，防止路径穿越。`commands/history.rs` 暴露 `save_history / list_history / read_history`，注册到 `lib.rs` 与 `lib/tauri.ts`。含 4 个单元测试。工作量 M。
+
+**裁决**：做
+
+**改动**：`src-tauri/src/history.rs`、`commands/history.rs`、`commands/mod.rs`、`src-tauri/src/lib.rs`、`src/lib/tauri.ts`、`src/features/editor/save.ts`、`src/features/history/HistoryDialog.tsx`、`history.css`、`src/stores/ui.ts`、`src/app/App.tsx`、`src/features/commands/CommandPalette.tsx`；README / roadmap 勾选。
+
+**构建**：通过（`bun run build` 878ms，含 tsc）；`cargo test` 40 passed（新增 4 个）。
+
+**验证**：CDP（9222）：新建 `历史测试-183.md`，编辑并保存两版 → `Ctrl+Alt+H` 打开面板显示 2 条（最新 54 B / 旧版 42 B），默认预览最新；点旧版预览为「版本二的内容」，点「恢复此版本」弹确认，载入后编辑器回到旧内容、状态栏「待保存」、提示按 Ctrl+S 写盘；保存后磁盘内容确为旧版。相同内容重复保存由单测验证不新增快照；20 份上限、路径穿越拒绝由单测覆盖。测试后已删除测试笔记并切到 `写作示例.md`。
+
+**遗留 / 下一轮建议**：历史目录留给用户缓存的条目没有清理入口（可在后续设置里加「清空历史」）；恢复不提供 diff 对比。下一轮可做「多标签与分屏编辑」或「图片缩放、对齐与图注」。
+
+---
+
 ## 第 182 轮 · 2026-10-30 18:56
 **用户需求**：笔记散在多个文件夹里，记得写过「某句话」，但忘记在哪一篇 → 只能逐个打开文件树翻找；编辑器里的 Ctrl+F 又只搜当前文档。希望跨整个工作区搜关键词，点结果直接到命中行。
 

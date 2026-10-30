@@ -117,6 +117,14 @@ export function CommandPalette() {
         run: () => exportActiveAsHtml(),
       },
       {
+        id: "history",
+        title: "版本历史…",
+        hint: "回看每次保存留下的快照并恢复",
+        shortcut: "Ctrl+Alt+H",
+        keywords: "history version 历史 快照 版本",
+        run: () => useUiStore.getState().openHistory(),
+      },
+      {
         id: "search-workspace",
         title: "在工作区中搜索",
         hint: "跨全部笔记，结果直接跳到命中行",
@@ -227,6 +235,7 @@ export function CommandPalette() {
       if (command.id === "forward") return forwardLength > 0;
       if (command.id === "refresh-tree") return Boolean(root);
       if (command.id === "search-workspace") return Boolean(root);
+      if (command.id === "history") return hasDoc;
       return true;
     });
   }, [docPath, root, historyLength, forwardLength]);

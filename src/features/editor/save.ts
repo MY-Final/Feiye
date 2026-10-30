@@ -2,6 +2,7 @@ import {
   describeError,
   isAppError,
   readFile,
+  saveHistory,
   writeFile,
 } from "../../lib/tauri";
 import { useDocumentStore } from "../../stores/document";
@@ -61,6 +62,8 @@ async function performSave(options: SaveOptions): Promise<boolean> {
     if (!stillDirty) {
       await clearRecoverySnapshot(path);
     }
+    // 历史快照只是顺手留档：写失败不影响保存结果。
+    void saveHistory(path, text).catch(() => {});
     return sameDocument && !stillDirty;
   } catch (error) {
     const current = useDocumentStore.getState();
@@ -135,6 +138,7 @@ async function overwriteActiveDocument(path: string): Promise<boolean> {
     const stillDirty = latest !== null && latest !== text;
     current.markSaved(meta.modifiedMs, stillDirty);
     if (!stillDirty) await clearRecoverySnapshot(path);
+    void saveHistory(path, text).catch(() => {});
 
     useUiStore
       .getState()
