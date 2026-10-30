@@ -1,4 +1,5 @@
 import { redo, undo } from "@codemirror/commands";
+import { invoke } from "@tauri-apps/api/core";
 import { useRef, type ReactNode } from "react";
 
 import { SlidingSegmented } from "../components/SlidingSegmented";
@@ -33,8 +34,45 @@ import { useEditorStore } from "../stores/editor";
 import { useUiStore } from "../stores/ui";
 import { useWorkspaceStore } from "../stores/workspace";
 import { copyHtml } from "../lib/clipboard";
-import { countLocalImages } from "../lib/images";
+import { countLocalImages, normalizeImagePath } from "../lib/images";
+import { parentRel } from "../lib/paths";
 import { VIEW_MODES } from "../lib/view-modes";
+
+/** 把预览 HTML 中的工作区图片换成 data URL，超过上限或读取失败时保留原地址。 */
+async function inlineLocalImages(
+  html: string,
+): Promise<{ html: string; inlined: number }> {
+  const root = useWorkspaceStore.getState().root;
+  const docPath = useDocumentStore.getState().path;
+  if (!root || !docPath) return { html, inlined: 0 };
+
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  const dirRel = parentRel(docPath);
+  let inlined = 0;
+
+  for (const img of template.content.querySelectorAll("img[src]")) {
+    const src = img.getAttribute("src")?.trim() ?? "";
+    if (!src || /^(?:https?:|data:|blob:|\/\/)/i.test(src)) continue;
+    const rel = src.startsWith("/")
+      ? normalizeImagePath(src.slice(1))
+      : normalizeImagePath(dirRel ? `${dirRel}/${src}` : src);
+    if (!rel) continue;
+    try {
+      const dataUrl = await invoke<string | null>("read_image_data_url", {
+        relPath: rel,
+      });
+      if (dataUrl) {
+        img.setAttribute("src", dataUrl);
+        inlined += 1;
+      }
+    } catch {
+      // 读取失败时保留原地址，由随后的提示说明。
+    }
+  }
+
+  return { html: template.innerHTML, inlined };
+}
 
 export async function copyActiveAsHtml(): Promise<void> {
   const editorView = getEditorView();
@@ -51,11 +89,14 @@ export async function copyActiveAsHtml(): Promise<void> {
   if (text === null) return;
 
   try {
-    const html = await renderMarkdownToHtml(text);
+    const rendered = await renderMarkdownToHtml(text);
+    const { html, inlined } = await inlineLocalImages(rendered);
     const copied = await copyHtml(html);
     const localImages = countLocalImages(html);
-    const warning =
-      localImages > 0 ? `（${localImages} 张本地图片在应用外可能无法显示）` : "";
+    const notes: string[] = [];
+    if (inlined > 0) notes.push(`${inlined} 张本地图片已内联`);
+    if (localImages > 0) notes.push(`${localImages} 张本地图片在应用外可能无法显示`);
+    const warning = notes.length > 0 ? `（${notes.join("；")}）` : "";
     const okMessage =
       (useSelection
         ? "所选内容已复制为 HTML，可直接粘贴到邮件或公众号草稿"
@@ -245,7 +286,7 @@ export function Toolbar() {
         <button
           type="button"
           className="toolbar-text-btn"
-          title="按预览排版复制 HTML (Ctrl+Shift+E)；选中正文时只复制所选部分"
+          title="按预览排版复制 HTML (Ctrl+Shift+E)；选中正文时只复制所选部分，本地图片自动内联（单张 4 MB 以内）"
           disabled={!hasDoc}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => void copyActiveAsHtml()}

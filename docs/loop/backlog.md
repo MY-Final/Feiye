@@ -19,6 +19,25 @@
 
 <!-- 从这里开始追加 -->
 
+## 第 147 轮 · 2026-10-30 15:33
+**用户需求**：把笔记里的截图用「复制 HTML」贴进邮件或公众号后，收件人看到的是裂图 → 第 146 轮只提示了「可能无法显示」，问题还在 → 希望复制时就把本地图片一并带上，单张别太大，超限的再保留原地址并提示。
+
+**产品经理**：做。把图片内联进剪贴板是「导出 HTML / 复制 HTML」的自然收尾，不落盘、不新增依赖，图片仍只从当前工作区读取，符合「本地优先、数据安全」。4 MB 上限避免剪贴板与正文被撑爆，超限或读取失败回落到第 146 轮的提示，不静默丢图。
+
+**前端**：影响 `src/app/Toolbar.tsx`（新增 `inlineLocalImages`：解析预览 HTML 里的相对 / 根路径图片，逐个 `invoke("read_image_data_url")` 换成 data URL；成功数与剩余本地图片数一起写进提示）。风险：仅处理 `img[src]` 且跳过 http(s) / data / blob，远程图片不动；单张失败只保留原地址，不阻断复制。工作量 S。
+
+**后端**：影响 `src-tauri/src/commands/image_asset.rs`（新增 `read_image_data_url`：`normalize_rel` + `resolve_in_workspace` 做工作区边界校验，扩展名白名单 png/jpg/jpeg/gif/webp/avif/bmp/ico，只读、不写盘；超过 4 MB、非图片或不存在返回 `None`，交由前端保留原地址）、`src-tauri/src/lib.rs`（注册命令）。风险：沿用现有路径校验，无新增文件系统写行为；新增单元测试覆盖小图成功、超大 / 非图片 / 不存在跳过、`..` 越界报错。工作量 S。
+
+**裁决**：做
+
+**改动**：`src-tauri/src/commands/image_asset.rs`、`src-tauri/src/lib.rs`、`src/app/Toolbar.tsx`（3 个文件，约 115 行，含 15 行单元测试）
+
+**构建**：通过（`bun run build` 538ms，含 tsc）；`cargo test` 32 passed / 0 failed（新增 `inlines_small_images_and_skips_large_or_unsupported`）。
+
+**验证**：CDP（9222，工作区 `D:\clawWorkSpeace\新建文件夹`）整页刷新后停在 `写作示例.md`。①直接 `invoke("read_image_data_url", {relPath:"assets/小图.png"})` 返回 `data:image/png;base64,…`（10,858 字节）；②按 Ctrl+Shift+E，提示为「HTML 已复制，可直接粘贴到邮件或公众号草稿（3 张本地图片已内联）」；③PowerShell 读取剪贴板 `HTML Format`：`data:image/` 出现 3 次、`feiyeimg` 0 次、3 个 `<img>`，整篇 HTML 约 111 KB。人工复现：打开含本地图片的笔记复制 HTML，粘贴到邮件 / Word 应能直接看到图；把某张图换成超过 4 MB 的文件再复制，该图保留原地址且提示「（1 张本地图片在应用外可能无法显示）」。改完 Rust 源码需重启 `bun run tauri dev`，前端改动请整页刷新。
+
+---
+
 ## 第 146 轮 · 2026-10-30 15:29
 **用户需求**：笔记里的截图用「复制 HTML」贴进邮件后是裂图 → 现在提示只说复制成功，让人以为整篇都能用，也不知道坏的是哪些 → 希望复制时就说明有本地图片、在应用外可能看不到，别等到收件人发现。
 

@@ -38,6 +38,7 @@ pub fn run() {
             commands::recovery::delete_recovery,
             commands::recovery::clear_recovery,
             commands::image_asset::save_image_asset,
+            commands::image_asset::read_image_data_url,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

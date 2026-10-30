@@ -14,6 +14,9 @@ use crate::fs_path;
 /// 与图片读取通道保持一致的单张图片上限。
 const MAX_IMAGE_BYTES: usize = 16 * 1024 * 1024;
 
+/// 复制 HTML 时内联单张图片的上限；超过则保留原地址，避免剪贴板过大。
+const INLINE_MAX_BYTES: u64 = 4 * 1024 * 1024;
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ImageAsset {
@@ -164,6 +167,55 @@ pub fn save_image_asset(
     save_asset_in(&root, &rel_path, &data, &base_name)
 }
 
+fn inline_mime(extension: &str) -> Option<&'static str> {
+    match extension {
+        "png" => Some("image/png"),
+        "jpg" | "jpeg" => Some("image/jpeg"),
+        "gif" => Some("image/gif"),
+        "webp" => Some("image/webp"),
+        "avif" => Some("image/avif"),
+        "bmp" => Some("image/bmp"),
+        "ico" => Some("image/x-icon"),
+        _ => None,
+    }
+}
+
+/// 读取工作区内的一张图片并编码成 data URL；不存在、格式不支持或超过 4 MB 时返回 None。
+fn data_url_in(root: &Path, rel: &str) -> Result<Option<String>, AppError> {
+    let clean = fs_path::normalize_rel(rel)?;
+    let path = fs_path::resolve_in_workspace(root, &clean)?;
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(str::to_ascii_lowercase);
+    let mime = match extension.as_deref().and_then(inline_mime) {
+        Some(mime) => mime,
+        None => return Ok(None),
+    };
+    let metadata = match fs::metadata(&path) {
+        Ok(metadata) => metadata,
+        Err(_) => return Ok(None),
+    };
+    if !metadata.is_file() || metadata.len() > INLINE_MAX_BYTES {
+        return Ok(None);
+    }
+    let bytes = fs::read(&path)?;
+    Ok(Some(format!(
+        "data:{mime};base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    )))
+}
+
+/// 把工作区内的图片读成 data URL，供「复制 HTML」内联，应用外也能显示。
+#[tauri::command]
+pub fn read_image_data_url(
+    rel_path: String,
+    state: State<'_, WorkspaceState>,
+) -> Result<Option<String>, AppError> {
+    let root = state.root()?;
+    data_url_in(&root, &rel_path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -200,6 +252,22 @@ mod tests {
 
         assert_eq!(first.markdown_path, "assets/image-1.png");
         assert_eq!(second.markdown_path, "assets/image-1-1.png");
+    }
+
+    #[test]
+    fn inlines_small_images_and_skips_large_or_unsupported() {
+        let (_temp, root) = workspace();
+        fs::write(root.join("pic.png"), [0x89, b'P', b'N', b'G', 1, 2]).unwrap();
+        let url = data_url_in(&root, "pic.png").unwrap().unwrap();
+        assert!(url.starts_with("data:image/png;base64,"));
+
+        fs::write(root.join("note.txt"), b"text").unwrap();
+        assert!(data_url_in(&root, "note.txt").unwrap().is_none());
+        assert!(data_url_in(&root, "missing.png").unwrap().is_none());
+
+        fs::write(root.join("big.png"), vec![0u8; INLINE_MAX_BYTES as usize + 1]).unwrap();
+        assert!(data_url_in(&root, "big.png").unwrap().is_none());
+        assert!(data_url_in(&root, "../pic.png").is_err());
     }
 
     #[test]
