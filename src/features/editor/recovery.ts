@@ -15,6 +15,7 @@ import { useUiStore } from "../../stores/ui";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { rememberLastDocument } from "../workspace/last-document";
 import { getEditorText, setEditorDocument } from "./editor-bridge";
+import { waitForCompositionEnd } from "./composition";
 import { requestPreview } from "../preview/preview-controller";
 
 let prompting = false;
@@ -43,6 +44,10 @@ export function snapshotActiveDocument(): Promise<void> {
   if (writeInFlight) return writeInFlight;
 
   const run = (async () => {
+    // 组词中触发（失焦 / 隐藏）时，等提交后再快照，副本里不留半截拼音；
+    // 超时仍未提交则本次跳过，恢复定时器或下次失焦再写。
+    if (!(await waitForCompositionEnd())) return;
+
     const doc = useDocumentStore.getState();
     if (!doc.path || !doc.name || !doc.dirty) return;
 

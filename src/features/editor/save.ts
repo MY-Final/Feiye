@@ -9,6 +9,7 @@ import { useDocumentStore } from "../../stores/document";
 import { useUiStore } from "../../stores/ui";
 import { requestPreview } from "../preview/preview-controller";
 import { getEditorText, setEditorDocument } from "./editor-bridge";
+import { waitForCompositionEnd } from "./composition";
 import {
   clearRecoverySnapshot,
   discardRecoveryForPath,
@@ -34,6 +35,15 @@ export function saveActiveDocument(options: SaveOptions = {}): Promise<boolean> 
 async function performSave(options: SaveOptions): Promise<boolean> {
   const doc = useDocumentStore.getState();
   if (!doc.path) return false;
+
+  // 组词中的正文含未上屏拼音：等提交后再读文本，别把半截拼音写进源文件。
+  // 超时仍未提交则放弃本次保存，下次自动保存 / 手动保存再落盘。
+  if (!(await waitForCompositionEnd())) {
+    if (!options.auto) {
+      useUiStore.getState().toast("输入法组词尚未结束，完成输入后再保存", "info");
+    }
+    return false;
+  }
 
   let text = getEditorText();
   if (text === null) return false;
