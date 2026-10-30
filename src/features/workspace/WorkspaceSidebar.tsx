@@ -18,6 +18,7 @@ import { useOutlineStore } from "../../stores/outline";
 import { useUiStore } from "../../stores/ui";
 import { useWorkspaceStore } from "../../stores/workspace";
 import {
+  collapseAllKeepingActive,
   copyEntryLink,
   createFolderIn,
   createMarkdownFile,
@@ -289,7 +290,6 @@ export function WorkspaceSidebar() {
   const children = useWorkspaceStore((state) => state.children[""]);
   const rootLoading = useWorkspaceStore((state) => Boolean(state.loading[""]));
   const refreshTree = useWorkspaceStore((state) => state.refreshTree);
-  const collapseAll = useWorkspaceStore((state) => state.collapseAll);
   const headingCount = useOutlineStore((state) => state.headings.length);
   const [tab, setTab] = useState<SidebarTab>("files");
   const [menu, setMenu] = useState<MenuState | null>(null);
@@ -533,9 +533,18 @@ export function WorkspaceSidebar() {
             <button
               type="button"
               className="sidebar-action"
-              title="全部折叠"
+              title="全部折叠（保留当前笔记所在目录）"
               aria-label="全部折叠"
-              onClick={() => collapseAll()}
+              onClick={() => {
+                void collapseAllKeepingActive().then(() => {
+                  // 展开目录后把当前笔记滚回可见范围，省得自己找。
+                  requestAnimationFrame(() => {
+                    document
+                      .querySelector(".tree-row.active")
+                      ?.scrollIntoView({ block: "nearest" });
+                  });
+                });
+              }}
             >
               <CollapseIcon />
             </button>

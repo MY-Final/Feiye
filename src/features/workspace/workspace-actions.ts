@@ -216,6 +216,19 @@ function jumpToAnchorInOpenDocument(fragment: string): void {
   }
 }
 
+/** 全部折叠，但保留当前笔记的目录链展开：正在写的那篇不该从树里消失。 */
+export async function collapseAllKeepingActive(): Promise<void> {
+  useWorkspaceStore.getState().collapseAll();
+  const path = useDocumentStore.getState().path;
+  if (!path) return;
+  const folders = path.split("/").slice(0, -1);
+  let prefix = "";
+  for (const folder of folders) {
+    prefix = prefix ? `${prefix}/${folder}` : folder;
+    await useWorkspaceStore.getState().expandDir(prefix);
+  }
+}
+
 export async function openFile(
   entry: Entry,
   silent = false,
