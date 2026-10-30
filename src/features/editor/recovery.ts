@@ -76,6 +76,44 @@ export async function discardRecoveryForPath(relPath: string): Promise<void> {
   await clearRecoverySnapshot(relPath);
 }
 
+/**
+ * 文档路径变化后（重命名文件或所在目录），把恢复副本迁到新路径。
+ * 与自动保存共用写入锁，避免旧副本覆盖刚写入的新副本；
+ * 新路径已有副本时只删旧的，保留更新的那份。
+ */
+export async function migrateRecoverySnapshot(
+  oldPath: string,
+  nextPath: string,
+): Promise<void> {
+  const run = (async () => {
+    try {
+      if (writeInFlight) await writeInFlight;
+      const snapshots = await listRecoveries();
+      const previous = snapshots.find((item) => item.relPath === oldPath);
+      if (!previous) return;
+      if (snapshots.some((item) => item.relPath === nextPath)) {
+        await deleteRecovery(previous.id);
+        return;
+      }
+      await saveRecovery(
+        nextPath,
+        previous.name,
+        previous.content,
+        previous.baseModifiedMs,
+      );
+      await deleteRecovery(previous.id);
+    } catch {
+      // 迁移失败时保留旧副本，下次启动仍会提示，不会丢内容。
+    }
+  })();
+
+  writeInFlight = run;
+  void run.finally(() => {
+    if (writeInFlight === run) writeInFlight = null;
+  });
+  await run;
+}
+
 async function deleteSnapshot(id: string): Promise<void> {
   try {
     await deleteRecovery(id);

@@ -29,6 +29,7 @@ import { captureActiveCursor, restoreCursorFor } from "../editor/cursor-memory";
 import { getEditorText, setEditorDocument } from "../editor/editor-bridge";
 import {
   clearRecoverySnapshot,
+  migrateRecoverySnapshot,
   promptPendingRecoveries,
 } from "../editor/recovery";
 import { guardUnsaved } from "../editor/save";
@@ -323,9 +324,12 @@ export async function renameEntry(entry: Entry): Promise<void> {
     } else if (entry.isDir && doc.path && isWithin(doc.path, entry.relPath)) {
       // 当前文档所在目录被改名：保持文档打开，只把路径前缀换成新目录，
       // 正文、脏状态与自动保存都继续，避免静默丢失未保存内容。
-      const nextPath = `${renamed.relPath}${doc.path.slice(entry.relPath.length)}`;
+      const oldPath = doc.path;
+      const nextPath = `${renamed.relPath}${oldPath.slice(entry.relPath.length)}`;
       doc.renameActive(nextPath, doc.name ?? baseName(nextPath));
       void setSetting("lastDocument", nextPath);
+      // 恢复副本按旧路径保存，迁移过去，避免下次启动误报「原文件已不在」。
+      void migrateRecoverySnapshot(oldPath, nextPath);
     }
 
     if (entry.isDir) {
