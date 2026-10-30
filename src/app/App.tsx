@@ -72,6 +72,7 @@ function dialogOpen(): boolean {
 
 export default function App() {
   const root = useWorkspaceStore((state) => state.root);
+  const workspaceName = useWorkspaceStore((state) => state.name);
   const recent = useWorkspaceStore((state) => state.recent);
   const docPath = useDocumentStore((state) => state.path);
   const docName = useDocumentStore((state) => state.name);
@@ -383,17 +384,20 @@ export default function App() {
     return () => cancelAnimationFrame(frame);
   }, [zenMode]);
 
-  // 系统任务栏 / Alt-Tab 里也显示当前笔记名，未保存时带圆点。
+  // 系统任务栏 / Alt-Tab 里也显示当前笔记名，未保存时带圆点；
+  // 还没选笔记时显示库名，开着几个库也能分清是哪一个。
   useEffect(() => {
     const title = docName
       ? `${dirty ? "• " : ""}${docName} — ${APP_NAME}`
-      : APP_NAME;
+      : workspaceName
+        ? `${workspaceName} — ${APP_NAME}`
+        : APP_NAME;
     void getCurrentWindow()
       .setTitle(title)
       .catch(() => {
         // 非 Tauri 环境或权限缺失时保留默认标题。
       });
-  }, [docName, dirty]);
+  }, [docName, dirty, workspaceName]);
 
   // 字号、行高、行宽或行号变化后，让 CodeMirror 重新测量排版指标。
   useEffect(() => {
