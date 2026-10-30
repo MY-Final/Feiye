@@ -11,6 +11,7 @@ import {
   deleteEntry as apiDeleteEntry,
   describeError,
   getSetting,
+  listDir,
   openWorkspace as apiOpenWorkspace,
   pickWorkspaceFolder,
   readFile,
@@ -469,6 +470,52 @@ export async function renameEntry(entry: Entry): Promise<void> {
   }
 }
 
+/** 统计文件夹里会被一起删掉的内容：上限内扫完，别为大目录卡住确认框。 */
+async function countFolderContents(
+  relPath: string,
+): Promise<{ files: number; dirs: number; capped: boolean }> {
+  const LIMIT = 500;
+  let files = 0;
+  let dirs = 0;
+  const queue = [relPath];
+  while (queue.length > 0) {
+    if (files + dirs >= LIMIT) return { files, dirs, capped: true };
+    const current = queue.shift();
+    if (!current) break;
+    let entries: Entry[] = [];
+    try {
+      entries = await listDir(current);
+    } catch {
+      // 读不到的目录不计入，删除本身仍交给后端裁决。
+      continue;
+    }
+    for (const item of entries) {
+      if (files + dirs >= LIMIT) return { files, dirs, capped: true };
+      if (item.isDir) {
+        dirs += 1;
+        queue.push(item.relPath);
+      } else {
+        files += 1;
+      }
+    }
+  }
+  return { files, dirs, capped: false };
+}
+
+/** 删目录时把"里面还有多少东西"说清楚，避免以为只删了一个空壳。 */
+function folderContentsNote(count: {
+  files: number;
+  dirs: number;
+  capped: boolean;
+}): string {
+  const parts: string[] = [];
+  if (count.files > 0) parts.push(`${count.files} 个文件`);
+  if (count.dirs > 0) parts.push(`${count.dirs} 个子文件夹`);
+  if (parts.length === 0) return "";
+  const prefix = count.capped ? "至少 " : "";
+  return `其中的${prefix}${parts.join("、")}也会一起进回收站。`;
+}
+
 export async function deleteEntry(entry: Entry): Promise<void> {
   // 删除正在编辑且未保存的文件（或它所在的文件夹）时，编辑器里的内容
   // 会随文档一起清空，必须在确认框里说清楚，不能只提回收站可撤销。
@@ -479,12 +526,15 @@ export async function deleteEntry(entry: Entry): Promise<void> {
   const hasUnsaved = deletingActive && doc.dirty;
   // 同名文件可能散在好几个目录里，确认框带上路径才删得准。
   const shown = `「${parentRel(entry.relPath) ? entry.relPath : entry.name}」`;
+  const inside = entry.isDir
+    ? folderContentsNote(await countFolderContents(entry.relPath))
+    : "";
 
   const choice = await useUiStore.getState().ask({
     title: "删除",
     message: hasUnsaved
-      ? `${shown}里有正在编辑的笔记，还有未保存的修改。可以直接删掉，也可以先保存再删除——保存后的内容会随文件一起进回收站。`
-      : `确定将${shown}移到回收站吗？此操作可以在系统回收站中撤销。`,
+      ? `${shown}里有正在编辑的笔记，还有未保存的修改。${inside}可以直接删掉，也可以先保存再删除——保存后的内容会随文件一起进回收站。`
+      : `确定将${shown}移到回收站吗？${inside}此操作可以在系统回收站中撤销。`,
     buttons: hasUnsaved
       ? [
           { label: "保存后删除", value: "save-delete", tone: "primary" },
