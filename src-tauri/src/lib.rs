@@ -27,6 +27,7 @@ pub fn run() {
             commands::workspace::list_dir,
             commands::file::read_file,
             commands::file::write_file,
+            commands::file::export_html,
             commands::file::create_file,
             commands::file::create_folder,
             commands::file::reveal_entry,
