@@ -1,3 +1,5 @@
+import { useEffect, useRef } from "react";
+
 import { useDocumentStore } from "../../stores/document";
 import { useSettingsStore } from "../../stores/settings";
 import { useTabsStore } from "../../stores/tabs";
@@ -15,6 +17,15 @@ export function TabBar() {
   const hideExtensions = useSettingsStore(
     (state) => state.preferences.hideFileExtensions,
   );
+  const activeTabRef = useRef<HTMLDivElement>(null);
+
+  // 标签多到放不下时，用快捷键切到屏幕外的标签要把它们滚进来。
+  useEffect(() => {
+    activeTabRef.current?.scrollIntoView({
+      block: "nearest",
+      inline: "nearest",
+    });
+  }, [active]);
 
   if (tabs.length === 0) return null;
 
@@ -48,6 +59,7 @@ export function TabBar() {
         return (
           <div
             key={tab.path}
+            ref={isActive ? activeTabRef : null}
             className={`doc-tab${isActive ? " is-active" : ""}`}
           >
             <button

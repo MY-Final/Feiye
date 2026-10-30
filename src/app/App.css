@@ -1,6 +1,8 @@
 .app {
   display: grid;
   grid-template-rows: 40px auto minmax(0, 1fr) 26px;
+  /* 单列也要压住最小宽度：标签一多时，标签栏不应把整个窗口撑出横向滚动。 */
+  grid-template-columns: minmax(0, 1fr);
   height: 100%;
   background: var(--bg);
   color: var(--text);
