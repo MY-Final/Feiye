@@ -46,6 +46,8 @@ export function PreviewPane() {
   const [zoom, setZoom] = useState(1);
   // 放大后图片会超出屏幕，按住拖动才能看到边角。
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  // 小图放大后仍不足一屏，没有可拖的余量；提示与光标要跟着收敛。
+  const [canPan, setCanPan] = useState(false);
   const [dragging, setDragging] = useState(false);
   const panStart = useRef<{
     x: number;
@@ -241,10 +243,10 @@ export function PreviewPane() {
 
   // 放大后拖动最多让图片边缘贴住可视区边缘，不让整张图被拖出屏幕。
   // 某个方向放大后仍小于可视区时，该方向锁在居中。
-  const clampPan = (x: number, y: number) => {
+  const panLimits = () => {
     const image = imageRef.current;
     const box = lightboxRef.current;
-    if (!image || !box) return { x, y };
+    if (!image || !box) return { x: 0, y: 0 };
     const style = getComputedStyle(box);
     const availW =
       box.clientWidth -
@@ -254,13 +256,39 @@ export function PreviewPane() {
       box.clientHeight -
       parseFloat(style.paddingTop) -
       parseFloat(style.paddingBottom);
-    const maxX = Math.max(0, (image.offsetWidth * zoom - availW) / 2);
-    const maxY = Math.max(0, (image.offsetHeight * zoom - availH) / 2);
     return {
-      x: Math.min(maxX, Math.max(-maxX, x)),
-      y: Math.min(maxY, Math.max(-maxY, y)),
+      x: Math.max(0, (image.offsetWidth * zoom - availW) / 2),
+      y: Math.max(0, (image.offsetHeight * zoom - availH) / 2),
     };
   };
+
+  const clampPan = (x: number, y: number) => {
+    const limit = panLimits();
+    return {
+      x: Math.min(limit.x, Math.max(-limit.x, x)),
+      y: Math.min(limit.y, Math.max(-limit.y, y)),
+    };
+  };
+
+  // 图片加载完成、窗口大小变化都会改变可拖余量：
+  // 小图放大后仍不足一屏时不该给抓手光标，也不该提示「拖动平移」。
+  useEffect(() => {
+    if (!lightbox) {
+      setCanPan(false);
+      return;
+    }
+    const update = () => {
+      const limit = panLimits();
+      setCanPan(limit.x > 0 || limit.y > 0);
+    };
+    update();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(update);
+    if (imageRef.current) observer.observe(imageRef.current);
+    if (lightboxRef.current) observer.observe(lightboxRef.current);
+    return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lightbox !== null, lightbox?.index, zoom]);
 
   useEffect(() => {
     setPan((current) =>
@@ -554,7 +582,7 @@ export function PreviewPane() {
             src={lightboxImage.src}
             alt={lightboxImage.alt}
             draggable={false}
-            className={`${zoom > 1 ? "is-zoomed" : ""}${
+            className={`${zoom > 1 && canPan ? "is-zoomed" : ""}${
               dragging ? " is-dragging" : ""
             }`}
             style={{
@@ -571,7 +599,8 @@ export function PreviewPane() {
                 panY: pan.y,
               };
               panMoved.current = false;
-              setDragging(true);
+              // 不足一屏时没有可拖的余量，但不把拖动当点击：松手别顺手关掉浮层。
+              if (canPan) setDragging(true);
             }}
             onPointerMove={(event) => {
               const start = panStart.current;
@@ -579,7 +608,7 @@ export function PreviewPane() {
               const dx = event.clientX - start.x;
               const dy = event.clientY - start.y;
               if (Math.abs(dx) + Math.abs(dy) > 3) panMoved.current = true;
-              setPan(clampPan(start.panX + dx, start.panY + dy));
+              if (canPan) setPan(clampPan(start.panX + dx, start.panY + dy));
             }}
             onPointerUp={(event) => {
               if (!panStart.current) return;
@@ -643,7 +672,9 @@ export function PreviewPane() {
             <span className="image-lightbox-hint">
               {zoom === 1
                 ? "滚轮缩放 · Esc 关闭"
-                : "拖动平移 · 双击复位 · 滚轮缩放 · Esc 关闭"}
+                : canPan
+                  ? "拖动平移 · 双击复位 · 滚轮缩放 · Esc 关闭"
+                  : "双击复位 · 滚轮缩放 · Esc 关闭"}
             </span>
           </div>
         </div>
