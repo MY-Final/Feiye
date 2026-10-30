@@ -50,6 +50,7 @@ import {
 } from "../editor/editor-bridge";
 import { readOutline } from "../editor/outline";
 import {
+  clearRecoveryForEntry,
   clearRecoverySnapshot,
   migrateRecoverySnapshot,
   promptPendingRecoveries,
@@ -983,13 +984,15 @@ export async function deleteEntry(entry: Entry): Promise<void> {
 
     const doc = useDocumentStore.getState();
     if (doc.path && isWithin(doc.path, entry.relPath)) {
-      void clearRecoverySnapshot(doc.path);
       void rememberLastDocument(null);
       resetDocument();
     }
     // resetDocument 会先把当前光标记下来，所以清理放在它之后，
     // 否则同名新文件打开时会跳到被删文档的旧位置。
     forgetCursor(entry.relPath);
+    // 当前打开的 / 文件夹里没打开的笔记都可能留有恢复副本，一并清掉，
+    // 否则下次启动会把用户主动删掉的文件「恢复为文件」。
+    await clearRecoveryForEntry(entry.relPath);
   } catch (error) {
     toastError("删除失败", error);
   }
