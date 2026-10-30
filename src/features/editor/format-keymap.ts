@@ -1,6 +1,7 @@
 import type { EditorView, KeyBinding } from "@codemirror/view";
 
 import {
+  continueTaskList,
   exitCodeBlock,
   focusCodeLanguage,
   handleCodeBlockEnter,
@@ -78,6 +79,8 @@ export const formatKeymap: readonly KeyBinding[] = [
   { key: "Shift-Tab", run: (view) => indentLines(view, true) },
   // 代码块内：块尾空行回车退出；Ctrl/Cmd+Enter 随时退出。
   { key: "Enter", run: handleCodeBlockEnter },
+  // 代码块里 handleCodeBlockEnter 会先接住，这里只落到普通正文的任务项。
+  { key: "Enter", run: continueTaskList },
   { key: "Mod-Enter", run: exitCodeBlock },
   inline("bold", "Mod-b"),
   inline("italic", "Mod-i"),

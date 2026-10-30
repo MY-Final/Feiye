@@ -442,6 +442,32 @@ export function handleCodeBlockEnter(view: EditorView): boolean {
   return exitCodeBlock(view);
 }
 
+/** 任务项里回车：新一行沿用同一层级的 `- [ ] `，写清单不用每行手打。 */
+export function continueTaskList(view: EditorView): boolean {
+  const { state } = view;
+  const selection = state.selection.main;
+  if (!selection.empty) return false;
+
+  const line = state.doc.lineAt(selection.head);
+  if (selection.head !== line.to) return false;
+  // 代码块里的文本不当作清单。
+  if (findAncestor(state, selection.head, "FencedCode")) return false;
+  if (findAncestor(state, selection.head, "CodeBlock")) return false;
+
+  const match = /^(\s*)([-*+])\s+\[[ xX]\]\s+/.exec(line.text);
+  if (!match) return false;
+  // 空任务项回车交给默认行为删掉标记，和普通列表的收尾习惯一致。
+  if (line.text.trimEnd().length <= match[0].trimEnd().length) return false;
+
+  const insert = `\n${match[1]}${match[2]} [ ] `;
+  view.dispatch({
+    changes: { from: selection.head, insert },
+    selection: { anchor: selection.head + insert.length },
+    userEvent: "input",
+  });
+  return true;
+}
+
 /** 把焦点移到当前代码块底部的语言输入框，并选中已有语言。 */
 export function focusCodeLanguage(view: EditorView): boolean {
   const { state } = view;

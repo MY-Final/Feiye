@@ -113,6 +113,7 @@ const SHORTCUT_GROUPS: { title: string; items: [string, string][] }[] = [
       ["Ctrl + Shift + K", "代码块"],
       ["Ctrl + Shift + L", "跳到代码块的语言标记"],
       ["Ctrl + Enter", "退出代码块"],
+      ["Enter", "任务列表里自动续写 `- [ ] `"],
       ["Ctrl + Shift + M / Ctrl + Shift + 4", "行间 / 行内数学公式"],
       ["Ctrl + T", "插入表格"],
       ["Ctrl + Shift + H", "分隔线"],
