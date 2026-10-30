@@ -19,6 +19,22 @@
 
 <!-- 从这里开始追加 -->
 
+## 第 9 轮 · 2026-10-30 09:36
+
+**用户需求**：我在笔记之间互相引用，每次都要手动敲 `[标题](03-结构/编辑内核.md)`，目录一深就容易写错；照着状态栏抄路径也麻烦。希望文件树右键笔记时能「复制链接」，得到相对当前文档的 Markdown 链接，直接粘到正文里。
+
+**产品经理**：前几轮刚让预览与编辑区都能打开笔记链接，创建链接却仍靠手写，是链接工作流的另一半；不新增面板、不引入依赖。结论：**做**。
+
+**前端**：`lib/paths.ts` 新增 `relativeLinkPath`（计算相对当前文档目录的路径，只转义空格、括号、百分号，中文保持原样）；`workspace-actions.ts` 新增 `copyEntryLink`，用现有 `copyText` 写入 `[标题](路径)` 并 toast；`WorkspaceSidebar` 右键文件时显示「复制链接」。风险：没有打开文档时以工作区根目录为基准；重名笔记由路径区分。工作量 **S**。
+
+**后端**：无改动。工作量 **S**。
+
+**裁决**：做。
+
+**改动**：`src/lib/paths.ts`、`src/features/workspace/workspace-actions.ts`、`src/features/workspace/WorkspaceSidebar.tsx`。
+
+**构建**：通过（`bun run build` 0.62s，含 tsc）。`relativeLinkPath` 用 bun 跑了 5 组路径用例并验证 `resolveRelLink` 往返还原（空格与括号转义）；未做真机菜单验证。
+
 ## 第 8 轮 · 2026-10-30 09:30
 
 **用户需求**：写嵌套列表或代码块时按 Tab 想缩进，焦点却直接跳到工具栏，光标离开正文；Shift+Tab 也一样。希望 Tab / Shift+Tab 在编辑器里就是缩进 / 反缩进。

@@ -15,6 +15,7 @@ import { useDocumentStore } from "../../stores/document";
 import { useOutlineStore } from "../../stores/outline";
 import { useWorkspaceStore } from "../../stores/workspace";
 import {
+  copyEntryLink,
   createFolderIn,
   createMarkdownFile,
   deleteEntry,
@@ -56,6 +57,15 @@ function buildMenuActions(entry: Entry | null): MenuAction[] {
       },
     },
   ];
+
+  if (entry && !entry.isDir) {
+    actions.push({
+      label: "复制链接",
+      onSelect: () => {
+        void copyEntryLink(entry);
+      },
+    });
+  }
 
   if (entry) {
     actions.push({

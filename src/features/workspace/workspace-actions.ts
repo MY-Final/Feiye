@@ -1,4 +1,10 @@
-import { baseName, isWithin, parentRel } from "../../lib/paths";
+import { copyText } from "../../lib/clipboard";
+import {
+  baseName,
+  isWithin,
+  parentRel,
+  relativeLinkPath,
+} from "../../lib/paths";
 import {
   createFile as apiCreateFile,
   createFolder as apiCreateFolder,
@@ -253,6 +259,19 @@ export async function createFolderIn(parent: string): Promise<void> {
   } catch (error) {
     toastError("新建文件夹失败", error);
   }
+}
+
+/** 复制指向该文件的 Markdown 链接，基准是当前文档所在目录。 */
+export async function copyEntryLink(entry: Entry): Promise<void> {
+  if (entry.isDir) return;
+
+  const fromFile = useDocumentStore.getState().path ?? entry.relPath;
+  const href = relativeLinkPath(fromFile, entry.relPath);
+  const label = entry.name.replace(MARKDOWN_NAME, "");
+  const copied = await copyText(`[${label}](${href})`);
+  useUiStore
+    .getState()
+    .toast(copied ? "已复制链接" : "复制到剪贴板失败", copied ? "info" : "error");
 }
 
 export async function revealEntry(entry: Entry | null): Promise<void> {
