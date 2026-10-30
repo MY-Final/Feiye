@@ -18,11 +18,13 @@ import {
   chooseWorkspace,
   createMarkdownFile,
   newDocumentNearActive,
+  openFile,
   renameActiveDocument,
   restoreLastWorkspace,
   saveDocumentAs,
 } from "../features/workspace/workspace-actions";
 import { APP_NAME, APP_TAGLINE } from "../lib/app-info";
+import { baseName } from "../lib/paths";
 import { getSetting, readFile, setSetting } from "../lib/tauri";
 import { isViewMode } from "../lib/view-modes";
 import { useDocumentStore } from "../stores/document";
@@ -55,6 +57,7 @@ function isTextEntry(target: EventTarget | null): boolean {
 
 export default function App() {
   const root = useWorkspaceStore((state) => state.root);
+  const recent = useWorkspaceStore((state) => state.recent);
   const docPath = useDocumentStore((state) => state.path);
   const docName = useDocumentStore((state) => state.name);
   const dirty = useDocumentStore((state) => state.dirty);
@@ -314,6 +317,28 @@ export default function App() {
                     >
                       新建文件
                     </button>
+                    {recent.length > 0 ? (
+                      <>
+                        <p>最近打开</p>
+                        {recent.map((relPath) => (
+                          <button
+                            key={relPath}
+                            type="button"
+                            className="btn ghost"
+                            title={relPath}
+                            onClick={() =>
+                              void openFile({
+                                relPath,
+                                name: baseName(relPath),
+                                isDir: false,
+                              })
+                            }
+                          >
+                            {baseName(relPath)}
+                          </button>
+                        ))}
+                      </>
+                    ) : null}
                   </div>
                 </div>
               ) : null}

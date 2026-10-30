@@ -146,6 +146,7 @@ export async function openFile(
     setEditorDocument(file.content);
     requestPreview(file.content, true);
     void setSetting("lastDocument", entry.relPath);
+    useWorkspaceStore.getState().noteRecent(entry.relPath);
     await expandAncestors(entry.relPath);
     await restoreCursorFor(entry.relPath);
   } catch (error) {

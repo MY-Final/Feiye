@@ -62,14 +62,56 @@ async function restoreExpanded(root: string): Promise<void> {
   );
 }
 
+const RECENT_KEY = "recentDocuments";
+const RECENT_LIMIT = 5;
+
+/** 各工作区最近打开的文档；同样只在第一次读取后常驻。 */
+let recentByRoot: Record<string, string[]> | null = null;
+
+async function readRecentMap(): Promise<Record<string, string[]>> {
+  if (recentByRoot) return recentByRoot;
+
+  const raw = await getSetting<unknown>(RECENT_KEY);
+  const map: Record<string, string[]> = {};
+  if (raw && typeof raw === "object") {
+    for (const [root, paths] of Object.entries(raw as Record<string, unknown>)) {
+      if (Array.isArray(paths)) {
+        map[root] = paths.filter(
+          (path): path is string => typeof path === "string",
+        );
+      }
+    }
+  }
+  recentByRoot = map;
+  return map;
+}
+
+function persistRecent(root: string | null, paths: string[]): void {
+  if (!root) return;
+  void (async () => {
+    const map = await readRecentMap();
+    recentByRoot = { ...map, [root]: paths };
+    await setSetting(RECENT_KEY, recentByRoot);
+  })();
+}
+
+async function restoreRecent(root: string): Promise<void> {
+  const map = await readRecentMap();
+  if (useWorkspaceStore.getState().root !== root) return;
+  useWorkspaceStore.setState({ recent: map[root] ?? [] });
+}
+
 interface WorkspaceStore {
   root: string | null;
   name: string | null;
   children: Record<string, Entry[]>;
   expanded: Record<string, boolean>;
   loading: Record<string, boolean>;
+  /** 当前工作区最近打开的文档，最新的在前。 */
+  recent: string[];
 
   setWorkspace(info: WorkspaceInfo | null): void;
+  noteRecent(relPath: string): void;
   loadDir(relPath: string, silent?: boolean): Promise<void>;
   refreshDir(relPath: string): Promise<void>;
   refreshTree(): Promise<void>;
@@ -88,15 +130,31 @@ const EMPTY_MAPS = {
 export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   root: null,
   name: null,
+  recent: [],
   ...EMPTY_MAPS,
 
   setWorkspace(info) {
     set({
       root: info?.root ?? null,
       name: info?.name ?? null,
+      recent: [],
       ...EMPTY_MAPS,
     });
-    if (info) void restoreExpanded(info.root);
+    if (info) {
+      void restoreExpanded(info.root);
+      void restoreRecent(info.root);
+    }
+  },
+
+  noteRecent(relPath) {
+    const root = get().root;
+    if (!root) return;
+    const next = [
+      relPath,
+      ...get().recent.filter((path) => path !== relPath),
+    ].slice(0, RECENT_LIMIT);
+    set({ recent: next });
+    persistRecent(root, next);
   },
 
   async loadDir(relPath, silent = false) {
