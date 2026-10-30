@@ -17,12 +17,13 @@ import { useUiStore } from "../../stores/ui";
 import { changeViewMode } from "../workspace/workspace-actions";
 import "./settings.css";
 
-type Category = "appearance" | "editing" | "view" | "about";
+type Category = "appearance" | "editing" | "view" | "shortcuts" | "about";
 
 const CATEGORIES: { id: Category; label: string }[] = [
   { id: "appearance", label: "外观排版" },
   { id: "editing", label: "编辑行为" },
   { id: "view", label: "视图与预览" },
+  { id: "shortcuts", label: "快捷键" },
   { id: "about", label: "关于" },
 ];
 
@@ -74,6 +75,57 @@ function Row({
       </div>
       <div className="settings-control">{children}</div>
     </div>
+  );
+}
+
+const SHORTCUT_GROUPS: { title: string; items: [string, string][] }[] = [
+  {
+    title: "文件",
+    items: [
+      ["Ctrl + N", "新建 Markdown"],
+      ["Ctrl + S", "保存"],
+      ["Ctrl + Shift + S", "另存为"],
+      ["F2", "重命名当前笔记"],
+      ["Ctrl + O", "打开文件夹"],
+      ["Ctrl + B", "加粗（光标在正文时）；其余位置收起 / 展开侧栏"],
+    ],
+  },
+  {
+    title: "编辑",
+    items: [
+      ["Ctrl + Z / Ctrl + Shift + Z", "撤销 / 重做"],
+      ["Ctrl + I", "斜体"],
+      ["Ctrl + K", "插入链接"],
+      ["Tab / Shift + Tab", "增加 / 减少缩进"],
+    ],
+  },
+  {
+    title: "视图与查找",
+    items: [
+      ["Ctrl + F", "查找与替换（预览模式下自动切到分栏）"],
+      ["Ctrl + ,", "偏好设置"],
+      ["Esc", "关闭对话框、查看大图"],
+      ["Ctrl + 点击链接", "在应用内打开笔记"],
+    ],
+  },
+];
+
+function ShortcutPanel() {
+  return (
+    <section className="settings-section">
+      <h3 className="settings-section-title">快捷键</h3>
+      {SHORTCUT_GROUPS.map((group) => (
+        <div key={group.title} className="shortcut-group">
+          <h4 className="shortcut-group-title">{group.title}</h4>
+          {group.items.map(([keys, action]) => (
+            <div key={keys} className="shortcut-row">
+              <kbd className="shortcut-keys">{keys}</kbd>
+              <span className="shortcut-action">{action}</span>
+            </div>
+          ))}
+        </div>
+      ))}
+    </section>
   );
 }
 
@@ -397,6 +449,8 @@ export function SettingsDialog() {
                 </Row>
               </section>
             ) : null}
+
+            {category === "shortcuts" ? <ShortcutPanel /> : null}
 
             {category === "about" ? <AboutPanel /> : null}
           </div>
