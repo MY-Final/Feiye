@@ -444,20 +444,30 @@ pub fn reveal_entry(rel_path: String, state: State<'_, WorkspaceState>) -> Resul
 pub fn rename_entry(
     rel_path: String,
     new_name: String,
+    app: AppHandle,
     state: State<'_, WorkspaceState>,
 ) -> Result<Entry, AppError> {
     let root = state.root()?;
-    rename_in(&root, &rel_path, &new_name)
+    let clean = fs_path::normalize_rel(&rel_path)?;
+    let docs = collect_history_paths(&root, &clean);
+    let entry = rename_in(&root, &clean, &new_name)?;
+    migrate_history_for(&app, &root, &docs, &clean, &entry.rel_path);
+    Ok(entry)
 }
 
 #[tauri::command]
 pub fn move_entry(
     rel_path: String,
     new_parent: String,
+    app: AppHandle,
     state: State<'_, WorkspaceState>,
 ) -> Result<Entry, AppError> {
     let root = state.root()?;
-    move_in(&root, &rel_path, &new_parent)
+    let clean = fs_path::normalize_rel(&rel_path)?;
+    let docs = collect_history_paths(&root, &clean);
+    let entry = move_in(&root, &clean, &new_parent)?;
+    migrate_history_for(&app, &root, &docs, &clean, &entry.rel_path);
+    Ok(entry)
 }
 
 /// 收集删除后要清历史快照的文档（文件夹含子目录），删除前先记下来。
@@ -501,6 +511,31 @@ fn collect_history_paths(root: &Path, rel: &str) -> Vec<String> {
         }
     }
     paths
+}
+
+/// 重命名 / 移动成功后再迁快照；定位不到应用数据目录或迁移失败都不影响操作结果。
+/// `docs` 是操作前收集的旧路径，文件夹下每篇笔记按同名前缀换成新路径。
+fn migrate_history_for(
+    app: &AppHandle,
+    root: &Path,
+    docs: &[String],
+    old_rel: &str,
+    new_rel: &str,
+) {
+    if old_rel == new_rel || docs.is_empty() {
+        return;
+    }
+    let Ok(data) = app.path().app_data_dir() else {
+        return;
+    };
+    let pairs: Vec<(String, String)> = docs
+        .iter()
+        .map(|old| {
+            let suffix = old.strip_prefix(old_rel).unwrap_or("");
+            (old.clone(), format!("{new_rel}{suffix}"))
+        })
+        .collect();
+    history::move_documents(&data.join("history"), root, &pairs);
 }
 
 /// 删除成功后再清快照；定位不到应用数据目录或清理失败都不影响删除结果。

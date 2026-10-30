@@ -159,6 +159,32 @@ pub fn clear_documents(dir: &Path, root: &Path, rel_paths: &[String]) -> usize {
     removed
 }
 
+/// 重命名 / 移动笔记（或文件夹下的每篇笔记）后，把历史快照目录迁到新路径。
+/// 新路径已有历史则保留新的、删除旧的，避免覆盖。迁移失败不返回错误：
+/// 文件本身已经移动成功，历史只是辅助数据。
+pub fn move_documents(dir: &Path, root: &Path, pairs: &[(String, String)]) -> usize {
+    let mut moved = 0;
+    for (old_rel, new_rel) in pairs {
+        if old_rel == new_rel {
+            continue;
+        }
+        let (Ok(old_dir), Ok(new_dir)) =
+            (document_dir(dir, root, old_rel), document_dir(dir, root, new_rel))
+        else {
+            continue;
+        };
+        if !old_dir.is_dir() {
+            continue;
+        }
+        if new_dir.exists() {
+            let _ = fs::remove_dir_all(&old_dir);
+        } else if fs::rename(&old_dir, &new_dir).is_ok() {
+            moved += 1;
+        }
+    }
+    moved
+}
+
 pub fn list_history(
     dir: &Path,
     root: &Path,
@@ -256,6 +282,42 @@ mod tests {
 
         assert_eq!(clear_documents(&data, &root, &["notes/b.md".into()]), 0);
         assert_eq!(clear_documents(&data, &root, &["../a.md".into()]), 0);
+    }
+
+    #[test]
+    fn moves_documents_and_keeps_existing_target() {
+        let (_root_dir, root, _data_dir, data) = workspace();
+        for (rel, text) in [
+            ("a.md", "old-a"),
+            ("notes/b.md", "old-b"),
+            ("c.md", "c"),
+            ("b.md", "new-b"),
+        ] {
+            push_snapshot(&data, &root, rel, text).unwrap();
+        }
+        let latest = |rel: &str| {
+            let list = list_history(&data, &root, rel).unwrap();
+            list.first()
+                .map(|entry| read_history(&data, &root, rel, &entry.id).unwrap().content)
+        };
+
+        // 目标已有历史：保留目标、删掉旧的。
+        assert_eq!(
+            move_documents(&data, &root, &[("a.md".into(), "b.md".into())]),
+            0
+        );
+        assert_eq!(latest("a.md"), None);
+        assert_eq!(latest("b.md").as_deref(), Some("new-b"));
+
+        // 无冲突：整份历史迁到新路径。
+        let pair = [("notes/b.md".into(), "archive/b.md".into())];
+        assert_eq!(move_documents(&data, &root, &pair), 1);
+        assert_eq!(latest("notes/b.md"), None);
+        assert_eq!(latest("archive/b.md").as_deref(), Some("old-b"));
+
+        // 无关文档不动，重复迁移是空操作。
+        assert_eq!(latest("c.md").as_deref(), Some("c"));
+        assert_eq!(move_documents(&data, &root, &pair), 0);
     }
 
     #[test]
