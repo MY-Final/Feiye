@@ -24,6 +24,7 @@ import {
   type Entry,
 } from "../../lib/tauri";
 import { useDocumentStore, type ViewMode } from "../../stores/document";
+import { useTabsStore } from "../../stores/tabs";
 import { useOutlineStore } from "../../stores/outline";
 import { useUiStore } from "../../stores/ui";
 import { useWorkspaceStore } from "../../stores/workspace";
@@ -37,6 +38,10 @@ import {
   migrateCursor,
   restoreCursorFor,
 } from "../editor/cursor-memory";
+import {
+  clearEditorStateCache,
+  forgetEditorState,
+} from "../editor/editor-bridge";
 import {
   getEditorText,
   getEditorView,
@@ -198,6 +203,8 @@ export async function openWorkspaceAt(
       useUiStore.getState().toggleZenMode();
     }
     resetDocument();
+    useTabsStore.getState().clear();
+    clearEditorStateCache();
     await useWorkspaceStore.getState().loadDir("");
     await setSetting("lastWorkspace", info.root);
     await rememberWorkspace(info.root);
@@ -328,7 +335,8 @@ export async function openFile(
     useDocumentStore
       .getState()
       .setDocument(entry.relPath, entry.name, file.modifiedMs);
-    setEditorDocument(file.content);
+    setEditorDocument(file.content, entry.relPath);
+    useTabsStore.getState().addTab(entry.relPath, entry.name);
     requestPreview(file.content, true);
     void rememberLastDocument(entry.relPath);
     useWorkspaceStore.getState().noteRecent(entry.relPath);
@@ -350,8 +358,55 @@ export async function openFile(
     useWorkspaceStore.getState().updateRecent(entry.relPath, null);
     useWorkspaceStore.getState().forgetHistory(entry.relPath);
     useWorkspaceStore.getState().forgetForward(entry.relPath);
+    useTabsStore.getState().removeTab(entry.relPath);
     toastError("打开文件失败", error);
   }
+}
+
+/** 关闭一个标签；关闭当前文档时切到相邻标签，并先处理未保存内容。 */
+export async function closeDocumentTab(path: string): Promise<void> {
+  const tabs = useTabsStore.getState().tabs;
+  const index = tabs.findIndex((tab) => tab.path === path);
+  if (index < 0) return;
+
+  if (useDocumentStore.getState().path !== path) {
+    useTabsStore.getState().removeTab(path);
+    forgetEditorState(path);
+    return;
+  }
+  if (!(await guardUnsaved())) return;
+
+  // 先按关闭前的顺序找邻居，再从列表里摘掉。
+  const next = tabs[index + 1] ?? tabs[index - 1] ?? null;
+  useTabsStore.getState().removeTab(path);
+  forgetEditorState(path);
+  if (next) {
+    await openFile(
+      { name: next.name, relPath: next.path, isDir: false },
+      false,
+      undefined,
+      false,
+    );
+  } else {
+    resetDocument();
+  }
+}
+
+/** Ctrl+Tab / Ctrl+Shift+Tab 在已打开的标签之间循环切换。 */
+export async function switchDocumentTab(delta: number): Promise<void> {
+  const tabs = useTabsStore.getState().tabs;
+  if (tabs.length < 2) return;
+  const active = useDocumentStore.getState().path;
+  const index = tabs.findIndex((tab) => tab.path === active);
+  const target =
+    tabs[((index < 0 ? 0 : index) + delta + tabs.length) % tabs.length];
+  if (!target || target.path === active) return;
+  await openFile(
+    { name: target.name, relPath: target.path, isDir: false },
+    false,
+    undefined,
+    false,
+  );
 }
 
 /** 「上一篇」的目标：本次会话里真正上一步打开的笔记。 */
@@ -590,6 +645,7 @@ export async function renameEntry(entry: Entry): Promise<void> {
     await useWorkspaceStore.getState().refreshDir(parentRel(entry.relPath));
     useWorkspaceStore.getState().updateRecent(entry.relPath, renamed.relPath);
     useWorkspaceStore.getState().remapHistory(entry.relPath, renamed.relPath);
+    useTabsStore.getState().remap(entry.relPath, renamed.relPath);
     // 改名后路径变了，光标记录也换到新路径，重新打开时才能接着上次的位置写。
     migrateCursor(entry.relPath, renamed.relPath);
 
@@ -669,6 +725,7 @@ export async function moveEntry(
 
     useWorkspaceStore.getState().updateRecent(entry.relPath, moved.relPath);
     useWorkspaceStore.getState().remapHistory(entry.relPath, moved.relPath);
+    useTabsStore.getState().remap(entry.relPath, moved.relPath);
     migrateCursor(entry.relPath, moved.relPath);
 
     const doc = useDocumentStore.getState();
@@ -811,6 +868,7 @@ export async function deleteEntry(entry: Entry): Promise<void> {
     useWorkspaceStore.getState().updateRecent(entry.relPath, null);
     // 删除目录时，历史和前进栈里它下面的笔记也一起摘掉，返回不再撞旧路径。
     useWorkspaceStore.getState().remapHistory(entry.relPath, null);
+    useTabsStore.getState().remap(entry.relPath, null);
 
     const doc = useDocumentStore.getState();
     if (doc.path && isWithin(doc.path, entry.relPath)) {

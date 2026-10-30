@@ -122,7 +122,7 @@ export function HistoryDialog() {
     if (useDocumentStore.getState().viewMode === "preview") {
       await changeViewMode("split");
     }
-    setEditorDocument(content);
+    setEditorDocument(content, docPath);
     useDocumentStore.getState().markDirty(true);
     requestPreview(content, true);
     close();

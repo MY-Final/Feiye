@@ -19,11 +19,13 @@ import {
 import { PreviewPane } from "../features/preview/PreviewPane";
 import { CommandPalette } from "../features/commands/CommandPalette";
 import { HistoryDialog } from "../features/history/HistoryDialog";
+import { TabBar } from "../features/tabs/TabBar";
 import { SettingsDialog } from "../features/settings/SettingsDialog";
 import { WorkspaceSidebar } from "../features/workspace/WorkspaceSidebar";
 import {
   changeViewMode,
   chooseWorkspace,
+  closeDocumentTab,
   createMarkdownFile,
   forwardDocumentPath,
   newDocumentNearActive,
@@ -34,6 +36,7 @@ import {
   renameActiveDocument,
   restoreLastWorkspace,
   saveDocumentAs,
+  switchDocumentTab,
 } from "../features/workspace/workspace-actions";
 import { APP_NAME, APP_TAGLINE } from "../lib/app-info";
 import { baseName, parentRel } from "../lib/paths";
@@ -229,6 +232,19 @@ export default function App() {
       }
 
       if (dialogOpen()) return;
+
+      // Ctrl+Tab / Ctrl+Shift+Tab 在已打开的标签之间切换；Ctrl+W 关闭当前标签。
+      if (mod && event.key === "Tab") {
+        event.preventDefault();
+        void switchDocumentTab(event.shiftKey ? -1 : 1);
+        return;
+      }
+      if (mod && !event.shiftKey && event.key.toLowerCase() === "w") {
+        event.preventDefault();
+        const path = useDocumentStore.getState().path;
+        if (path) void closeDocumentTab(path);
+        return;
+      }
 
       // 查找面板等输入框里，组合键交给输入框自己处理（全选、粘贴、再次查找）；
       // 只保留"保存"这个希望随时生效的动作。
@@ -566,7 +582,9 @@ export default function App() {
       <div className="app-body">
         {hasWorkspace && sidebarVisible && !zenMode ? <WorkspaceSidebar /> : null}
 
-        <main
+        <div className="main-column">
+          <TabBar />
+          <main
           className={`workspace-main mode-${viewMode}${preferences.lineNumbers ? "" : " hide-line-numbers"}`}
           style={
             {
@@ -704,7 +722,8 @@ export default function App() {
               </div>
             </div>
           )}
-        </main>
+          </main>
+        </div>
       </div>
 
       <StatusBar />
