@@ -358,7 +358,15 @@ export async function openFile(
       .setDocument(entry.relPath, entry.name, file.modifiedMs);
     setEditorDocument(file.content, entry.relPath);
     useTabsStore.getState().addTab(entry.relPath, entry.name);
-    requestPreview(file.content, true);
+    // 所见 / 源码模式下预览是隐藏的：不在这里让 Worker 解析整篇，
+    // 切到分栏 / 预览时 changeViewMode 会立即按当前内容补一次。
+    const previewMode = useDocumentStore.getState().viewMode;
+    if (previewMode === "split" || previewMode === "preview") {
+      requestPreview(file.content, true);
+    } else {
+      // 顺手释放上一篇留下的预览 HTML；切到分栏时再按当前内容重新解析。
+      clearPreview();
+    }
     void rememberLastDocument(entry.relPath);
     useWorkspaceStore.getState().noteRecent(entry.relPath);
     await expandAncestors(entry.relPath);
