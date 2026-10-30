@@ -14,6 +14,7 @@ import { parentRel } from "../../lib/paths";
 import { getSetting, setSetting, type Entry } from "../../lib/tauri";
 import { useDocumentStore } from "../../stores/document";
 import { useOutlineStore } from "../../stores/outline";
+import { useSettingsStore } from "../../stores/settings";
 import { useUiStore } from "../../stores/ui";
 import { useWorkspaceStore } from "../../stores/workspace";
 import {
@@ -192,6 +193,9 @@ function TreeNode({ entry, depth, onMenuAt }: TreeNodeProps) {
     Boolean(state.loading[entry.relPath]),
   );
   const active = useDocumentStore((state) => state.path === entry.relPath);
+  const hideExt = useSettingsStore(
+    (state) => state.preferences.hideFileExtensions,
+  );
   const toggleDir = useWorkspaceStore((state) => state.toggleDir);
   const rowRef = useRef<HTMLButtonElement>(null);
 
@@ -252,7 +256,11 @@ function TreeNode({ entry, depth, onMenuAt }: TreeNodeProps) {
         <span className={`tree-icon ${entry.isDir ? "folder" : "markdown"}`}>
           {entry.isDir ? <FolderIcon /> : <MarkdownIcon />}
         </span>
-        <span className="tree-label">{entry.name}</span>
+        <span className="tree-label">
+          {entry.isDir || !hideExt
+            ? entry.name
+            : entry.name.replace(/\.(md|markdown|mdx)$/i, "")}
+        </span>
       </button>
 
       {entry.isDir && expanded ? (

@@ -19,6 +19,24 @@
 
 <!-- 从这里开始追加 -->
 
+## 第 89 轮 · 2026-10-30 13:32
+**用户需求**：文件树每一行都挂着 `.md`，名字长了就挤成一行省略号，和别的笔记应用比显得啰嗦。希望能把扩展名藏起来，只显示标题；需要确认真实文件名时，悬停还能看到。
+
+**产品经理**：做。本地优先应用里文件名仍是真实文件，扩展名不该被强行隐藏，所以做成设置项、默认保持现状；打开后树里只留可读的标题，悬停 title 仍是完整文件名，两边都不丢信息。
+
+**前端**：影响 `src/stores/settings.ts`（新增布尔偏好，含默认值与载入校验）、`src/features/settings/SettingsDialog.tsx`（视图分类加开关）、`src/features/workspace/WorkspaceSidebar.tsx`（按偏好去掉 md / markdown / mdx 后缀，目录与标题不变）。风险：仅影响显示，重命名、链接生成仍用完整文件名。工作量 S。
+
+**后端**：无改动。工作量 0。
+
+**裁决**：做
+
+**改动**：`src/stores/settings.ts`、`src/features/settings/SettingsDialog.tsx`、`src/features/workspace/WorkspaceSidebar.tsx`
+
+**构建**：通过（bun run build，520ms）
+
+---
+
+
 ## 第 88 轮 · 2026-10-30 13:29
 **用户需求**：只用键盘整理笔记时，F2 重命名、Delete 删除都能用，但「新建文件夹」「复制链接」这些只藏在右键菜单里，键盘按不出来。期望在文件树的某一行上能直接用键盘打开这个菜单。
 

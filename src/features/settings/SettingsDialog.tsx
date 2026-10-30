@@ -464,6 +464,26 @@ export function SettingsDialog() {
                   </select>
                 </Row>
 
+                <Row
+                  label="隐藏扩展名"
+                  hint="文件树只显示笔记名，悬停仍能看到完整文件名"
+                >
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={preferences.hideFileExtensions}
+                    aria-label="隐藏扩展名"
+                    className={`settings-switch${preferences.hideFileExtensions ? " on" : ""}`}
+                    onClick={() =>
+                      update({
+                        hideFileExtensions: !preferences.hideFileExtensions,
+                      })
+                    }
+                  >
+                    <span aria-hidden="true" />
+                  </button>
+                </Row>
+
                 <Row label="显示行号" hint="仅影响源码与分栏模式">
                   <button
                     type="button"
