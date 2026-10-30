@@ -74,6 +74,54 @@ async function inlineLocalImages(
   return { html: template.innerHTML, inlined };
 }
 
+/** 预览图片的 feiyeimg 地址还原成工作区相对路径；不是本工作区的返回 null。 */
+function feiyeimgRel(src: string, root: string | null): string | null {
+  if (!root || !/^[a-z]+:\/\//i.test(src)) return null;
+  let pathname = "";
+  try {
+    pathname = decodeURIComponent(new URL(src).pathname);
+  } catch {
+    return null;
+  }
+  const abs = pathname.replace(/^\/+/, "").replace(/\\/g, "/");
+  const base = root.replace(/\\/g, "/").replace(/\/+$/, "");
+  if (!abs.toLowerCase().startsWith(`${base.toLowerCase()}/`)) return null;
+  return abs.slice(base.length + 1);
+}
+
+/** 把预览区里选中的内容变成可复制的 HTML，去掉复制按钮等界面装饰。 */
+function previewSelectionHtml(root: string | null): string | null {
+  const body = document.querySelector<HTMLElement>(
+    ".preview-pane .markdown-body",
+  );
+  const selection = window.getSelection();
+  if (!body || !selection || selection.rangeCount === 0) return null;
+  if (selection.isCollapsed) return null;
+  const range = selection.getRangeAt(0);
+  if (!body.contains(range.commonAncestorContainer)) return null;
+
+  const holder = document.createElement("div");
+  holder.append(range.cloneContents());
+  holder
+    .querySelectorAll(".preview-code-copy, .preview-code-lang")
+    .forEach((node) => node.remove());
+  holder.querySelectorAll("h1,h2,h3,h4,h5,h6").forEach((heading) => {
+    heading.removeAttribute("id");
+    heading.removeAttribute("data-heading-index");
+  });
+  // 链接上由预览补的路径提示不该跟着进剪贴板。
+  holder.querySelectorAll<HTMLElement>("[data-link-hint]").forEach((node) => {
+    node.removeAttribute("title");
+    node.removeAttribute("data-link-hint");
+  });
+  holder.querySelectorAll<HTMLImageElement>("img[src]").forEach((image) => {
+    const rel = feiyeimgRel(image.getAttribute("src") ?? "", root);
+    if (rel) image.setAttribute("src", `/${rel}`);
+  });
+
+  return holder.innerHTML.trim() ? holder.innerHTML : null;
+}
+
 export async function copyActiveAsHtml(): Promise<void> {
   const editorView = getEditorView();
   const viewMode = useDocumentStore.getState().viewMode;
@@ -85,14 +133,19 @@ export async function copyActiveAsHtml(): Promise<void> {
       ? editorView!.state.sliceDoc(selection.from, selection.to)
       : "";
   const useSelection = selected.trim().length > 0;
-  const text = useSelection ? selected : getEditorText();
-  if (text === null) return;
   // 渲染等待期间可能已经切到别的笔记；图片路径要以按下快捷键时的文档为准。
   const root = useWorkspaceStore.getState().root;
   const docPath = useDocumentStore.getState().path;
+  // 编辑区没有选区时，尊重在预览区里选中的那段。
+  const previewHtml = useSelection ? null : previewSelectionHtml(root);
+  const usePreviewSelection = previewHtml !== null;
+  const text = useSelection ? selected : getEditorText();
+  if (!usePreviewSelection && text === null) return;
 
   try {
-    const rendered = await renderMarkdownToHtml(text);
+    const rendered = usePreviewSelection
+      ? (previewHtml ?? "")
+      : await renderMarkdownToHtml(text!);
     const { html, inlined } = await inlineLocalImages(rendered, root, docPath);
     const copied = await copyHtml(html);
     const localImages = countLocalImages(html);
@@ -101,7 +154,7 @@ export async function copyActiveAsHtml(): Promise<void> {
     if (localImages > 0) notes.push(`${localImages} 张本地图片在应用外可能无法显示`);
     const warning = notes.length > 0 ? `（${notes.join("；")}）` : "";
     const okMessage =
-      (useSelection
+      (useSelection || usePreviewSelection
         ? "所选内容已复制为 HTML，可直接粘贴到邮件或公众号草稿"
         : "HTML 已复制，可直接粘贴到邮件或公众号草稿") + warning;
     useUiStore
