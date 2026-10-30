@@ -69,7 +69,15 @@ export function TitleBar() {
   const controls = useWindowControls();
 
   return (
-    <header className="titlebar" data-tauri-drag-region="deep">
+    <header
+      className="titlebar"
+      data-tauri-drag-region="deep"
+      // 自绘标题栏没有系统默认行为，双击空白处最大化 / 还原是大家的肌肉记忆。
+      onDoubleClick={(event) => {
+        if ((event.target as HTMLElement).closest("button")) return;
+        void controls.toggleMaximize();
+      }}
+    >
       <div className="titlebar-left">
         <button
           type="button"
