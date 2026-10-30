@@ -665,10 +665,24 @@ export class RuleWidget extends WidgetType {
     return other instanceof RuleWidget;
   }
 
-  toDOM(): HTMLElement {
+  toDOM(view?: EditorView): HTMLElement {
     const wrapper = document.createElement("div");
     wrapper.className = "cm-wysiwyg-hr";
     wrapper.appendChild(document.createElement("hr"));
+
+    // 分隔线只有 1px，CodeMirror 对它所在块的坐标映射会落到文档开头或
+    // 相邻空行。这里在整块可点区域内直接定位到 `---` 起点，进入源码。
+    if (view) {
+      wrapper.addEventListener("mousedown", (event) => {
+        const mouse = event as MouseEvent;
+        if (mouse.button !== 0) return;
+        event.preventDefault();
+        event.stopPropagation();
+        view.dispatch({ selection: { anchor: view.posAtDOM(wrapper, 0) } });
+        view.focus();
+      });
+    }
+
     return wrapper;
   }
 
