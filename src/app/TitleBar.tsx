@@ -84,7 +84,17 @@ export function TitleBar() {
           className="icon-btn"
           title={sidebarVisible ? "收起侧栏 (Ctrl+B)" : "展开侧栏 (Ctrl+B)"}
           disabled={!root}
-          onClick={toggleSidebar}
+          onClick={() => {
+            // 专注模式里侧栏是被整体收起的，单纯切换可见性看不出变化；
+            // 和 Ctrl+B 一样，先退出专注再把侧栏打开。
+            const ui = useUiStore.getState();
+            if (ui.zenMode) {
+              ui.toggleZenMode();
+              if (!ui.sidebarVisible) ui.setSidebarVisible(true);
+              return;
+            }
+            toggleSidebar();
+          }}
         >
           <SidebarIcon />
         </button>
