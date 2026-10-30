@@ -487,21 +487,32 @@ export async function closeDocumentTab(path: string): Promise<void> {
   }
   if (!(await guardUnsaved())) return;
 
-  // 先按关闭前的顺序找邻居，再从列表里摘掉。
-  const next = tabs[index + 1] ?? tabs[index - 1] ?? null;
+  // 从关闭位置向两侧依次尝试其余标签；同样距离时先右侧（原行为）。
+  const candidates = tabs
+    .map((tab, i) => ({ tab, i }))
+    .filter(({ tab }) => tab.path !== path)
+    .sort((a, b) => {
+      const da = Math.abs(a.i - index);
+      const db = Math.abs(b.i - index);
+      if (da !== db) return da - db;
+      return (a.i > index ? 0 : 1) - (b.i > index ? 0 : 1);
+    });
   useTabsStore.getState().removeTab(path);
   forgetEditorState(path);
   forgetPreview(path);
-  if (next) {
+  for (const { tab } of candidates) {
     await openFile(
-      { name: next.name, relPath: next.path, isDir: false },
+      { name: tab.name, relPath: tab.path, isDir: false },
       false,
       undefined,
       false,
     );
-  } else {
-    resetDocument();
+    // 目标文件刚被删 / 打不开时 openFile 会摘掉它的标签并保留当前文档；
+    // 不能停在刚关掉的这篇上（标签已没了），继续试下一个。
+    if (useDocumentStore.getState().path !== path) return;
   }
+  // 没有能打开的其他标签：回到空状态，别留一个没有标签的编辑区。
+  resetDocument();
 }
 
 /** Ctrl+Tab / Ctrl+Shift+Tab 在已打开的标签之间循环切换。 */
