@@ -370,6 +370,47 @@ pub fn export_html(
     export_to(&root, &rel_path, &content)
 }
 
+/// 在导出目录里找第一个空闲的 `.html` 名字。
+/// 文件树只列 Markdown，前端看不到已有的 `.html`，所以由后端直接扫磁盘，
+/// 跨会话 / 外部放入的文件也能正确避让。
+fn next_export_in(root: &Path, parent_rel: &str, name: &str) -> Result<String, AppError> {
+    let ext = Path::new(name)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or_default();
+    if !ext.eq_ignore_ascii_case("html") {
+        return Err(AppError::InvalidPath("导出文件必须以 .html 结尾".into()));
+    }
+    fs_path::validate_name(name)?;
+    let parent = fs_path::resolve_in_workspace(root, parent_rel)?;
+    if !parent.is_dir() {
+        return Err(AppError::NotFound(parent_rel.to_string()));
+    }
+
+    let stem = name.rsplit_once('.').map(|(stem, _)| stem).unwrap_or(name);
+    for index in 1..1000 {
+        let candidate = if index == 1 {
+            name.to_string()
+        } else {
+            format!("{stem}-{index}.html")
+        };
+        if !parent.join(&candidate).exists() {
+            return Ok(candidate);
+        }
+    }
+    Err(AppError::AlreadyExists(name.to_string()))
+}
+
+#[tauri::command]
+pub fn next_export_name(
+    parent_rel_path: String,
+    name: String,
+    state: State<'_, WorkspaceState>,
+) -> Result<String, AppError> {
+    let root = state.root()?;
+    next_export_in(&root, &parent_rel_path, &name)
+}
+
 #[tauri::command]
 pub fn create_file(
     parent_rel_path: String,
@@ -615,6 +656,29 @@ mod tests {
         fs::create_dir(root.join("导出")).unwrap();
         assert!(export_to(&root, "导出/a.html", "z").is_ok());
         assert!(export_to(&root, "缺失/a.html", "z").is_err());
+    }
+
+    #[test]
+    fn finds_free_export_name_on_disk() {
+        let (_temp, root) = workspace();
+        fs::create_dir(root.join("notes")).unwrap();
+
+        assert_eq!(next_export_in(&root, "", "a.html").unwrap(), "a.html");
+        fs::write(root.join("a.html"), "x").unwrap();
+        assert_eq!(next_export_in(&root, "", "a.html").unwrap(), "a-2.html");
+        fs::write(root.join("a-2.html"), "x").unwrap();
+        assert_eq!(next_export_in(&root, "", "a.html").unwrap(), "a-3.html");
+
+        // 不同目录互不影响；非 .html 与不存在的目录都要拒绝。
+        fs::write(root.join("notes/b.html"), "x").unwrap();
+        assert_eq!(
+            next_export_in(&root, "notes", "b.html").unwrap(),
+            "b-2.html"
+        );
+        assert_eq!(next_export_in(&root, "", "b.html").unwrap(), "b.html");
+        assert!(next_export_in(&root, "", "b.md").is_err());
+        assert!(next_export_in(&root, "missing", "b.html").is_err());
+        assert!(next_export_in(&root, "", "../逃逸.html").is_err());
     }
 
     fn read_file_path(root: &Path, rel: &str) -> Result<FileContent, AppError> {

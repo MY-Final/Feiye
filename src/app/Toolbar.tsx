@@ -38,7 +38,7 @@ import { useWorkspaceStore } from "../stores/workspace";
 import { copyHtml } from "../lib/clipboard";
 import { countLocalImages, normalizeImagePath } from "../lib/images";
 import { baseName, parentRel } from "../lib/paths";
-import { describeError, isAppError } from "../lib/tauri";
+import { describeError } from "../lib/tauri";
 import { VIEW_MODES } from "../lib/view-modes";
 
 /** 把预览 HTML 中的工作区图片换成 data URL，超过上限或读取失败时保留原地址。 */
@@ -232,27 +232,14 @@ ${body}
 `;
 }
 
-// 文件树只列 Markdown，已导出的 `.html` 不会出现在 children 里；这里按会话记住导出记录，
-// 让连续导出（改完再导一份）也能避让，键是 `${parent}\u0000${文件名小写}`。
-const exportedHtml = new Set<string>();
-
-/** 同目录已有同名文件时退到 `名字-2.html`，与「另存为」连续保存的默认名一致。 */
-function nextFreeHtmlName(parent: string, leaf: string): string {
-  const entries = useWorkspaceStore.getState().children[parent] ?? [];
-  const used = new Set(
-    entries.filter((item) => !item.isDir).map((item) => item.name.toLowerCase()),
-  );
-  const prefix = `${parent}\u0000`;
-  for (const key of exportedHtml) {
-    if (key.startsWith(prefix)) used.add(key.slice(prefix.length));
-  }
-  if (!used.has(leaf.toLowerCase())) return leaf;
-  const stem = leaf.replace(/\.html$/i, "");
-  for (let n = 2; n < 1000; n += 1) {
-    const candidate = `${stem}-${n}.html`;
-    if (!used.has(candidate.toLowerCase())) return candidate;
-  }
-  return leaf;
+/** 同目录已有同名文件时退到 `名字-2.html`。
+ * 文件树只列 Markdown，前端看不到已有的 `.html`，所以交给后端扫磁盘，
+ * 跨会话或外部放入的文件也能正确避让。 */
+function nextFreeHtmlName(parent: string, leaf: string): Promise<string> {
+  return invoke<string>("next_export_name", {
+    parentRelPath: parent,
+    name: leaf,
+  });
 }
 
 /** 把整篇笔记导出成同目录下的 `.html` 文件；已存在时后端拒绝，不静默覆盖。 */
@@ -268,9 +255,10 @@ export async function exportActiveAsHtml(): Promise<void> {
   if (text === null) return;
 
   const parent = parentRel(docPath);
-  const defaultName = nextFreeHtmlName(
-    parent,
-    `${baseName(docPath).replace(/\.[^./\\]+$/, "") || "笔记"}.html`,
+  const baseLeaf = `${baseName(docPath).replace(/\.[^./\\]+$/, "") || "笔记"}.html`;
+  // 对话框里一打开就给出真正可用的名字，不让用户确认后再被悄悄改名。
+  const defaultName = await nextFreeHtmlName(parent, baseLeaf).catch(
+    () => baseLeaf,
   );
   const name = await ui.askInput({
     title: parent ? `导出 HTML · ${parent}` : "导出 HTML",
@@ -297,7 +285,6 @@ export async function exportActiveAsHtml(): Promise<void> {
     // 用最终落盘的文件名做 `<title>`，撞名顺延后标签页仍与文件名一致。
     const content = standaloneHtml(candidate.replace(/\.html$/i, ""), body);
     await invoke("export_html", { relPath: candidateRel, content });
-    exportedHtml.add(`${parent}\u0000${candidate.toLowerCase()}`);
     // 文件树只列 Markdown，导出的 `.html` 不会出现在树里；
     // 提示里给一个直达入口，点一下就打开所在文件夹并选中文件。
     ui.toast(`已导出 HTML：${candidateRel} · 点击在文件夹中显示`, "info", () => {
@@ -307,28 +294,11 @@ export async function exportActiveAsHtml(): Promise<void> {
     });
     void useWorkspaceStore.getState().refreshDir(parent);
   };
-  const stem = leaf.replace(/\.html$/i, "");
   try {
-    await write(nextFreeHtmlName(parent, leaf));
+    // 写盘前再探测一次：对话框开着时可能有人从外部放进同名文件。
+    await write(await nextFreeHtmlName(parent, leaf));
   } catch (error) {
-    if (!(isAppError(error) && error.code === "already-exists")) {
-      ui.toast(`导出 HTML 失败：${describeError(error)}`, "error");
-      return;
-    }
-    // 同目录可能有别的会话 / 外部放入的 `.html`，会话记录看不到；
-    // 顺着 `名字-2.html`、`名字-3.html`… 试到第一个空闲名，始终不覆盖。
-    for (let n = 2; n <= 50; n += 1) {
-      try {
-        await write(`${stem}-${n}.html`);
-        return;
-      } catch (err) {
-        if (!(isAppError(err) && err.code === "already-exists")) {
-          ui.toast(`导出 HTML 失败：${describeError(err)}`, "error");
-          return;
-        }
-      }
-    }
-    ui.toast(`「${leaf}」及其后 50 个序号都被占用，换个文件名再试`, "error");
+    ui.toast(`导出 HTML 失败：${describeError(error)}`, "error");
   }
 }
 
