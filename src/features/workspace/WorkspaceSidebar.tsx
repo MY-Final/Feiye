@@ -162,6 +162,12 @@ function TreeNode({ entry, depth, onMenu }: TreeNodeProps) {
   );
   const active = useDocumentStore((state) => state.path === entry.relPath);
   const toggleDir = useWorkspaceStore((state) => state.toggleDir);
+  const rowRef = useRef<HTMLButtonElement>(null);
+
+  // 打开文件（含链接跳转、启动恢复）后让它在树里进入可见范围。
+  useEffect(() => {
+    if (active) rowRef.current?.scrollIntoView({ block: "nearest" });
+  }, [active]);
 
   const indent = 4 + depth * 14;
 
@@ -169,6 +175,7 @@ function TreeNode({ entry, depth, onMenu }: TreeNodeProps) {
     <div className="tree-node">
       <button
         type="button"
+        ref={rowRef}
         className={`tree-row${active ? " active" : ""}`}
         style={{ paddingLeft: indent }}
         title={entry.name}
