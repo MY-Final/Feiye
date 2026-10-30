@@ -156,9 +156,12 @@ export function StatusBar() {
       <span className="status-meta">
         {docPath ? (
           <>
-            <span>
-              {cursor.line}:{cursor.column}
-            </span>
+            {viewMode !== "preview" ? (
+              // 纯预览里编辑器不显示，光标行列是切走前的旧值，只会让人误解。
+              <span>
+                {cursor.line}:{cursor.column}
+              </span>
+            ) : null}
             {shownSelectedWords > 0 ? (
               <span className="status-stat" title="当前选区的字数（不含空白）">
                 选中 {shownSelectedWords.toLocaleString("zh-CN")} 字
