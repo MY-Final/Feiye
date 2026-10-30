@@ -55,6 +55,8 @@ export function PreviewPane() {
   } | null>(null);
   // 拖完那一次不算点击，别让浮层跟着关掉。
   const panMoved = useRef(false);
+  // 放大时单击关闭要稍等，给双击复位留出时间，别让第一下就关掉浮层。
+  const closeTimer = useRef<number | null>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const paneRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -266,6 +268,15 @@ export function PreviewPane() {
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zoom]);
+
+  // 浮层关掉后取消还没触发的延迟关闭，别让它关掉下一次打开的浮层。
+  useEffect(() => {
+    if (lightbox) return;
+    if (closeTimer.current !== null) {
+      window.clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  }, [lightbox]);
 
   // 浮层打开时把焦点收进来，关闭后还回去：读屏和键盘都不会停在背后的正文上。
   useEffect(() => {
@@ -524,6 +535,17 @@ export function PreviewPane() {
               panMoved.current = false;
               return;
             }
+            // 放大时留一点时间判断是不是双击复位，再决定关不关。
+            if (zoom !== 1) {
+              if (closeTimer.current !== null) {
+                window.clearTimeout(closeTimer.current);
+              }
+              closeTimer.current = window.setTimeout(() => {
+                closeTimer.current = null;
+                setLightbox(null);
+              }, 250);
+              return;
+            }
             setLightbox(null);
           }}
         >
@@ -571,6 +593,15 @@ export function PreviewPane() {
               panStart.current = null;
               setDragging(false);
             }}
+            onDoubleClick={(event) => {
+              event.stopPropagation();
+              if (closeTimer.current !== null) {
+                window.clearTimeout(closeTimer.current);
+                closeTimer.current = null;
+              }
+              setZoom(1);
+              setPan({ x: 0, y: 0 });
+            }}
           />
           {lightbox.images.length > 1 ? (
             <>
@@ -612,7 +643,7 @@ export function PreviewPane() {
             <span className="image-lightbox-hint">
               {zoom === 1
                 ? "滚轮缩放 · Esc 关闭"
-                : "拖动平移 · 滚轮可调回 100% · Esc 关闭"}
+                : "拖动平移 · 双击复位 · 滚轮缩放 · Esc 关闭"}
             </span>
           </div>
         </div>
