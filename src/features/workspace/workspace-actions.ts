@@ -31,6 +31,18 @@ import {
 } from "../preview/preview-controller";
 
 const MARKDOWN_NAME = /\.(md|markdown|mdx)$/i;
+const HAS_EXTENSION = /\.[^./\\]+$/;
+
+/** 没写扩展名的 Markdown 名称补上 `.md`；已有非 Markdown 扩展名的由校验拦下。 */
+function ensureMarkdownName(value: string): string {
+  return MARKDOWN_NAME.test(value) ? value : `${value}.md`;
+}
+
+/** 输入校验：无扩展名视为可以自动补全，只有写了别的扩展名才报错。 */
+function markdownNameError(value: string): string | null {
+  if (!HAS_EXTENSION.test(value)) return null;
+  return MARKDOWN_NAME.test(value) ? null : "只支持 .md / .markdown / .mdx";
+}
 
 function resetDocument(): void {
   resetAutoSave();
@@ -147,18 +159,17 @@ export async function createMarkdownFile(parent: string): Promise<void> {
     validate: (value) => {
       const trimmed = value.trim();
       if (!trimmed) return "文件名不能为空";
-      if (!MARKDOWN_NAME.test(trimmed)) return "文件名需要以 .md 结尾";
       if (trimmed.includes("/") || trimmed.includes("\\")) {
         return "文件名不能包含路径分隔符";
       }
-      return null;
+      return markdownNameError(trimmed);
     },
   });
 
   if (!name) return;
 
   try {
-    const created = await apiCreateFile(parent, name.trim());
+    const created = await apiCreateFile(parent, ensureMarkdownName(name.trim()));
     await useWorkspaceStore.getState().refreshDir(parent);
     if (parent) await useWorkspaceStore.getState().expandDir(parent);
     await openFile(created);
@@ -218,8 +229,8 @@ export async function renameEntry(entry: Entry): Promise<void> {
       if (trimmed.includes("/") || trimmed.includes("\\")) {
         return "名称不能包含路径分隔符";
       }
-      if (!entry.isDir && !MARKDOWN_NAME.test(trimmed)) {
-        return "文件名需要以 .md 结尾";
+      if (!entry.isDir) {
+        return markdownNameError(trimmed);
       }
       return null;
     },
@@ -227,10 +238,11 @@ export async function renameEntry(entry: Entry): Promise<void> {
 
   if (!nextName) return;
   const trimmed = nextName.trim();
-  if (trimmed === entry.name) return;
+  const target = entry.isDir ? trimmed : ensureMarkdownName(trimmed);
+  if (target === entry.name) return;
 
   try {
-    const renamed = await apiRenameEntry(entry.relPath, trimmed);
+    const renamed = await apiRenameEntry(entry.relPath, target);
     await useWorkspaceStore.getState().refreshDir(parentRel(entry.relPath));
 
     const doc = useDocumentStore.getState();
