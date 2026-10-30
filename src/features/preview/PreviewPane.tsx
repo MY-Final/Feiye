@@ -539,10 +539,12 @@ export function PreviewPane() {
     const body = bodyRef.current;
     if (!pane || !body) return;
 
+    // HTML 每变一次重建标题列表；滚动时不再每帧整篇 querySelectorAll。
+    const headings = previewHeadingElements(body);
     let frame: number | null = null;
     const update = () => {
       frame = null;
-      const index = previewActiveHeadingIndex(pane, body);
+      const index = previewActiveHeadingIndex(pane, headings);
       useOutlineStore.getState().setScrollIndex(index < 0 ? null : index);
     };
     const schedule = () => {

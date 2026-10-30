@@ -32,17 +32,31 @@ export function previewHeadingElements(
 /**
  * 预览区当前顶部对应的标题下标；还没滚到第一个标题时返回 -1。
  * 只读位置，不动滚动，供大纲高亮使用。
+ *
+ * 标题按文档顺序单调向下排列，用二分查找最后一个顶部不超过阈值的标题：
+ * 滚到长文档末尾时不再每帧从头把几千个标题都量一遍。
  */
 export function previewActiveHeadingIndex(
   pane: HTMLElement,
-  body: HTMLElement,
+  headings: HTMLElement[],
 ): number {
-  const headings = previewHeadingElements(body);
+  const count = headings.length;
+  if (count === 0) return -1;
+  const paneTop = pane.getBoundingClientRect().top;
   const threshold = pane.scrollTop + 12;
+  let low = 0;
+  let high = count - 1;
   let active = -1;
-  for (let index = 0; index < headings.length; index += 1) {
-    if (previewHeadingTop(pane, headings[index]) <= threshold) active = index;
-    else break;
+  while (low <= high) {
+    const mid = (low + high) >> 1;
+    const top =
+      headings[mid].getBoundingClientRect().top - paneTop + pane.scrollTop;
+    if (top <= threshold) {
+      active = mid;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
   }
   return active;
 }
