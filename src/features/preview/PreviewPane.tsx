@@ -55,6 +55,7 @@ export function PreviewPane() {
   } | null>(null);
   // 拖完那一次不算点击，别让浮层跟着关掉。
   const panMoved = useRef(false);
+  const imageRef = useRef<HTMLImageElement>(null);
   const paneRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const lightboxRef = useRef<HTMLDivElement>(null);
@@ -236,8 +237,34 @@ export function PreviewPane() {
     setPan({ x: 0, y: 0 });
   }, [lightbox?.index]);
 
+  // 放大后拖动最多让图片边缘贴住可视区边缘，不让整张图被拖出屏幕。
+  // 某个方向放大后仍小于可视区时，该方向锁在居中。
+  const clampPan = (x: number, y: number) => {
+    const image = imageRef.current;
+    const box = lightboxRef.current;
+    if (!image || !box) return { x, y };
+    const style = getComputedStyle(box);
+    const availW =
+      box.clientWidth -
+      parseFloat(style.paddingLeft) -
+      parseFloat(style.paddingRight);
+    const availH =
+      box.clientHeight -
+      parseFloat(style.paddingTop) -
+      parseFloat(style.paddingBottom);
+    const maxX = Math.max(0, (image.offsetWidth * zoom - availW) / 2);
+    const maxY = Math.max(0, (image.offsetHeight * zoom - availH) / 2);
+    return {
+      x: Math.min(maxX, Math.max(-maxX, x)),
+      y: Math.min(maxY, Math.max(-maxY, y)),
+    };
+  };
+
   useEffect(() => {
-    if (zoom === 1) setPan({ x: 0, y: 0 });
+    setPan((current) =>
+      zoom === 1 ? { x: 0, y: 0 } : clampPan(current.x, current.y),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zoom]);
 
   // 浮层打开时把焦点收进来，关闭后还回去：读屏和键盘都不会停在背后的正文上。
@@ -501,6 +528,7 @@ export function PreviewPane() {
           }}
         >
           <img
+            ref={imageRef}
             src={lightboxImage.src}
             alt={lightboxImage.alt}
             draggable={false}
@@ -529,7 +557,7 @@ export function PreviewPane() {
               const dx = event.clientX - start.x;
               const dy = event.clientY - start.y;
               if (Math.abs(dx) + Math.abs(dy) > 3) panMoved.current = true;
-              setPan({ x: start.panX + dx, y: start.panY + dy });
+              setPan(clampPan(start.panX + dx, start.panY + dy));
             }}
             onPointerUp={(event) => {
               if (!panStart.current) return;
