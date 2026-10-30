@@ -1,5 +1,6 @@
 import { useDocumentStore } from "../stores/document";
 import { useEditorStore } from "../stores/editor";
+import { useSettingsStore } from "../stores/settings";
 import { useWorkspaceStore } from "../stores/workspace";
 
 function formatSavedAt(ms: number): string {
@@ -30,6 +31,9 @@ export function StatusBar() {
   const cursor = useDocumentStore((state) => state.cursor);
   const stats = useDocumentStore((state) => state.stats);
   const selectedWords = useEditorStore((state) => state.selectedWords);
+  const autoSaveOff = useSettingsStore(
+    (state) => state.preferences.autoSaveDelay <= 0,
+  );
 
   const savedAt =
     savedModifiedMs !== null ? formatSavedAt(savedModifiedMs) : "";
@@ -38,7 +42,9 @@ export function StatusBar() {
     : dirty
       ? saveBlocked
         ? "保存暂停"
-        : "待保存"
+        : autoSaveOff
+          ? "未保存 · Ctrl+S"
+          : "待保存"
       : savedAt
         ? `已保存 ${savedAt}`
         : "已保存";
@@ -52,6 +58,9 @@ export function StatusBar() {
       ? new Date(savedModifiedMs).toLocaleString("zh-CN")
       : null,
     saveBlocked,
+    dirty && autoSaveOff && !saveBlocked
+      ? "自动保存已关闭，按 Ctrl+S 保存"
+      : null,
   ]
     .filter(Boolean)
     .join(" · ");
