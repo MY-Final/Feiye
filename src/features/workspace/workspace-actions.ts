@@ -318,9 +318,12 @@ export async function renameEntry(entry: Entry): Promise<void> {
 
     const doc = useDocumentStore.getState();
     if (doc.path === entry.relPath) {
-      void clearRecoverySnapshot(entry.relPath);
+      // 恢复副本跟着改名迁移，而不是直接删掉：改名后若立刻崩溃，
+      // 未保存的内容仍能找回。
+      const oldPath = doc.path;
       doc.renameActive(renamed.relPath, renamed.name);
       void setSetting("lastDocument", renamed.relPath);
+      void migrateRecoverySnapshot(oldPath, renamed.relPath);
     } else if (entry.isDir && doc.path && isWithin(doc.path, entry.relPath)) {
       // 当前文档所在目录被改名：保持文档打开，只把路径前缀换成新目录，
       // 正文、脏状态与自动保存都继续，避免静默丢失未保存内容。
