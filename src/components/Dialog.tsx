@@ -47,16 +47,24 @@ function ConfirmDialog({ request }: { request: ConfirmRequest }) {
     request.buttons.find((button) => button.value === "cancel")?.value ??
     request.buttons[request.buttons.length - 1]?.value ??
     "cancel";
+  // 回车只认主按钮；「移动到回收站」这类危险按钮必须真的点一下。
+  const primaryValue =
+    request.buttons.find((button) => button.tone === "primary")?.value ?? null;
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         useUiStore.getState().resolveConfirm(cancelValue);
+        return;
+      }
+      if (event.key === "Enter" && primaryValue) {
+        event.preventDefault();
+        useUiStore.getState().resolveConfirm(primaryValue);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [cancelValue]);
+  }, [cancelValue, primaryValue]);
 
   return (
     <div
