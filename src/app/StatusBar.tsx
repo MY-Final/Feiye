@@ -1,3 +1,4 @@
+import { saveActiveDocument } from "../features/editor/save";
 import { useDocumentStore } from "../stores/document";
 import { useEditorStore } from "../stores/editor";
 import { useSettingsStore } from "../stores/settings";
@@ -88,16 +89,29 @@ export function StatusBar() {
               {stats.words.toLocaleString("zh-CN")} 字
             </span>
             <span>UTF-8</span>
-            <span
-              className={`status-save${dirty ? " status-dirty" : ""}${
-                saveBlocked ? " status-blocked" : ""
-              }`}
-              title={saveTitle || undefined}
-            >
-              <span key={saveKey} className="status-save-text">
-                {saveLabel}
+            {saveBlocked ? (
+              // 自动保存被冲突或错误挡下后，状态栏直接作为重试入口，
+              // 不用让用户自己猜「按 Ctrl+S」。
+              <button
+                type="button"
+                className="status-save status-blocked status-action"
+                title={saveTitle || "点击重试保存"}
+                onClick={() => void saveActiveDocument()}
+              >
+                <span key={saveKey} className="status-save-text">
+                  {saveLabel}
+                </span>
+              </button>
+            ) : (
+              <span
+                className={`status-save${dirty ? " status-dirty" : ""}`}
+                title={saveTitle || undefined}
+              >
+                <span key={saveKey} className="status-save-text">
+                  {saveLabel}
+                </span>
               </span>
-            </span>
+            )}
           </>
         ) : null}
       </span>

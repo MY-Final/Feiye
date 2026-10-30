@@ -1320,3 +1320,17 @@ body.is-resizing-split * {
     margin-left: auto;
   }
 }
+
+/* 状态栏里可点的保存状态（保存被挡下时）。 */
+.status-action {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--danger);
+  cursor: pointer;
+}
+
+.status-action:hover .status-save-text {
+  text-decoration: underline;
+}
