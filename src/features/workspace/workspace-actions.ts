@@ -134,6 +134,7 @@ function resetDocument(): void {
   // 文档被整体清空（切换笔记库、删除当前笔记、关闭最后一个标签）时，
   // 任何仍在进行的打开都应作废，别让它把旧笔记装回来。
   openRequestSeq += 1;
+  pendingOpenPath = null;
   resetAutoSave();
   captureActiveCursor();
   setEditorDocument("");
@@ -340,6 +341,14 @@ export async function collapseAllKeepingActive(): Promise<void> {
  * 先发起的读盘即使后返回（或用户点回当前这篇），也不能覆盖后来的选择。
  */
 let openRequestSeq = 0;
+/** 正在打开的目标路径：关掉它的标签时，这次仍在读盘的打开要作废。 */
+let pendingOpenPath: string | null = null;
+
+function cancelPendingOpen(path: string): void {
+  if (pendingOpenPath !== path) return;
+  pendingOpenPath = null;
+  openRequestSeq += 1;
+}
 
 export async function openFile(
   entry: Entry,
@@ -349,9 +358,19 @@ export async function openFile(
 ): Promise<void> {
   if (entry.isDir) return;
   const requestId = ++openRequestSeq;
+  pendingOpenPath = entry.relPath;
+  const finishPending = () => {
+    if (requestId === openRequestSeq) pendingOpenPath = null;
+  };
   // 点回当前这篇：作废仍在进行的打开，最后点的算数。
-  if (useDocumentStore.getState().path === entry.relPath) return;
-  if (!(await guardUnsaved())) return;
+  if (useDocumentStore.getState().path === entry.relPath) {
+    finishPending();
+    return;
+  }
+  if (!(await guardUnsaved())) {
+    finishPending();
+    return;
+  }
   if (requestId !== openRequestSeq) return;
 
   try {
@@ -374,6 +393,7 @@ export async function openFile(
       .setDocument(entry.relPath, entry.name, file.modifiedMs);
     setEditorDocument(file.content, entry.relPath);
     useTabsStore.getState().addTab(entry.relPath, entry.name);
+    finishPending();
     // 所见 / 源码模式下预览是隐藏的：不在这里让 Worker 解析整篇，
     // 切到分栏 / 预览时 changeViewMode 会立即按当前内容补一次。
     const previewMode = useDocumentStore.getState().viewMode;
@@ -398,6 +418,7 @@ export async function openFile(
   } catch (error) {
     // 已过期（后来点了别的笔记）的失败不必提示，也别动标签栏。
     if (requestId !== openRequestSeq) return;
+    finishPending();
     if (silent) {
       void rememberLastDocument(null);
       return;
@@ -418,6 +439,8 @@ export async function closeDocumentTab(path: string): Promise<void> {
   const tabs = useTabsStore.getState().tabs;
   const index = tabs.findIndex((tab) => tab.path === path);
   if (index < 0) return;
+  // 这篇还在读盘时被关掉：作废这次打开，别让读完后自己把标签加回来。
+  cancelPendingOpen(path);
 
   if (useDocumentStore.getState().path !== path) {
     useTabsStore.getState().removeTab(path);
