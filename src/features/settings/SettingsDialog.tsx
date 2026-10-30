@@ -4,6 +4,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { trapTab } from "../../components/Dialog";
 import { SlidingSegmented } from "../../components/SlidingSegmented";
 import { APP_NAME, APP_NAME_EN, APP_TAGLINE } from "../../lib/app-info";
+import { getSetting, setSetting } from "../../lib/tauri";
 import { VIEW_MODES } from "../../lib/view-modes";
 import {
   flushPreferences,
@@ -213,9 +214,17 @@ export function SettingsDialog() {
 
   useEffect(() => {
     if (!open) return;
-    setCategory("appearance");
+    // 记住上次停留的分类：反复调视图设置时不用每次都点一遍。
+    let disposed = false;
+    void getSetting<unknown>("settingsCategory").then((value) => {
+      if (disposed) return;
+      if (CATEGORIES.some((item) => item.id === value)) {
+        setCategory(value as Category);
+      }
+    });
     const frame = requestAnimationFrame(() => dialogRef.current?.focus());
     return () => {
+      disposed = true;
       cancelAnimationFrame(frame);
       // Esc、齿轮或遮罩关闭时也把待写入的偏好落盘。
       void flushPreferences();
@@ -320,7 +329,10 @@ export function SettingsDialog() {
                 role="tab"
                 aria-selected={category === item.id}
                 className={`settings-nav-item${category === item.id ? " active" : ""}`}
-                onClick={() => setCategory(item.id)}
+                onClick={() => {
+                  setCategory(item.id);
+                  void setSetting("settingsCategory", item.id);
+                }}
               >
                 {item.label}
               </button>
