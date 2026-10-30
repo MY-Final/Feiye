@@ -225,6 +225,8 @@ export default function App() {
           event.preventDefault();
           if (useWorkspaceStore.getState().root) {
             void newDocumentNearActive();
+          } else {
+            useUiStore.getState().toast("先打开一个工作区再新建笔记");
           }
           break;
         case "s":
