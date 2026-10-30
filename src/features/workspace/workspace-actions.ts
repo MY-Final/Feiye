@@ -504,13 +504,16 @@ function cancelPendingOpen(path: string): void {
   openRequestSeq += 1;
 }
 
+/** 打开结果：失败时调用方（如搜索面板）可据此清掉已失效的入口。 */
+export type OpenFileResult = "opened" | "cancelled" | "failed" | "superseded";
+
 export async function openFile(
   entry: Entry,
   silent = false,
   anchor?: string,
   recordHistory = true,
-): Promise<void> {
-  if (entry.isDir) return;
+): Promise<OpenFileResult> {
+  if (entry.isDir) return "cancelled";
   const requestId = ++openRequestSeq;
   pendingOpenPath = entry.relPath;
   const finishPending = () => {
@@ -519,19 +522,19 @@ export async function openFile(
   // 点回当前这篇：作废仍在进行的打开，最后点的算数。
   if (useDocumentStore.getState().path === entry.relPath) {
     finishPending();
-    return;
+    return "opened";
   }
   if (!(await guardUnsaved())) {
     finishPending();
-    return;
+    return "cancelled";
   }
-  if (requestId !== openRequestSeq) return;
+  if (requestId !== openRequestSeq) return "superseded";
 
   try {
     const file = await readFile(entry.relPath);
     // 读盘期间又打开了别的笔记：丢弃这次过期结果，
     // 否则会用旧文档覆盖新选择。
-    if (requestId !== openRequestSeq) return;
+    if (requestId !== openRequestSeq) return "superseded";
     // 成功读到新文档后再记一步浏览历史：取消未保存提示、读盘失败都不留脏记录。
     if (recordHistory) {
       const current = useDocumentStore.getState().path;
@@ -560,22 +563,23 @@ export async function openFile(
     void rememberLastDocument(entry.relPath);
     useWorkspaceStore.getState().noteRecent(entry.relPath);
     await expandAncestors(entry.relPath);
-    if (requestId !== openRequestSeq) return;
+    if (requestId !== openRequestSeq) return "superseded";
     await restoreCursorFor(entry.relPath);
-    if (requestId !== openRequestSeq) return;
+    if (requestId !== openRequestSeq) return "superseded";
     // 从文件树点开笔记后默认就要接着写：把焦点交给正文，
     // 纯预览模式没有可见的编辑区，不抢焦点。
     if (useDocumentStore.getState().viewMode !== "preview") {
       getEditorView()?.focus();
     }
     if (anchor) jumpToAnchorInOpenDocument(anchor);
+    return "opened";
   } catch (error) {
     // 已过期（后来点了别的笔记）的失败不必提示，也别动标签栏。
-    if (requestId !== openRequestSeq) return;
+    if (requestId !== openRequestSeq) return "superseded";
     finishPending();
     if (silent) {
       void rememberLastDocument(null);
-      return;
+      return "failed";
     }
     // 可能是文件已在应用外被删除：从最近打开、浏览历史与前进栈里摘掉，
     // 避免反复点开 / 反复按 Alt+→ 都报同一个错。
@@ -585,6 +589,7 @@ export async function openFile(
     useTabsStore.getState().removeTab(entry.relPath);
     forgetPreview(entry.relPath);
     toastError("打开文件失败", error);
+    return "failed";
   }
 }
 
