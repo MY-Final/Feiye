@@ -35,3 +35,35 @@ export async function copyText(text: string): Promise<boolean> {
     return false;
   }
 }
+
+function copyRichViaSelection(html: string): boolean {
+  const active =
+    document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+  const holder = document.createElement("div");
+  holder.contentEditable = "true";
+  holder.innerHTML = html;
+  holder.style.cssText = "position:fixed;top:-1000px;opacity:0";
+  document.body.append(holder);
+
+  try {
+    const range = document.createRange();
+    range.selectNodeContents(holder);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    return document.execCommand("copy");
+  } catch {
+    return false;
+  } finally {
+    window.getSelection()?.removeAllRanges();
+    holder.remove();
+    active?.focus({ preventScroll: true });
+  }
+}
+
+/** 把 HTML 同时以富文本与纯文本写进剪贴板，可直接粘贴到邮件或公众号草稿。 */
+export async function copyHtml(html: string): Promise<boolean> {
+  return copyRichViaSelection(html) || copyText(html);
+}

@@ -2,7 +2,7 @@ import { redo, undo } from "@codemirror/commands";
 import { useRef, type ReactNode } from "react";
 
 import { SlidingSegmented } from "../components/SlidingSegmented";
-import { runEditorCommand } from "../features/editor/editor-bridge";
+import { getEditorText, runEditorCommand } from "../features/editor/editor-bridge";
 import { insertImageFiles } from "../features/editor/image-insert";
 import {
   insertHorizontalRule,
@@ -23,11 +23,32 @@ import {
   renameActiveDocument,
   saveDocumentAs,
 } from "../features/workspace/workspace-actions";
+import { renderMarkdownToHtml } from "../features/preview/preview-controller";
 import { useDocumentStore } from "../stores/document";
 import { useEditorStore } from "../stores/editor";
 import { useUiStore } from "../stores/ui";
 import { useWorkspaceStore } from "../stores/workspace";
+import { copyHtml } from "../lib/clipboard";
 import { VIEW_MODES } from "../lib/view-modes";
+
+async function copyActiveAsHtml(): Promise<void> {
+  const text = getEditorText();
+  if (text === null) return;
+
+  try {
+    const html = await renderMarkdownToHtml(text);
+    const copied = await copyHtml(html);
+    useUiStore
+      .getState()
+      .toast(
+        copied ? "HTML 已复制，可直接粘贴到邮件或公众号草稿" : "复制 HTML 失败，请重试",
+        copied ? "info" : "error",
+      );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    useUiStore.getState().toast(`生成 HTML 失败：${message}`, "error");
+  }
+}
 
 function UndoIcon() {
   return (
@@ -198,6 +219,16 @@ export function Toolbar() {
           onClick={() => void saveDocumentAs()}
         >
           另存为
+        </button>
+        <button
+          type="button"
+          className="toolbar-text-btn"
+          title="按预览排版复制 HTML，可直接粘贴到邮件或公众号草稿"
+          disabled={!hasDoc}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => void copyActiveAsHtml()}
+        >
+          复制 HTML
         </button>
         <button
           type="button"
