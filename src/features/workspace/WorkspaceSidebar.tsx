@@ -214,6 +214,9 @@ function TreeNode({ entry, depth, onMenuAt }: TreeNodeProps) {
         className={`tree-row${active ? " active" : ""}`}
         style={{ paddingLeft: indent }}
         title={entry.name}
+        role="treeitem"
+        aria-level={depth + 1}
+        aria-selected={active}
         data-depth={depth}
         aria-expanded={entry.isDir ? expanded : undefined}
         onClick={() => {
@@ -266,6 +269,7 @@ function TreeNode({ entry, depth, onMenuAt }: TreeNodeProps) {
       {entry.isDir && expanded ? (
         <div
           className="tree-children"
+          role="group"
           style={{ "--guide-left": `${indent + 8}px` } as CSSProperties}
         >
           {!children && loading ? (
@@ -573,6 +577,8 @@ export function WorkspaceSidebar() {
       {tab === "files" ? (
         <div
           className="tree"
+          role="tree"
+          aria-label="工作区文件"
           onKeyDown={handleTreeKeys}
           onContextMenu={(event) => {
             // 只在空白区域弹出根目录菜单，行上的右键由 TreeNode 处理。
