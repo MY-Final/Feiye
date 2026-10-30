@@ -87,6 +87,7 @@ const SHORTCUT_GROUPS: { title: string; items: [string, string][] }[] = [
       ["Ctrl + Shift + S", "另存为"],
       ["F2", "重命名当前笔记；文件树里作用于选中的那一行"],
       ["Delete", "删除文件树里选中的项（进回收站，需确认）"],
+      ["Shift + F10", "在文件树里打开右键菜单"],
       ["Ctrl + O", "打开文件夹"],
       [
         "Ctrl + B",
