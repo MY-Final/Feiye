@@ -19,6 +19,28 @@
 
 <!-- 从这里开始追加 -->
 
+## 第 177 轮 · 2026-10-30 18:15
+**用户需求**：写架构笔记时用 ```mermaid 画流程，预览里只看到一段代码 → 希望预览直接画成图；图写错时别整块消失，要能看出错在哪；切换深色主题时图也要跟着换配色。
+
+**产品经理**：做。README 技术栈早就承诺 Mermaid（严格模式），是「计划中」的第一项；只在文档真出现图表时才加载，不拖慢普通笔记。
+
+**前端**：预览 Worker 解析 mdast 时收集 ```mermaid 源码随 HTML 一并返回（`preview-protocol` / `markdown.worker` / `preview-controller`）；`PreviewPane` 在每次 HTML 上屏后按源码匹配代码块，懒加载 `mermaid`（12.2.0，动态 import）渲染成 SVG，替换代码块并保留 `data-source`；主题切换时按源码重画。渲染失败保留源码并显示 Mermaid 的解析错误；先打 `data-mermaid` 标记，避免补「复制代码」按钮。风险：图表源码与普通代码块内容完全相同时会被当成图表（罕见）；「复制 / 导出 HTML」仍是代码块形态，图表 SVG 内联留作后续。工作量 M。
+
+**后端**：无改动。工作量 0。
+
+**裁决**：做
+
+**改动**：`src/features/preview/mermaid.ts`（新增，约 90 行）、`PreviewPane.tsx`、`markdown.worker.ts`、`preview-controller.ts`、`preview-protocol.ts`、`preview.css`（6 个文件）；`package.json` / `bun.lock` 新增 `mermaid@12.2.0`（README 技术栈承诺，经用户要求补齐）；README 计划中移除 Mermaid。
+
+**构建**：通过（`bun run build` 986ms，含 tsc；Mermaid 按需拆成独立 chunk）。
+
+**验证**：CDP（9222，工作区 `D:\clawWorkSpeace\新建文件夹`）建临时 `MermaidTest.md`（流程图 + 时序图 + 普通 js 代码块），整页刷新后打开：2 个 `.mermaid-figure` 均生成 SVG、普通代码块仍有复制按钮、无残留源码块；`ErrorMermaid.md`（非法语法）显示「图表渲染失败：Parse error…」并保留源码；设置里切「深色」后 SVG 样式从 `fill:#333` 变 `#ccc`（重画成功），切回浅色恢复。测试笔记与截图已删除。
+
+**遗留 / 下一轮建议**：「复制 / 导出 HTML」里的 mermaid 仍是代码块，若要图表随 HTML 导出需在主线程渲染后替换（M）；检验计数已满 5，下一轮按规则为检验轮，回归第 173–177 轮。
+
+---
+
+
 ## 第 176 轮 · 2026-10-30 17:51
 **用户需求**：切到纯「预览」读一篇长文，状态栏左边还挂着「102:38」这样的光标行列 → 预览里根本没有编辑器，这个数字是切走前留下的旧位置，读长文时容易被误当成「读到第几行」→ 纯预览时不要显示光标行列，切回源码 / 分栏再出现。
 

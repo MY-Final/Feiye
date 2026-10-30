@@ -40,7 +40,7 @@ function ensureWorker(): Worker | null {
       if (data.id !== latestId) return;
       lastResult = data.error
         ? { html: "", error: data.error }
-        : { html: data.html };
+        : { html: data.html, mermaid: data.mermaid };
       listener?.(lastResult);
     };
     worker.onerror = (event) => {

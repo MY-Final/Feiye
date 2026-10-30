@@ -34,6 +34,8 @@ function findHeadingByAnchor(body: HTMLElement, fragment: string): number {
   );
 }
 import { attachSplitScrollSync } from "./scroll-sync";
+import { renderMermaidBlocks, type MermaidTarget } from "./mermaid";
+import { useSettingsStore } from "../../stores/settings";
 
 /** 会话内记住每篇笔记在纯预览里的阅读位置，切走再切回能接着读。 */
 const PREVIEW_SCROLL_LIMIT = 100;
@@ -93,6 +95,7 @@ export function PreviewPane() {
   const docPath = useDocumentStore((state) => state.path);
   const viewMode = useDocumentStore((state) => state.viewMode);
   const cursorLine = useDocumentStore((state) => state.cursor.line);
+  const themeMode = useSettingsStore((state) => state.preferences.theme);
 
   // 本地图片走工作区作用域的 feiyeimg 协议；远程图片保持原样。
   const html = useMemo(
@@ -494,6 +497,34 @@ export function PreviewPane() {
     return attachSplitScrollSync(pane, body);
   }, [viewMode, html]);
 
+  // ```mermaid 代码块画成图：Worker 只给源码，这里按需懒加载 Mermaid。
+  // 先打标记，避免下面给代码块补「复制」按钮时把图表源码也包一层。
+  // 主题切换时按记住的源码重画，图表不会停在旧配色上。
+  useEffect(() => {
+    const body = bodyRef.current;
+    const sources = result.mermaid;
+    if (!body || !sources?.length) return;
+    const wanted = new Set(sources.map((source) => source.trim()));
+    const targets: MermaidTarget[] = [];
+    for (const pre of body.querySelectorAll("pre")) {
+      const source = (pre.textContent ?? "").trim();
+      if (!wanted.has(source)) continue;
+      pre.dataset.mermaid = "pending";
+      targets.push({ element: pre, source });
+    }
+    for (const figure of body.querySelectorAll<HTMLElement>(
+      "figure.mermaid-figure[data-source]",
+    )) {
+      targets.push({ element: figure, source: figure.dataset.source ?? "" });
+    }
+    if (!targets.length) return;
+    const cancel = { cancelled: false };
+    void renderMermaidBlocks(targets, cancel);
+    return () => {
+      cancel.cancelled = true;
+    };
+  }, [html, result.mermaid, themeMode]);
+
   // 给预览里的每段代码挂一个复制按钮。HTML 由 Worker 生成，
   // 这里在每次渲染后补齐按钮，不改动 Markdown 管线。
   useEffect(() => {
@@ -501,6 +532,7 @@ export function PreviewPane() {
     if (!body) return;
 
     for (const pre of body.querySelectorAll("pre")) {
+      if (pre.dataset.mermaid) continue;
       if (pre.parentElement?.classList.contains("preview-code-block")) {
         continue;
       }

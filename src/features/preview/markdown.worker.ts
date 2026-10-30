@@ -76,12 +76,34 @@ const processor = unified()
   })
   .use(rehypeStringify);
 
+interface MdastNode {
+  type: string;
+  lang?: string | null;
+  value?: string;
+  children?: MdastNode[];
+}
+
+/** 收集 ```mermaid 代码块的源码：Worker 里不能画图，交给主线程渲染。 */
+function collectMermaid(node: MdastNode, out: string[]): void {
+  if (node.type === "code" && (node.lang ?? "").split(/\s+/)[0].toLowerCase() === "mermaid") {
+    out.push(node.value ?? "");
+  }
+  for (const child of node.children ?? []) collectMermaid(child, out);
+}
+
 scope.onmessage = async (event) => {
   const { id, markdown } = event.data;
 
   try {
-    const file = await processor.process(markdown);
-    scope.postMessage({ id, html: String(file) });
+    const tree = processor.parse(markdown) as unknown as MdastNode;
+    const mermaid: string[] = [];
+    collectMermaid(tree, mermaid);
+    const file = await processor.run(tree as never);
+    scope.postMessage({
+      id,
+      html: String(processor.stringify(file)),
+      mermaid: mermaid.length ? mermaid : undefined,
+    });
   } catch (error) {
     scope.postMessage({
       id,

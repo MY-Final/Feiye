@@ -257,6 +257,35 @@
   color: var(--accent);
 }
 
+.markdown-body .mermaid-figure {
+  margin: 1.2em 0;
+  text-align: center;
+}
+
+.markdown-body .mermaid-figure svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.markdown-body .mermaid-figure.is-error {
+  text-align: left;
+}
+
+.markdown-body .mermaid-figure.is-error .mermaid-source {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  overflow-x: auto;
+}
+
+.markdown-body .mermaid-error {
+  margin-top: 6px;
+  color: #c2410c;
+  font-size: 0.85em;
+}
+
 .markdown-body table {
   display: block;
   width: max-content;
