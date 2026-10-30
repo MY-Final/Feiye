@@ -255,10 +255,12 @@ export async function saveDocumentAs(): Promise<void> {
   if (text === null) return;
 
   const parent = parentRel(doc.path);
+  const copyBase = `${doc.name.replace(MARKDOWN_NAME, "")}-副本`;
   const name = await useUiStore.getState().askInput({
     title: "另存为",
     label: "新文件名",
-    initialValue: `${doc.name.replace(MARKDOWN_NAME, "")}-副本.md`,
+    // 连续另存时默认名自动加序号，不再撞上上一篇副本报「目标已存在」。
+    initialValue: nextAvailableName(parent, copyBase, ".md"),
     confirmLabel: "保存副本",
     validate: (value) => {
       const trimmed = value.trim();
