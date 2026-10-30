@@ -98,6 +98,20 @@ export function HistoryDialog() {
     };
   }, [open, docPath, selected]);
 
+  // Esc 与其他弹层一致：直接关掉并把焦点还给打开前的元素。
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      closeHistory();
+      const previous = restoreFocus.current;
+      if (previous?.isConnected) previous.focus();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, closeHistory]);
+
   if (!open) return null;
 
   const close = () => {
