@@ -307,8 +307,20 @@ export async function restoreLastWorkspace(): Promise<void> {
     );
 
     await promptPendingRecoveries();
-  } catch {
-    if (requestId === workspaceOpenSeq) await setSetting("lastWorkspace", null);
+  } catch (error) {
+    if (requestId !== workspaceOpenSeq) return;
+    await setSetting("lastWorkspace", null);
+    // 上次的库被删 / 移走时别静悄悄停在一片空白：说清楚发生了什么，
+    // 并把已经点不开的路径从最近工作区摘掉，空状态里可以直接再打开别的库。
+    const gone = isAppError(error) && error.code === "not-found";
+    if (gone) await forgetWorkspace(last);
+    const label = last.split(/[\\/]/).filter(Boolean).pop() ?? last;
+    useUiStore.getState().toast(
+      gone
+        ? `上次的库已不在：${label}（可能已被删除或移走，已从最近工作区移除）`
+        : `恢复上次工作区失败：${describeError(error)}`,
+      gone ? "info" : "error",
+    );
   } finally {
     // 被后来的切库取代时只放开自己的暂停，不写盘，避免把旧库的中间态记下。
     if (pausedHere) {
