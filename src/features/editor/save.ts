@@ -79,9 +79,10 @@ async function performSave(options: SaveOptions): Promise<boolean> {
         const choice = await useUiStore.getState().ask({
           title: "文件已被其他程序修改",
           message:
-            "磁盘上的内容与编辑器不一致，本次保存没有写入。可以直接另存一份副本，两边的修改都保留；重新加载会丢弃当前未保存的修改。",
+            "磁盘上的内容与编辑器不一致，本次保存没有写入。覆盖保存会用编辑器里的内容替换磁盘版本（外部修改会丢失）；另存副本可保留两边的修改；重新加载会丢弃当前未保存的修改。",
           buttons: [
             { label: "另存副本…", value: "copy", tone: "primary" },
+            { label: "覆盖保存", value: "overwrite", tone: "danger" },
             { label: "重新加载", value: "reload", tone: "danger" },
             { label: "取消", value: "cancel" },
           ],
@@ -94,6 +95,8 @@ async function performSave(options: SaveOptions): Promise<boolean> {
             "../workspace/workspace-actions"
           );
           await saveDocumentAs();
+        } else if (choice === "overwrite") {
+          return await overwriteActiveDocument(path);
         }
       }
     } else {
@@ -111,6 +114,40 @@ async function performSave(options: SaveOptions): Promise<boolean> {
     if (useDocumentStore.getState().path === path) {
       useDocumentStore.getState().setSaving(false);
     }
+  }
+}
+
+/**
+ * 冲突对话框里用户明确选择「覆盖保存」后才走这里：跳过 mtime 校验，
+ * 用编辑器当前内容替换磁盘版本。只在显式点击后发生，不是静默覆盖。
+ */
+async function overwriteActiveDocument(path: string): Promise<boolean> {
+  const text = getEditorText();
+  if (text === null) return false;
+
+  try {
+    const meta = await writeFile(path, text, null);
+    const current = useDocumentStore.getState();
+    if (current.path !== path) return false;
+
+    // 写盘期间若又输入了新内容，保留脏状态；下一次自动保存会写到新基线。
+    const latest = getEditorText();
+    const stillDirty = latest !== null && latest !== text;
+    current.markSaved(meta.modifiedMs, stillDirty);
+    if (!stillDirty) await clearRecoverySnapshot(path);
+
+    useUiStore
+      .getState()
+      .toast("已覆盖保存，磁盘上的外部修改已被替换", "info");
+    return true;
+  } catch (error) {
+    useDocumentStore
+      .getState()
+      .markSaveBlocked(`保存失败：${describeError(error)}`);
+    useUiStore
+      .getState()
+      .toast(`覆盖保存失败：${describeError(error)}`, "error");
+    return false;
   }
 }
 
