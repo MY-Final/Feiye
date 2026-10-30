@@ -416,6 +416,15 @@ export function PreviewPane() {
   }, [html]);
 
   const lightboxImage = lightbox ? lightbox.images[lightbox.index] : null;
+  // 单张图放大时也要报百分比：只看画面变大，分不清放到了几倍。
+  const lightboxStatus = [
+    lightbox && lightbox.images.length > 1
+      ? `${lightbox.index + 1} / ${lightbox.images.length}`
+      : "",
+    zoom !== 1 ? `${Math.round(zoom * 100)}%` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <div
@@ -494,27 +503,20 @@ export function PreviewPane() {
               </button>
             </>
           ) : null}
-          {lightboxImage.alt || lightbox.images.length > 1 || zoom === 1 ? (
-            <div className="image-lightbox-info">
-              {/* 连续截屏时分不清是哪张，把替代文字当作说明贴在底部。 */}
-              {lightboxImage.alt ? (
-                <span className="image-lightbox-caption">
-                  {lightboxImage.alt}
-                </span>
-              ) : null}
-              {lightbox.images.length > 1 ? (
-                <span className="image-lightbox-count">
-                  {lightbox.index + 1} / {lightbox.images.length}
-                  {zoom !== 1 ? ` · ${Math.round(zoom * 100)}%` : ""}
-                </span>
-              ) : null}
-              {zoom === 1 ? (
-                <span className="image-lightbox-hint">
-                  滚轮缩放 · Esc 关闭
-                </span>
-              ) : null}
-            </div>
-          ) : null}
+          <div className="image-lightbox-info">
+            {/* 连续截屏时分不清是哪张，把替代文字当作说明贴在底部。 */}
+            {lightboxImage.alt ? (
+              <span className="image-lightbox-caption">
+                {lightboxImage.alt}
+              </span>
+            ) : null}
+            {lightboxStatus ? (
+              <span className="image-lightbox-count">{lightboxStatus}</span>
+            ) : null}
+            {zoom === 1 ? (
+              <span className="image-lightbox-hint">滚轮缩放 · Esc 关闭</span>
+            ) : null}
+          </div>
         </div>
       ) : null}
     </div>
