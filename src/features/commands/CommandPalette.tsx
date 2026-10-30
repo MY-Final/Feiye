@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 
-import { copyActiveAsHtml, exportActiveAsHtml } from "../../app/Toolbar";
+import {
+  copyActiveAsHtml,
+  exportActiveAsHtml,
+  printActiveDocument,
+} from "../../app/Toolbar";
 import { trapTab } from "../../components/Dialog";
 import { openEditorSearch } from "../editor/editor-bridge";
 import { saveActiveDocument } from "../editor/save";
@@ -116,6 +120,14 @@ export function CommandPalette() {
         hint: "写到当前笔记同目录",
         keywords: "export html 导出",
         run: () => exportActiveAsHtml(),
+      },
+      {
+        id: "print-pdf",
+        title: "导出 PDF…",
+        hint: "按打印版式打开系统打印对话框，可选另存为 PDF",
+        shortcut: "Ctrl+P",
+        keywords: "pdf print 打印 导出 另存",
+        run: () => printActiveDocument(),
       },
       {
         id: "split-preview",
@@ -254,6 +266,7 @@ export function CommandPalette() {
       if (command.id === "search-workspace") return Boolean(root);
       if (command.id === "history") return hasDoc;
       if (command.id === "split-preview") return Boolean(root);
+      if (command.id === "print-pdf") return hasDoc;
       return true;
     });
   }, [docPath, root, historyLength, forwardLength]);

@@ -1,4 +1,5 @@
 import { redo, undo } from "@codemirror/commands";
+import katexCss from "katex/dist/katex.min.css?inline";
 import { invoke } from "@tauri-apps/api/core";
 import { useRef, type ReactNode } from "react";
 
@@ -213,7 +214,7 @@ th,td{border:1px solid #ddd8cc;padding:6px 10px}
 hr{border:0;border-top:1px solid #ddd8cc;margin:2em 0}
 `;
 
-function standaloneHtml(title: string, body: string): string {
+function standaloneHtml(title: string, body: string, extraStyle = ""): string {
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -221,7 +222,7 @@ function standaloneHtml(title: string, body: string): string {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="generator" content="扉页">
 <title>${escapeHtml(title)}</title>
-<style>${EXPORT_STYLE}</style>
+<style>${EXPORT_STYLE}${extraStyle}</style>
 </head>
 <body>
 <main class="markdown-body">
@@ -230,6 +231,77 @@ ${body}
 </body>
 </html>
 `;
+}
+
+/** 打印版式：A4、白底、去掉应用里的页面边距，避免代码块与图片跨页断开。 */
+const PRINT_STYLE = `
+@page{size:A4;margin:18mm 16mm}
+body{background:#fff}
+main{max-width:none;padding:0}
+a{color:inherit;text-decoration:none}
+pre{white-space:pre-wrap;word-break:break-word;break-inside:avoid}
+img,table,blockquote{break-inside:avoid}
+h1,h2,h3,h4{break-after:avoid}
+`;
+
+let printFrame: HTMLIFrameElement | null = null;
+
+function ensurePrintFrame(): HTMLIFrameElement {
+  if (printFrame?.isConnected) return printFrame;
+  const frame = document.createElement("iframe");
+  frame.className = "print-frame";
+  frame.setAttribute("aria-hidden", "true");
+  frame.tabIndex = -1;
+  frame.style.cssText =
+    "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";
+  document.body.appendChild(frame);
+  printFrame = frame;
+  return frame;
+}
+
+/** 生成打印用的完整 HTML（已内联本地图片与 KaTeX 样式），供导出测试与打印共用。 */
+export async function buildPrintableHtml(): Promise<string | null> {
+  const docPath = useDocumentStore.getState().path;
+  if (!docPath) return null;
+  const text = getEditorText();
+  if (text === null) return null;
+  const rendered = await renderMarkdownToHtml(text);
+  const { html } = await inlineLocalImages(
+    rendered,
+    useWorkspaceStore.getState().root,
+    docPath,
+  );
+  const title = baseName(docPath).replace(/\.[^./\\]+$/, "") || "笔记";
+  return standaloneHtml(title, html, `${katexCss}
+${PRINT_STYLE}`);
+}
+
+/**
+ * 导出 PDF：在隐藏 iframe 里按打印版式渲染当前笔记，再打开系统打印对话框；
+ * 用户在对话框里选「另存为 PDF」并选择位置。应用本身不接管 PDF 文件写入。
+ */
+export async function printActiveDocument(): Promise<void> {
+  const ui = useUiStore.getState();
+  if (!useDocumentStore.getState().path) {
+    ui.toast("先打开一篇笔记再导出 PDF");
+    return;
+  }
+  try {
+    const html = await buildPrintableHtml();
+    if (!html) return;
+    const frame = ensurePrintFrame();
+    await new Promise<void>((resolve) => {
+      frame.onload = () => resolve();
+      frame.srcdoc = html;
+    });
+    const win = frame.contentWindow;
+    if (!win) throw new Error("无法打开打印视图");
+    win.focus();
+    win.print();
+    ui.toast("在系统打印对话框中选择「另存为 PDF」即可导出", "info");
+  } catch (error) {
+    ui.toast(`导出 PDF 失败：${describeError(error)}`, "error");
+  }
 }
 
 /** 同目录已有同名文件时退到 `名字-2.html`。

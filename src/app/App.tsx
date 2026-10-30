@@ -17,6 +17,7 @@ import {
   saveActiveDocument,
 } from "../features/editor/save";
 import { PreviewPane } from "../features/preview/PreviewPane";
+import { printActiveDocument } from "./Toolbar";
 import { CommandPalette } from "../features/commands/CommandPalette";
 import { HistoryDialog } from "../features/history/HistoryDialog";
 import { SplitPane } from "../features/split/SplitPane";
@@ -234,6 +235,13 @@ export default function App() {
       }
 
       if (dialogOpen()) return;
+
+      // 导出 PDF：Ctrl+P 打开打印版式，系统对话框里可另存为 PDF。
+      if (mod && !event.shiftKey && event.key.toLowerCase() === "p") {
+        event.preventDefault();
+        void printActiveDocument();
+        return;
+      }
 
       // 分屏对照：Ctrl+\，开关右侧另一篇笔记的预览。
       if (mod && event.key === "\\") {

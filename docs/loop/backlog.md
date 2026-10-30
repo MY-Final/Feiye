@@ -19,6 +19,17 @@
 
 <!-- 从这里开始追加 -->
 
+## 第 189 轮 · 2026-10-30 20:15
+**用户需求**：写完一篇带代码、公式和图片的笔记，想发给不用 Markdown 的人 → 现在只能导 HTML / 复制富文本，对方未必会开浏览器看，也不方便打印 → 期望按打印版式一键导出 PDF。
+**产品经理**：做。本地优先、不新增依赖，走系统打印对话框（「另存为 PDF」）即可；不是静默写盘，用户对版式与打印目标有最终控制。
+**前端**：`app/Toolbar.tsx` 增 `buildPrintableHtml`（复用预览 Worker 渲染、内联图片、嵌入 KaTeX CSS 与 A4 打印样式）/ `printActiveDocument`（隐藏 iframe + `print()`）；`app/App.tsx` 绑定 `Ctrl+P`；`commands/CommandPalette.tsx` 增「导出 PDF…」。风险：WebView2 打印对话框阻塞 UI，已在测试中用 `buildPrintableHtml` 单独验。
+**后端**：无。
+**裁决**：做。
+**改动**：`src/app/Toolbar.tsx`、`src/app/App.tsx`、`src/features/commands/CommandPalette.tsx`、README、`docs/loop/roadmap.md`、`docs/loop/state.md`。
+**构建**：`bun run build` 通过；CDP 动态导入 `buildPrintableHtml` 实测：101k 字符自足 HTML，含 `size:A4`、KaTeX 样式、标题 `<h1>`、3 张图片全部内联为 data URI，无 `feiyeimg://` 残留。真实打印对话框需人工点 `Ctrl+P` 验证。
+
+---
+
 ## 第 188 轮 · 2026-10-30 20:10
 **用户需求**：默认排版看久了想微调（标题颜色、引用线、行距），又不想改源码重新构建 → 希望设置里能直接写一小段 CSS，立刻看到效果，重启后还在。
 
