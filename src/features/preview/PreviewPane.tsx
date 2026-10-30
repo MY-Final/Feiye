@@ -230,7 +230,19 @@ export function PreviewPane() {
         input.disabled = false;
         input.setAttribute("aria-label", "切换任务完成状态");
       });
-  }, [html]);
+
+    // 悬停时显示链接目标，点之前就知道会去哪；用户自己写了 title 的不覆盖。
+    body.querySelectorAll<HTMLAnchorElement>("a[href]").forEach((anchor) => {
+      // 自己加过的提示在切换文档后要按新路径重算，用户写的则不动。
+      if (anchor.title && anchor.dataset.linkHint !== "1") return;
+      const href = anchor.getAttribute("href") ?? "";
+      if (!href || href.startsWith("#")) return;
+      anchor.title = /^https?:\/\//i.test(href)
+        ? href
+        : (docPath && resolveRelLink(href, docPath)) || href;
+      anchor.dataset.linkHint = "1";
+    });
+  }, [html, docPath]);
 
   // 切到预览时停止在光标所在标题，而不是回到文档开头。
   useEffect(() => {
