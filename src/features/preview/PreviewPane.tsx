@@ -147,11 +147,16 @@ export function PreviewPane() {
   const viewMode = useDocumentStore((state) => state.viewMode);
   const cursorLine = useDocumentStore((state) => state.cursor.line);
   const themeMode = useSettingsStore((state) => state.preferences.theme);
+  // 源码 / 所见模式下预览被隐藏：不解析、不重建它的 DOM，切到分栏 / 预览时补上。
+  const previewVisible = viewMode === "split" || viewMode === "preview";
 
   // 本地图片走工作区作用域的 feiyeimg 协议；远程图片保持原样。
   const html = useMemo(
-    () => rewritePreviewImages(result.html, root, docPath ?? ""),
-    [result.html, root, docPath],
+    () =>
+      previewVisible
+        ? rewritePreviewImages(result.html, root, docPath ?? "")
+        : "",
+    [result.html, root, docPath, previewVisible],
   );
 
   // 增量上屏：同一篇笔记内只替换变动的块；换文档时整篇重来，免得沿用旧节点。
@@ -159,7 +164,7 @@ export function PreviewPane() {
   const patchedPath = useRef<string | null>(null);
   useLayoutEffect(() => {
     const body = bodyRef.current;
-    if (!body) return;
+    if (!body || !previewVisible) return;
     if (patchedPath.current !== docPath) {
       patchedPath.current = docPath;
       body.innerHTML = html;
@@ -170,7 +175,7 @@ export function PreviewPane() {
       return;
     }
     rawBlocks.current = patchPreviewBlocks(body, html, rawBlocks.current);
-  }, [html, docPath]);
+  }, [html, docPath, previewVisible]);
 
   useEffect(() => {
     setPreviewListener((next) =>
@@ -440,7 +445,7 @@ export function PreviewPane() {
   // 给标题补上稳定锚点，供大纲跳转和滚动同步使用。
   useEffect(() => {
     const body = bodyRef.current;
-    if (!body) return;
+    if (!body || !previewVisible) return;
     body
       .querySelectorAll<HTMLElement>("h1, h2, h3, h4, h5, h6")
       .forEach((heading, index) => {
@@ -481,7 +486,7 @@ export function PreviewPane() {
         : (docPath && resolveRelLink(href, docPath)) || href;
       anchor.dataset.linkHint = "1";
     });
-  }, [html, docPath]);
+  }, [html, docPath, previewVisible]);
 
   // 离开预览后不再沿用上次的阅读位置：回到编辑时以光标为准。
   useEffect(() => {
@@ -569,8 +574,9 @@ export function PreviewPane() {
   // 图片的 title 显示成图注；宽高 / 对齐来自 Markdown 的 {width=… align=…}。
   useEffect(() => {
     const body = bodyRef.current;
-    if (body) wrapImageCaptions(body);
-  }, [html]);
+    if (!body || !previewVisible) return;
+    wrapImageCaptions(body);
+  }, [html, previewVisible]);
 
   // ```mermaid 代码块画成图：Worker 只给源码，这里按需懒加载 Mermaid。
   // 先打标记，避免下面给代码块补「复制」按钮时把图表源码也包一层。
@@ -579,7 +585,7 @@ export function PreviewPane() {
   useEffect(() => {
     const body = bodyRef.current;
     const sources = result.mermaid;
-    if (!body || !sources?.length) return;
+    if (!body || !sources?.length || !previewVisible) return;
     const themeChanged = mermaidTheme.current !== themeMode;
     mermaidTheme.current = themeMode;
     const wanted = new Set(sources.map((source) => source.trim()));
@@ -604,13 +610,13 @@ export function PreviewPane() {
     return () => {
       cancel.cancelled = true;
     };
-  }, [html, result.mermaid, themeMode]);
+  }, [html, result.mermaid, themeMode, previewVisible]);
 
   // 给预览里的每段代码挂一个复制按钮。HTML 由 Worker 生成，
   // 这里在每次渲染后补齐按钮，不改动 Markdown 管线。
   useEffect(() => {
     const body = bodyRef.current;
-    if (!body) return;
+    if (!body || !previewVisible) return;
 
     for (const pre of body.querySelectorAll("pre")) {
       if (pre.dataset.mermaid) continue;
@@ -672,7 +678,7 @@ export function PreviewPane() {
 
       wrapper.append(button);
     }
-  }, [html]);
+  }, [html, previewVisible]);
 
   const lightboxImage = lightbox ? lightbox.images[lightbox.index] : null;
   // 单张图放大时也要报百分比：只看画面变大，分不清放到了几倍。
