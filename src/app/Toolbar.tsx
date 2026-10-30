@@ -298,7 +298,13 @@ export async function exportActiveAsHtml(): Promise<void> {
     const content = standaloneHtml(candidate.replace(/\.html$/i, ""), body);
     await invoke("export_html", { relPath: candidateRel, content });
     exportedHtml.add(`${parent}\u0000${candidate.toLowerCase()}`);
-    ui.toast(`已导出 HTML：${candidateRel}`);
+    // 文件树只列 Markdown，导出的 `.html` 不会出现在树里；
+    // 提示里给一个直达入口，点一下就打开所在文件夹并选中文件。
+    ui.toast(`已导出 HTML：${candidateRel} · 点击在文件夹中显示`, "info", () => {
+      void invoke("reveal_entry", { relPath: candidateRel }).catch((error) => {
+        ui.toast(`打开资源管理器失败：${describeError(error)}`, "error");
+      });
+    });
     void useWorkspaceStore.getState().refreshDir(parent);
   };
   const stem = leaf.replace(/\.html$/i, "");
