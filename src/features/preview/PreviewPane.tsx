@@ -12,7 +12,11 @@ import { openFile } from "../workspace/workspace-actions";
 import "./preview.css";
 import type { PreviewResult } from "./preview-protocol";
 import { setPreviewListener } from "./preview-controller";
-import { previewHeadingElements, scrollPreviewToHeading } from "./preview-scroll";
+import {
+  previewActiveHeadingIndex,
+  previewHeadingElements,
+  scrollPreviewToHeading,
+} from "./preview-scroll";
 
 /** 标题文本与链接片段归一到同一形式，兼容中文标题和常见 slug 写法。 */
 function normalizeAnchor(value: string): string {
@@ -167,6 +171,35 @@ export function PreviewPane() {
     });
     return () => cancelAnimationFrame(frame);
   }, [viewMode, docPath, cursorLine]);
+
+  // 纯预览模式下滚动阅读时，让左侧大纲跟着高亮当前章节；
+  // 只更新大纲，不移动编辑器光标。
+  useEffect(() => {
+    if (viewMode !== "preview") {
+      useOutlineStore.getState().setScrollIndex(null);
+      return;
+    }
+    const pane = paneRef.current;
+    const body = bodyRef.current;
+    if (!pane || !body) return;
+
+    let frame: number | null = null;
+    const update = () => {
+      frame = null;
+      const index = previewActiveHeadingIndex(pane, body);
+      useOutlineStore.getState().setScrollIndex(index < 0 ? null : index);
+    };
+    const schedule = () => {
+      if (frame === null) frame = window.requestAnimationFrame(update);
+    };
+
+    pane.addEventListener("scroll", schedule, { passive: true });
+    update();
+    return () => {
+      pane.removeEventListener("scroll", schedule);
+      if (frame !== null) window.cancelAnimationFrame(frame);
+    };
+  }, [viewMode, html, docPath]);
 
   // 分栏模式：按标题锚点同步编辑区与预览区滚动。
   useEffect(() => {

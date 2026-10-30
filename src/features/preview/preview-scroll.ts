@@ -15,6 +15,24 @@ export function previewHeadingElements(
   );
 }
 
+/**
+ * 预览区当前顶部对应的标题下标；还没滚到第一个标题时返回 -1。
+ * 只读位置，不动滚动，供大纲高亮使用。
+ */
+export function previewActiveHeadingIndex(
+  pane: HTMLElement,
+  body: HTMLElement,
+): number {
+  const headings = previewHeadingElements(body);
+  const threshold = pane.scrollTop + 12;
+  let active = -1;
+  for (let index = 0; index < headings.length; index += 1) {
+    if (previewHeadingTop(pane, headings[index]) <= threshold) active = index;
+    else break;
+  }
+  return active;
+}
+
 /** 点击大纲时把预览滚动到对应标题。 */
 export function scrollPreviewToHeading(index: number): boolean {
   const pane = document.querySelector<HTMLElement>(".preview-pane");

@@ -7,12 +7,13 @@ import { useOutlineStore } from "../../stores/outline";
 
 export function OutlinePanel() {
   const headings = useOutlineStore((state) => state.headings);
+  const scrollIndex = useOutlineStore((state) => state.scrollIndex);
   const cursorLine = useDocumentStore((state) => state.cursor.line);
   const docPath = useDocumentStore((state) => state.path);
   const viewMode = useDocumentStore((state) => state.viewMode);
   const listRef = useRef<HTMLDivElement>(null);
 
-  const activeIndex = useMemo(() => {
+  const cursorIndex = useMemo(() => {
     let active = -1;
     for (let index = 0; index < headings.length; index += 1) {
       if (headings[index].line <= cursorLine) active = index;
@@ -20,6 +21,10 @@ export function OutlinePanel() {
     }
     return active;
   }, [headings, cursorLine]);
+
+  // 纯预览模式下以滚动位置为准；编辑 / 分栏模式仍跟随光标。
+  const activeIndex =
+    viewMode === "preview" && scrollIndex !== null ? scrollIndex : cursorIndex;
 
   // 长文档里让当前标题始终留在可见范围，但不抢夺滚动焦点。
   useEffect(() => {
