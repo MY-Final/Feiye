@@ -20,6 +20,8 @@ import { requestPreview } from "../preview/preview-controller";
 let prompting = false;
 let recoveryWarned = false;
 let writeInFlight: Promise<void> | null = null;
+/** 最近一次成功写入的副本内容，未变化时不再重复整篇写盘。 */
+let lastSnapshot: { path: string; text: string } | null = null;
 
 function formatTime(ms: number): string {
   const date = new Date(ms);
@@ -46,9 +48,18 @@ export function snapshotActiveDocument(): Promise<void> {
 
     const text = getEditorText();
     if (text === null) return;
+    // 内容没变就不必每隔几秒把同一份副本再整篇写一遍。
+    if (
+      lastSnapshot &&
+      lastSnapshot.path === doc.path &&
+      lastSnapshot.text === text
+    ) {
+      return;
+    }
 
     try {
       await saveRecovery(doc.path, doc.name, text, doc.savedModifiedMs);
+      lastSnapshot = { path: doc.path, text };
       recoveryWarned = false;
     } catch (error) {
       if (!recoveryWarned) {
@@ -71,6 +82,7 @@ export async function clearRecoverySnapshot(relPath: string): Promise<void> {
     // 等待正在进行的副本写入，避免清理完成后旧副本又被落盘。
     if (writeInFlight) await writeInFlight;
     await clearRecovery(relPath);
+    lastSnapshot = null;
   } catch {
     // 清理失败不应阻止保存或切换文档。
   }
@@ -107,6 +119,7 @@ export async function migrateRecoverySnapshot(
         previous.baseModifiedMs,
       );
       await deleteRecovery(previous.id);
+      lastSnapshot = null;
     } catch {
       // 迁移失败时保留旧副本，下次启动仍会提示，不会丢内容。
     }

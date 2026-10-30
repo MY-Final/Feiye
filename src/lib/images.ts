@@ -91,7 +91,8 @@ export function rewritePreviewImages(
   root: string | null,
   docRel: string,
 ): string {
-  if (!root) return html;
+  // 没有图片时不必为改写而整篇解析：纯文字长文档切换能省下解析与序列化。
+  if (!root || !html.includes("<img")) return html;
 
   const template = document.createElement("template");
   template.innerHTML = html;

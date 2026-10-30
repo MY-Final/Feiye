@@ -60,5 +60,5 @@
 - 不 push、不创建 PR、不改 README 中已承诺的产品边界。
 - 不新增依赖、不改构建配置。
 - 每轮只做 1 条需求，宁可少做，不要批量重构。
-- 分支 `loop/optimize`（优化窗口，从 `main` 新建）；bun 一律用 `$HOME/.bun/bin/bun`。
+- 分支以 `state.md` 顶部为准（当前 `loop/perf`）；bun 一律用 `$HOME/.bun/bin/bun`。
 - 每轮控制在 2–3 分钟内完成；做不完就把它拆小。

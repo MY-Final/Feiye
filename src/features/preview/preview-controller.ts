@@ -222,6 +222,11 @@ export function setPreviewListener(
   if (next && lastResult.html) next(lastResult);
 }
 
+/** 关闭标签时释放该文档的预览缓存：关闭的笔记不该继续占着 HTML 与图表。 */
+export function forgetPreview(docKey: string): void {
+  resultCache.delete(docKey);
+}
+
 export function clearPreview(): void {
   if (timer !== null) {
     window.clearTimeout(timer);

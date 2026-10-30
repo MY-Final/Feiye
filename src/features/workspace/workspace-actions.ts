@@ -57,6 +57,7 @@ import {
 import { guardUnsaved, saveActiveDocument } from "../editor/save";
 import {
   clearPreview,
+  forgetPreview,
   requestPreview,
 } from "../preview/preview-controller";
 import {
@@ -388,6 +389,7 @@ export async function openFile(
     useWorkspaceStore.getState().forgetHistory(entry.relPath);
     useWorkspaceStore.getState().forgetForward(entry.relPath);
     useTabsStore.getState().removeTab(entry.relPath);
+    forgetPreview(entry.relPath);
     toastError("打开文件失败", error);
   }
 }
@@ -401,6 +403,7 @@ export async function closeDocumentTab(path: string): Promise<void> {
   if (useDocumentStore.getState().path !== path) {
     useTabsStore.getState().removeTab(path);
     forgetEditorState(path);
+    forgetPreview(path);
     return;
   }
   if (!(await guardUnsaved())) return;
@@ -409,6 +412,7 @@ export async function closeDocumentTab(path: string): Promise<void> {
   const next = tabs[index + 1] ?? tabs[index - 1] ?? null;
   useTabsStore.getState().removeTab(path);
   forgetEditorState(path);
+  forgetPreview(path);
   if (next) {
     await openFile(
       { name: next.name, relPath: next.path, isDir: false },

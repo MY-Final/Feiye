@@ -11,6 +11,7 @@ import { EditorView, keymap, placeholder } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
 
 import type { ResolvedImage } from "../../lib/images";
+import { setEditorComposing } from "./composition";
 import { formatKeymap } from "./format-keymap";
 import { readFormatState, type FormatState } from "./formatting";
 import {
@@ -240,6 +241,19 @@ export function createEditorState(
   handlers: EditorHandlers,
   options: EditorOptions,
 ): EditorState {
+  // 输入法组词期间文档里是未上屏的拼音：推迟统计、大纲、预览与自动保存，
+  // 等 compositionend 后再按最终文本补一次，避免半截拼音被计入或写盘。
+  let composing = false;
+  let pendingCompositionChange = false;
+
+  const flushCompositionChange = () => {
+    if (!pendingCompositionChange) return;
+    pendingCompositionChange = false;
+    handlers.onChange();
+    handlers.onStats();
+    handlers.onOutline();
+  };
+
   return EditorState.create({
     doc,
     extensions: [
@@ -259,12 +273,28 @@ export function createEditorState(
         paste: (event, view) => handleEditorPaste(event, view),
         drop: (event, view) => handleEditorDrop(event, view),
         dragover: (event) => handleEditorDragOver(event),
+        compositionstart: () => {
+          composing = true;
+          setEditorComposing(true);
+        },
+        compositionend: () => {
+          composing = false;
+          setEditorComposing(false);
+          // 最终提交事务可能在 compositionend 之后才发出；等一拍再补，
+          // 若事务已带着最终文本触发过 onChange，这里就不会重复。
+          window.setTimeout(flushCompositionChange, 0);
+        },
       }),
       editorModeCompartment.of(editorModeExtension(options.mode, options)),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
-          handlers.onChange();
-          handlers.onStats();
+          if (composing || update.view.composing) {
+            pendingCompositionChange = true;
+          } else {
+            pendingCompositionChange = false;
+            handlers.onChange();
+            handlers.onStats();
+          }
         }
         if (update.docChanged || update.selectionSet) {
           const head = update.state.selection.main.head;
@@ -275,7 +305,9 @@ export function createEditorState(
         // 也要跟着补齐，否则不输入就会一直停留在打开文档时的那一段。
         if (
           !update.docChanged &&
-          syntaxTree(update.startState) !== syntaxTree(update.state)
+          syntaxTree(update.startState) !== syntaxTree(update.state) &&
+          !composing &&
+          !update.view.composing
         ) {
           handlers.onOutline();
         }
