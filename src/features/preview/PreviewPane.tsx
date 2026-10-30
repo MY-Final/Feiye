@@ -35,8 +35,34 @@ function findHeadingByAnchor(body: HTMLElement, fragment: string): number {
 }
 import { attachSplitScrollSync } from "./scroll-sync";
 
+/** 会话内记住每篇笔记在纯预览里的阅读位置，切走再切回能接着读。 */
+const PREVIEW_SCROLL_LIMIT = 100;
+const previewScrollPositions = new Map<string, number>();
+
+function rememberPreviewScroll(path: string, top: number): void {
+  if (top <= 0) {
+    previewScrollPositions.delete(path);
+    return;
+  }
+  // 重新插入，让最近读过的文档留在淘汰顺序的末尾。
+  previewScrollPositions.delete(path);
+  previewScrollPositions.set(path, top);
+  if (previewScrollPositions.size > PREVIEW_SCROLL_LIMIT) {
+    const oldest = previewScrollPositions.keys().next().value;
+    if (oldest !== undefined) previewScrollPositions.delete(oldest);
+  }
+}
+
+interface PanePreviewResult extends PreviewResult {
+  /** 这份 HTML 属于哪篇笔记：预览 Worker 异步返回，不能直接按当前路径判断。 */
+  path: string | null;
+}
+
 export function PreviewPane() {
-  const [result, setResult] = useState<PreviewResult>({ html: "" });
+  const [result, setResult] = useState<PanePreviewResult>({
+    html: "",
+    path: null,
+  });
   // 放大查看时带上同篇文档的全部图片，方向键可以一张张翻。
   const [lightbox, setLightbox] = useState<{
     images: { src: string; alt: string }[];
@@ -75,7 +101,13 @@ export function PreviewPane() {
   );
 
   useEffect(() => {
-    setPreviewListener(setResult);
+    setPreviewListener((next) =>
+      setResult({
+        ...next,
+        // Worker 只回 HTML，落结果时记下当前文档；过期结果会被控制器丢弃。
+        path: useDocumentStore.getState().path,
+      }),
+    );
     return () => setPreviewListener(null);
   }, []);
 
@@ -379,9 +411,30 @@ export function PreviewPane() {
     });
   }, [html, docPath]);
 
-  // 切到预览时停止在光标所在标题，而不是回到文档开头。
+  // 离开预览后不再沿用上次的阅读位置：回到编辑时以光标为准。
   useEffect(() => {
-    if (viewMode !== "preview") return;
+    if (viewMode === "preview" || !docPath) return;
+    previewScrollPositions.delete(docPath);
+  }, [viewMode, docPath]);
+
+  // 预览内容真正换成这篇笔记后，再恢复上次读到的地方；
+  // 不能只看文档路径，否则 Worker 还没返回时会拿旧 HTML 去滚。
+  useEffect(() => {
+    if (viewMode !== "preview" || !docPath || result.path !== docPath) return;
+    const saved = previewScrollPositions.get(docPath);
+    const pane = paneRef.current;
+    if (saved === undefined || !pane) return;
+    const frame = requestAnimationFrame(() => {
+      pane.scrollTop = saved;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [viewMode, docPath, result.path]);
+
+  // 切到预览时停止在光标所在标题，而不是回到文档开头；
+  // 从别的笔记切回来时，优先回到上次的阅读位置。
+  useEffect(() => {
+    if (viewMode !== "preview" || result.path !== docPath) return;
+    if (docPath && previewScrollPositions.has(docPath)) return;
     const headings = useOutlineStore.getState().headings;
     if (headings.length === 0) return;
 
@@ -396,7 +449,7 @@ export function PreviewPane() {
       scrollPreviewToHeading(index);
     });
     return () => cancelAnimationFrame(frame);
-  }, [viewMode, docPath, cursorLine]);
+  }, [viewMode, docPath, cursorLine, result.path]);
 
   // 纯预览模式下滚动阅读时，让左侧大纲跟着高亮当前章节；
   // 只更新大纲，不移动编辑器光标。
@@ -416,6 +469,11 @@ export function PreviewPane() {
       useOutlineStore.getState().setScrollIndex(index < 0 ? null : index);
     };
     const schedule = () => {
+      // 只有当前 HTML 真的属于这篇笔记时才记位置；切换文档的过渡帧里
+      // 面板还显示着上一篇，别把旧滚动位置存到新文档名下。
+      if (docPath && result.path === docPath) {
+        rememberPreviewScroll(docPath, pane.scrollTop);
+      }
       if (frame === null) frame = window.requestAnimationFrame(update);
     };
 
@@ -425,7 +483,7 @@ export function PreviewPane() {
       pane.removeEventListener("scroll", schedule);
       if (frame !== null) window.cancelAnimationFrame(frame);
     };
-  }, [viewMode, html, docPath]);
+  }, [viewMode, html, docPath, result.path]);
 
   // 分栏模式：按标题锚点同步编辑区与预览区滚动。
   useEffect(() => {
