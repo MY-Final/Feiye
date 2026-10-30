@@ -184,6 +184,21 @@ function ensureHtmlName(value: string): string {
   return /\.html$/i.test(value) ? value : `${value}.html`;
 }
 
+/** 同目录已有同名文件时退到 `名字-2.html`，与「另存为」连续保存的默认名一致。 */
+function nextFreeHtmlName(parent: string, leaf: string): string {
+  const entries = useWorkspaceStore.getState().children[parent] ?? [];
+  const used = new Set(
+    entries.filter((item) => !item.isDir).map((item) => item.name.toLowerCase()),
+  );
+  if (!used.has(leaf.toLowerCase())) return leaf;
+  const stem = leaf.replace(/\.html$/i, "");
+  for (let n = 2; n < 1000; n += 1) {
+    const candidate = `${stem}-${n}.html`;
+    if (!used.has(candidate.toLowerCase())) return candidate;
+  }
+  return leaf;
+}
+
 /** 把整篇笔记导出成同目录下的 `.html` 文件；已存在时后端拒绝，不静默覆盖。 */
 export async function exportActiveAsHtml(): Promise<void> {
   const ui = useUiStore.getState();
@@ -197,7 +212,10 @@ export async function exportActiveAsHtml(): Promise<void> {
   if (text === null) return;
 
   const parent = parentRel(docPath);
-  const defaultName = `${baseName(docPath).replace(/\.[^./\\]+$/, "") || "笔记"}.html`;
+  const defaultName = nextFreeHtmlName(
+    parent,
+    `${baseName(docPath).replace(/\.[^./\\]+$/, "") || "笔记"}.html`,
+  );
   const name = await ui.askInput({
     title: parent ? `导出 HTML · ${parent}` : "导出 HTML",
     label: "文件名（保存在当前笔记所在目录，自动补 .html）",
@@ -225,7 +243,10 @@ export async function exportActiveAsHtml(): Promise<void> {
     void useWorkspaceStore.getState().refreshDir(parent);
   } catch (error) {
     if (isAppError(error) && error.code === "already-exists") {
-      ui.toast(`「${leaf}」已存在，未覆盖；换个文件名再试`, "error");
+      const suggestion = nextFreeHtmlName(parent, leaf);
+      const hint =
+        suggestion === leaf ? "换个文件名再试" : `可改用「${suggestion}」`;
+      ui.toast(`「${leaf}」已存在，未覆盖；${hint}`, "error");
     } else {
       ui.toast(`导出 HTML 失败：${describeError(error)}`, "error");
     }
