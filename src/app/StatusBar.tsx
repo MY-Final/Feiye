@@ -146,6 +146,7 @@ export function StatusBar() {
                 type="button"
                 className="status-zen"
                 title="退出专注模式（Ctrl + Shift + F）"
+                aria-label="退出专注模式"
                 onClick={() => useUiStore.getState().toggleZenMode()}
               >
                 专注
