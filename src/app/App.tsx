@@ -24,7 +24,7 @@ import {
   saveDocumentAs,
 } from "../features/workspace/workspace-actions";
 import { APP_NAME, APP_TAGLINE } from "../lib/app-info";
-import { baseName } from "../lib/paths";
+import { baseName, parentRel } from "../lib/paths";
 import { getSetting, readFile, setSetting } from "../lib/tauri";
 import { isViewMode } from "../lib/view-modes";
 import { useDocumentStore } from "../stores/document";
@@ -329,7 +329,7 @@ export default function App() {
                           <button
                             key={relPath}
                             type="button"
-                            className="btn ghost"
+                            className="btn ghost recent-file"
                             title={relPath}
                             onClick={() =>
                               void openFile({
@@ -339,7 +339,14 @@ export default function App() {
                               })
                             }
                           >
-                            {baseName(relPath)}
+                            <span className="recent-name">
+                              {baseName(relPath)}
+                            </span>
+                            {parentRel(relPath) ? (
+                              <span className="recent-dir">
+                                {parentRel(relPath)}
+                              </span>
+                            ) : null}
                           </button>
                         ))}
                       </>

@@ -622,6 +622,23 @@ body.is-resizing-split * {
   font-size: 13px;
 }
 
+/* 同名笔记靠所在目录区分，长路径整体省略。 */
+.empty-state .recent-file {
+  max-width: 340px;
+}
+
+.empty-state .recent-name,
+.empty-state .recent-dir {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty-state .recent-dir {
+  color: var(--text-faint);
+  font-size: 11.5px;
+}
+
 /* ---------- 半扉页（欢迎） ---------- */
 
 .welcome {
