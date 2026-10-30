@@ -23,6 +23,7 @@ import {
 } from "../features/workspace/workspace-actions";
 import { useDocumentStore } from "../stores/document";
 import { useEditorStore } from "../stores/editor";
+import { useUiStore } from "../stores/ui";
 import { useWorkspaceStore } from "../stores/workspace";
 import { VIEW_MODES } from "../lib/view-modes";
 
@@ -58,6 +59,14 @@ function ImageIcon() {
       <rect x="2" y="2.8" width="12" height="10.4" rx="1.6" />
       <circle cx="6" cy="6.4" r="1.1" />
       <path d="M3.4 11.6l3.1-3.2 2.2 2.2 1.6-1.6 2.3 2.6" />
+    </svg>
+  );
+}
+
+function FocusIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M2.6 6V3.4a.8.8 0 0 1 .8-.8H6M10 2.6h2.6a.8.8 0 0 1 .8.8V6M13.4 10v2.6a.8.8 0 0 1-.8.8H10M6 13.4H3.4a.8.8 0 0 1-.8-.8V10" />
     </svg>
   );
 }
@@ -344,6 +353,19 @@ export function Toolbar() {
           ariaLabel="视图模式"
           onChange={(mode) => void changeViewMode(mode)}
         />
+      ) : null}
+
+      {root ? (
+        <>
+          <span className="toolbar-sep" aria-hidden="true" />
+          {/* 快捷键之外也给一个看得见的入口，不然只有翻快捷键表才知道。 */}
+          <ToolButton
+            title="专注模式 (Ctrl + Shift + F)"
+            onClick={() => useUiStore.getState().toggleZenMode()}
+          >
+            <FocusIcon />
+          </ToolButton>
+        </>
       ) : null}
     </div>
   );
