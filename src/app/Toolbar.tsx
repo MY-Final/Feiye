@@ -186,6 +186,52 @@ function ensureHtmlName(value: string): string {
   return /\.html$/i.test(value) ? value : `${value}.html`;
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+// 渲染结果是片段，直接落盘用浏览器打开会没有标题、中文可能乱码、排版全塌；
+// 这里补上完整文档与一份自足的排版样式，让导出的文件离开应用也像预览。
+const EXPORT_STYLE = `
+body{margin:0;background:#fdfdfb;color:#22211d;font:16px/1.75 "Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+main{max-width:760px;margin:0 auto;padding:48px 24px 72px}
+h1,h2,h3,h4,h5,h6{font-family:Georgia,"Songti SC","SimSun",serif;line-height:1.35;margin:1.8em 0 .6em;font-weight:600}
+h1{font-size:2em}h2{font-size:1.5em}h3{font-size:1.25em}
+p,ul,ol{margin:0 0 1em}li>p{margin:0}
+a{color:#3455a8}
+img{max-width:100%;height:auto}
+blockquote{margin:0 0 1em;padding:.2em 1em;border-left:3px solid #c9c4b8;color:#555}
+pre{overflow:auto;padding:14px 16px;border-radius:8px;background:#f5f4ef;font-size:13px;line-height:1.55}
+code{font-family:Consolas,"SFMono-Regular",Menlo,monospace;font-size:.9em}
+:not(pre)>code{padding:.15em .35em;border-radius:4px;background:#f0efe8}
+table{border-collapse:collapse;margin:0 0 1em}
+th,td{border:1px solid #ddd8cc;padding:6px 10px}
+hr{border:0;border-top:1px solid #ddd8cc;margin:2em 0}
+`;
+
+function standaloneHtml(title: string, body: string): string {
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="generator" content="扉页">
+<title>${escapeHtml(title)}</title>
+<style>${EXPORT_STYLE}</style>
+</head>
+<body>
+<main class="markdown-body">
+${body}
+</main>
+</body>
+</html>
+`;
+}
+
 // 文件树只列 Markdown，已导出的 `.html` 不会出现在 children 里；这里按会话记住导出记录，
 // 让连续导出（改完再导一份）也能避让，键是 `${parent}\u0000${文件名小写}`。
 const exportedHtml = new Set<string>();
@@ -245,10 +291,12 @@ export async function exportActiveAsHtml(): Promise<void> {
 
   const leaf = ensureHtmlName(name.trim());
   const rendered = await renderMarkdownToHtml(text);
-  const { html } = await inlineLocalImages(rendered, root, docPath);
+  const { html: body } = await inlineLocalImages(rendered, root, docPath);
   const write = async (candidate: string) => {
     const candidateRel = parent ? `${parent}/${candidate}` : candidate;
-    await invoke("export_html", { relPath: candidateRel, content: html });
+    // 用最终落盘的文件名做 `<title>`，撞名顺延后标签页仍与文件名一致。
+    const content = standaloneHtml(candidate.replace(/\.html$/i, ""), body);
+    await invoke("export_html", { relPath: candidateRel, content });
     exportedHtml.add(`${parent}\u0000${candidate.toLowerCase()}`);
     ui.toast(`已导出 HTML：${candidateRel}`);
     void useWorkspaceStore.getState().refreshDir(parent);
