@@ -18,6 +18,7 @@ import { saveActiveDocument } from "../features/editor/save";
 import {
   changeViewMode,
   newDocumentNearActive,
+  openNextDocument,
   openPreviousDocument,
   renameActiveDocument,
   saveDocumentAs,
@@ -113,6 +114,9 @@ export function Toolbar() {
   const previousPath = useWorkspaceStore((state) =>
     docPath ? (state.history[state.history.length - 1] ?? null) : null,
   );
+  const nextPath = useWorkspaceStore((state) =>
+    docPath ? (state.forward[state.forward.length - 1] ?? null) : null,
+  );
   const imageInput = useRef<HTMLInputElement>(null);
 
   const hasDoc = Boolean(docPath);
@@ -150,6 +154,20 @@ export function Toolbar() {
           onClick={() => void openPreviousDocument()}
         >
           返回
+        </button>
+        <button
+          type="button"
+          className="toolbar-text-btn"
+          title={
+            nextPath
+              ? `前进下一篇笔记 (Alt+→)：${nextPath}`
+              : "前进下一篇笔记（还没有可前进的笔记）"
+          }
+          disabled={!nextPath}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => void openNextDocument()}
+        >
+          前进
         </button>
         <button
           type="button"
