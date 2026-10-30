@@ -135,7 +135,11 @@ export function resetAutoSave(): void {
 export function resyncAutoSave(): void {
   const hadAutoSave = autoSaveTimer !== null;
   clearAutoSaveTimer();
-  if (hadAutoSave) {
+  // 从「关闭」重新开启自动保存时原本没有计时器：当前若有未保存内容，
+  // 也要按新间隔排一次，不必等用户再敲一个字。
+  const doc = useDocumentStore.getState();
+  const autoSaveOn = useSettingsStore.getState().preferences.autoSaveDelay > 0;
+  if (hadAutoSave || (autoSaveOn && doc.dirty && !doc.saveBlocked)) {
     scheduleAutoSave();
   }
 
