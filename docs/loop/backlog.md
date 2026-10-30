@@ -19,6 +19,27 @@
 
 <!-- 从这里开始追加 -->
 
+## 第 182 轮 · 2026-10-30 18:56
+**用户需求**：笔记散在多个文件夹里，记得写过「某句话」，但忘记在哪一篇 → 只能逐个打开文件树翻找；编辑器里的 Ctrl+F 又只搜当前文档。希望跨整个工作区搜关键词，点结果直接到命中行。
+
+**产品经理**：做。README「后续」里的工作区全文搜索，是本地优先编辑器最常用的检索入口；只读文件、不改内容，结果即时呈现，符合「快、安静」；搜索范围与文件树一致，不引入索引库。
+
+**前端**：新增 `features/workspace/SearchPanel.tsx` + `search.css`：输入停顿 200ms 去抖调用后端，显示「搜索中 / N 条结果 / 没有匹配」；每行结果为「相对路径:行号 + 命中行预览」，关键词用 `<mark>` 高亮；↑↓ 选择、回车或点击打开（复用 `openFile` 的未保存守卫），纯预览模式下先切分栏，再按行号换算字符偏移 `jumpToEditorPosition` 定位。`SidebarTab` 扩展 `search` 并持久化；`ui` store 增加 `searchRequest` / `openSearchPanel()`，命令面板新增「在工作区中搜索」并切到搜索标签、聚焦输入框。风险：文档未切换成功（守卫取消 / 读盘失败）时不跳转；同一篇已打开时直接定位。工作量 M。
+
+**后端**：新增 `commands/search.rs`：`search_workspace(query, limit)` 从当前工作区根递归扫描，跳过隐藏项、`IGNORED_DIRS`、符号链接与非 Markdown，单文件 > 2MB 跳过，按行大小写不敏感匹配，返回 `relPath / line / text`（长行截断 240 字符），默认最多 200 条；注册到 `lib.rs` 与 `lib/tauri.ts`。含 2 个单元测试。工作量 S。
+
+**裁决**：做
+
+**改动**：`src-tauri/src/commands/search.rs`、`commands/mod.rs`、`src-tauri/src/lib.rs`、`src/lib/tauri.ts`、`src/features/workspace/SearchPanel.tsx`、`search.css`、`WorkspaceSidebar.tsx`、`src/stores/ui.ts`、`src/features/commands/CommandPalette.tsx`；README / roadmap 勾选。
+
+**构建**：通过（`bun run build` 1.21s，含 tsc）；`cargo test` 36 passed（新增 2 个）。
+
+**验证**：CDP（9222，工作区 `D:\clawWorkSpeace\新建文件夹`）：新建根目录与 `子目录/` 两篇含 `ZEBRAFISH_182` / `zebrafish_182` 的测试笔记 → 搜索标签输入小写 `zebrafish_182`，200ms 后显示「2 条结果」，路径 / 行号 / 命中行正确且高亮 2 处（大小写不敏感）；点击第一条打开 `子目录/搜索测试-182b.md` 且活动行就是第 3 行；↑↓ 切到第二条回车打开根目录笔记，活动行为第 4 行；命令面板搜「工作区中搜索」回车后切到搜索标签并聚焦输入框。隐藏目录 / 非 Markdown / `.git` 由单测覆盖。测试后已删除测试笔记并切回文件标签。
+
+**遗留 / 下一轮建议**：结果不随文件保存实时刷新（重新输入或切回标签即可）；未做跳行后高亮关键词（只定位行首）。下一轮可做「文档历史与本地快照」或「多标签与分屏编辑」。
+
+---
+
 ## 第 181 轮 · 2026-10-30 18:47
 **用户需求**：写东西时手不离键盘，想切视图、导出 HTML、进专注模式，要么去点工具栏，要么临时翻快捷键表 → 希望有一个输入框，打几个字就能搜索并执行这些动作。
 

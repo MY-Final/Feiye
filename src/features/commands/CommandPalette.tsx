@@ -117,6 +117,13 @@ export function CommandPalette() {
         run: () => exportActiveAsHtml(),
       },
       {
+        id: "search-workspace",
+        title: "在工作区中搜索",
+        hint: "跨全部笔记，结果直接跳到命中行",
+        keywords: "search find 全文 搜索 工作区",
+        run: () => useUiStore.getState().openSearchPanel(),
+      },
+      {
         id: "find",
         title: "查找与替换",
         shortcut: "Ctrl+F",
@@ -219,6 +226,7 @@ export function CommandPalette() {
       if (command.id === "back") return historyLength > 0;
       if (command.id === "forward") return forwardLength > 0;
       if (command.id === "refresh-tree") return Boolean(root);
+      if (command.id === "search-workspace") return Boolean(root);
       return true;
     });
   }, [docPath, root, historyLength, forwardLength]);

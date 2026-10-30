@@ -11,6 +11,7 @@ import { ContextMenu, type MenuAction } from "../../components/Menu";
 import { copyText } from "../../lib/clipboard";
 import { OutlinePanel } from "../outline/OutlinePanel";
 import { MoveDialog } from "./MoveDialog";
+import { SearchPanel } from "./SearchPanel";
 import { isWithin, parentRel } from "../../lib/paths";
 import { getSetting, setSetting, type Entry } from "../../lib/tauri";
 import { useDocumentStore } from "../../stores/document";
@@ -414,7 +415,7 @@ function TreeNode({
   );
 }
 
-type SidebarTab = "files" | "outline";
+type SidebarTab = "files" | "outline" | "search";
 
 const SIDEBAR_WIDTH_KEY = "sidebarWidth";
 const SIDEBAR_TAB_KEY = "sidebarTab";
@@ -433,6 +434,7 @@ export function WorkspaceSidebar() {
   const rootFailed = useWorkspaceStore((state) => Boolean(state.failed[""]));
   const refreshTree = useWorkspaceStore((state) => state.refreshTree);
   const headingCount = useOutlineStore((state) => state.headings.length);
+  const searchRequest = useUiStore((state) => state.searchRequest);
   const [tab, setTab] = useState<SidebarTab>("files");
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -446,9 +448,23 @@ export function WorkspaceSidebar() {
   // 记住上次看的标签：常看大纲的人重启后不用每次再点一下。
   useEffect(() => {
     void getSetting<unknown>(SIDEBAR_TAB_KEY).then((value) => {
-      if (value === "files" || value === "outline") setTab(value);
+      if (value === "files" || value === "outline" || value === "search") {
+        setTab(value);
+      }
     });
   }, []);
+
+  // 命令面板 / 快捷键请求打开搜索时切到搜索标签，并把光标送进输入框。
+  useEffect(() => {
+    if (searchRequest === 0) return;
+    setTab("search");
+    void setSetting(SIDEBAR_TAB_KEY, "search");
+    requestAnimationFrame(() => {
+      document
+        .querySelector<HTMLInputElement>(".sidebar .search-input")
+        ?.focus();
+    });
+  }, [searchRequest]);
 
   useEffect(() => {
     void getSetting<number>(SIDEBAR_WIDTH_KEY).then((value) => {
@@ -660,6 +676,15 @@ export function WorkspaceSidebar() {
               <span className="sidebar-count">{headingCount}</span>
             ) : null}
           </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "search"}
+            className={`sidebar-tab${tab === "search" ? " active" : ""}`}
+            onClick={() => selectTab("search")}
+          >
+            搜索
+          </button>
         </div>
 
         {tab === "files" ? (
@@ -802,8 +827,10 @@ export function WorkspaceSidebar() {
             </div>
           ) : null}
         </div>
-      ) : (
+      ) : tab === "outline" ? (
         <OutlinePanel />
+      ) : (
+        <SearchPanel />
       )}
 
       {menu ? (

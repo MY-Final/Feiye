@@ -221,3 +221,18 @@ export async function watchWorkspace(root: string): Promise<void> {
 export async function unwatchWorkspace(): Promise<void> {
   await invoke("unwatch_workspace");
 }
+
+export interface SearchHit {
+  relPath: string;
+  /** 1 开始的行号。 */
+  line: number;
+  text: string;
+}
+
+/** 在工作区所有 Markdown 里按行搜索，大小写不敏感。 */
+export function searchWorkspace(
+  query: string,
+  limit?: number,
+): Promise<SearchHit[]> {
+  return invoke<SearchHit[]>("search_workspace", { query, limit });
+}

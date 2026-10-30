@@ -3,4 +3,5 @@
 pub mod file;
 pub mod image_asset;
 pub mod recovery;
+pub mod search;
 pub mod workspace;
