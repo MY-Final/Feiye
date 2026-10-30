@@ -60,6 +60,11 @@ let lastEditingMode: ViewMode = "source";
 const TREE_REFRESH_INTERVAL = 2000;
 let lastTreeRefresh = 0;
 
+/** 「最近打开」和文件树用同一套显示规则：按偏好隐去 Markdown 扩展名。 */
+function noteLabel(name: string, hideExt: boolean): string {
+  return hideExt ? name.replace(/\.(md|markdown|mdx)$/i, "") : name;
+}
+
 function dialogOpen(): boolean {
   const ui = useUiStore.getState();
   return Boolean(ui.confirm || ui.prompt || ui.settingsOpen);
@@ -463,7 +468,10 @@ export default function App() {
                               }
                             >
                               <span className="recent-name">
-                                {baseName(relPath)}
+                                {noteLabel(
+                                  baseName(relPath),
+                                  preferences.hideFileExtensions,
+                                )}
                               </span>
                               {parentRel(relPath) ? (
                                 <span className="recent-dir">
