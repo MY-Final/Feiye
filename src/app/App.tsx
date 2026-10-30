@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties } from "react";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { DialogHost } from "../components/Dialog";
@@ -34,7 +35,7 @@ import {
 } from "../features/workspace/workspace-actions";
 import { APP_NAME, APP_TAGLINE } from "../lib/app-info";
 import { baseName, parentRel } from "../lib/paths";
-import { getSetting, isAppError, readFile, setSetting } from "../lib/tauri";
+import { getSetting, isAppError, readFile, setSetting, unwatchWorkspace, watchWorkspace } from "../lib/tauri";
 import { isViewMode } from "../lib/view-modes";
 import { useDocumentStore, type ViewMode } from "../stores/document";
 import {
@@ -427,7 +428,52 @@ export default function App() {
     };
     window.addEventListener("focus", onVisible);
     document.addEventListener("visibilitychange", onVisible);
+
+    // 目录监听：外部增删改不必等到窗口重新聚焦才可见。
+    // 事件可能一阵一阵地来（保存会触发多条），这里去抖后统一刷新。
+    let unlisten: UnlistenFn | null = null;
+    let watchTimer: number | null = null;
+    let watchingRoot: string | null = null;
+    let disposed = false;
+
+    const scheduleExternalCheck = () => {
+      if (watchTimer !== null) window.clearTimeout(watchTimer);
+      watchTimer = window.setTimeout(() => {
+        watchTimer = null;
+        void useWorkspaceStore.getState().refreshTree();
+        void checkExternalChange();
+      }, 350);
+    };
+
+    const attachWatch = async (root: string | null) => {
+      if (disposed || root === watchingRoot) return;
+      watchingRoot = root;
+      unlisten?.();
+      unlisten = null;
+      if (!root) {
+        void unwatchWorkspace().catch(() => {});
+        return;
+      }
+      try {
+        // 先挂监听再开始 watch，避免启动瞬间的变化被漏掉。
+        unlisten = await listen("workspace-changed", scheduleExternalCheck);
+        await watchWorkspace(root);
+      } catch {
+        // 监听不可用时保留「重新聚焦时刷新」的兜底。
+      }
+    };
+
+    void attachWatch(useWorkspaceStore.getState().root);
+    const unsubscribeRoot = useWorkspaceStore.subscribe((state, previous) => {
+      if (state.root !== previous.root) void attachWatch(state.root);
+    });
+
     return () => {
+      disposed = true;
+      unsubscribeRoot();
+      unlisten?.();
+      if (watchTimer !== null) window.clearTimeout(watchTimer);
+      void unwatchWorkspace().catch(() => {});
       window.removeEventListener("focus", onVisible);
       document.removeEventListener("visibilitychange", onVisible);
     };

@@ -212,3 +212,12 @@ export async function setSetting(key: string, value: unknown): Promise<void> {
     // 设置写入失败不应影响主流程。
   }
 }
+
+/** 开始监听工作区目录；切换工作区时后端会替换掉旧的监听器。 */
+export async function watchWorkspace(root: string): Promise<void> {
+  await invoke("watch_workspace", { root });
+}
+
+export async function unwatchWorkspace(): Promise<void> {
+  await invoke("unwatch_workspace");
+}
