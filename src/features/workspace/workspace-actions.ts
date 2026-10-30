@@ -448,12 +448,14 @@ export async function deleteEntry(entry: Entry): Promise<void> {
     doc.path && isWithin(doc.path, entry.relPath),
   );
   const hasUnsaved = deletingActive && doc.dirty;
+  // 同名文件可能散在好几个目录里，确认框带上路径才删得准。
+  const shown = `「${parentRel(entry.relPath) ? entry.relPath : entry.name}」`;
 
   const choice = await useUiStore.getState().ask({
     title: "删除",
     message: hasUnsaved
-      ? `「${entry.name}」里有正在编辑的笔记，还有未保存的修改。可以直接删掉，也可以先保存再删除——保存后的内容会随文件一起进回收站。`
-      : `确定将「${entry.name}」移到回收站吗？此操作可以在系统回收站中撤销。`,
+      ? `${shown}里有正在编辑的笔记，还有未保存的修改。可以直接删掉，也可以先保存再删除——保存后的内容会随文件一起进回收站。`
+      : `确定将${shown}移到回收站吗？此操作可以在系统回收站中撤销。`,
     buttons: hasUnsaved
       ? [
           { label: "保存后删除", value: "save-delete", tone: "primary" },
