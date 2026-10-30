@@ -37,7 +37,7 @@
 
 1. 切到或创建分支 `loop/auto-dev`（已存在则沿用）。
 2. 实现，遵守现有代码风格；不新增依赖；不改构建配置。
-3. 运行 `bun run build`，失败就修到通过；仍失败则回滚本轮改动，并在 backlog 记「失败」。
+3. 运行构建：前端用 `$HOME/.bun/bin/bun run build`（bun 不在 PATH）；若改了 `src-tauri/`，再运行 `(cd src-tauri && cargo check)`。失败就修到通过；仍失败则回滚本轮改动，并在 backlog 记「失败」。
 4. 提交：`feat(loop): 第 N 轮 - <需求一句话>`，只提交本轮相关文件。
 
 ## 5. 记录（每轮必做）
