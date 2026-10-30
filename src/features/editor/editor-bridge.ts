@@ -1,4 +1,5 @@
 import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
+import { openSearchPanel } from "@codemirror/search";
 import { EditorView } from "@codemirror/view";
 
 import {
@@ -154,6 +155,13 @@ export function jumpToEditorPosition(position: number, focus = true): boolean {
 
 export function focusEditor(): void {
   view?.focus();
+}
+
+/** 打开编辑器内置的查找 / 替换面板；编辑器隐藏时调用方负责先切回可见模式。 */
+export function openEditorSearch(): void {
+  if (!view) return;
+  openSearchPanel(view);
+  view.focus();
 }
 
 export function refreshEditorLayout(): void {

@@ -5,7 +5,10 @@ import { DialogHost } from "../components/Dialog";
 import { ToastHost } from "../components/Toast";
 import { EditorPane } from "../features/editor/EditorPane";
 import { flushAutoSave } from "../features/editor/autosave";
-import { refreshEditorLayout } from "../features/editor/editor-bridge";
+import {
+  openEditorSearch,
+  refreshEditorLayout,
+} from "../features/editor/editor-bridge";
 import {
   guardUnsaved,
   reloadActiveDocument,
@@ -15,6 +18,7 @@ import { PreviewPane } from "../features/preview/PreviewPane";
 import { SettingsDialog } from "../features/settings/SettingsDialog";
 import { WorkspaceSidebar } from "../features/workspace/WorkspaceSidebar";
 import {
+  changeViewMode,
   chooseWorkspace,
   createMarkdownFile,
   newDocumentNearActive,
@@ -159,6 +163,18 @@ export default function App() {
       if (!(event.ctrlKey || event.metaKey)) return;
 
       switch (event.key.toLowerCase()) {
+        case "f":
+          // 预览模式下编辑器被 CSS 隐藏，CodeMirror 的查找面板收不到焦点，
+          // Ctrl+F 会毫无反应；先切到分栏，再打开查找面板。
+          if (!useDocumentStore.getState().path) break;
+          event.preventDefault();
+          if (useDocumentStore.getState().viewMode === "preview") {
+            useUiStore.getState().toast("已切到分栏，方便查看搜索结果", "info");
+            void changeViewMode("split").then(openEditorSearch);
+          } else {
+            openEditorSearch();
+          }
+          break;
         case "n":
           event.preventDefault();
           if (useWorkspaceStore.getState().root) {
