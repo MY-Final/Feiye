@@ -24,6 +24,8 @@ import {
   createMarkdownFile,
   newDocumentNearActive,
   openFile,
+  openPreviousDocument,
+  previousDocumentPath,
   renameActiveDocument,
   restoreLastWorkspace,
   saveDocumentAs,
@@ -211,6 +213,14 @@ export default function App() {
         // 重命名输入框等对话框场景已由上面的 dialogOpen 拦截。
         event.preventDefault();
         void renameActiveDocument();
+        return;
+      }
+
+      // Alt + ← 与工具栏「返回」是同一动作：沿链接读下去后可以退回上一篇。
+      if (event.altKey && !mod && event.key === "ArrowLeft") {
+        // 拦掉 WebView 自带的「后退」，否则会整页退出应用界面。
+        event.preventDefault();
+        if (previousDocumentPath()) void openPreviousDocument();
         return;
       }
 

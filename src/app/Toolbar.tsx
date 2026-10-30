@@ -142,7 +142,7 @@ export function Toolbar() {
           className="toolbar-text-btn"
           title={
             previousPath
-              ? `返回上一篇笔记：${previousPath}`
+              ? `返回上一篇笔记 (Alt+←)：${previousPath}`
               : "返回上一篇笔记（最近打开里还没有其他笔记）"
           }
           disabled={!previousPath}

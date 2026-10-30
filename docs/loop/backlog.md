@@ -19,6 +19,25 @@
 
 <!-- 从这里开始追加 -->
 
+## 第 138 轮 · 2026-10-30 14:33
+**用户需求**：沿链接读完一篇后想回上一页，眼睛还停在正文上，手却得去够工具栏点「返回」；浏览器里 Alt+← 就是后退，编辑器里也该有同一个键。
+
+**产品经理**：做。「返回」已经解决导航本身，缺的只是键盘入口；Alt+← 是跨应用通行的「后退」语义，补上后读长文不用离开键盘，也不新增任何按钮或数据结构，符合「安静、快」的原则。
+
+**前端**：影响 `src/app/App.tsx`（应用级 keydown 里处理 Alt+←，与工具栏「返回」共用 `previousDocumentPath` / `openPreviousDocument`，并 `preventDefault` 拦掉 WebView 自带后退）、`src/app/Toolbar.tsx`（悬停提示补 `Alt+←`）、`src/features/settings/SettingsDialog.tsx`（「视图与查找」分组新增一行）。风险：输入框内沿用既有规则不触发；没有上一篇时静默无动作，与按钮置灰一致；macOS 上 Option+← 原生是「按词左移」，本窗口以 Windows 为主要验证环境，后续如支持 macOS 再单独裁决。工作量 S。
+
+**后端**：无改动。工作量 0。
+
+**裁决**：做
+
+**改动**：`src/app/App.tsx`、`src/app/Toolbar.tsx`、`src/features/settings/SettingsDialog.tsx`
+
+**构建**：通过（bun run build，619ms）
+
+**验证**：CDP（9222，工作区 `D:\clawWorkSpeace\新建文件夹`）。当前 `CaseTest.md` 时模拟 Alt+←，状态栏切到 `README.md`、工具栏提示变为「返回上一篇笔记 (Alt+←)：CaseTest.md」；再按一次回到 `CaseTest.md`，事件 `defaultPrevented` 为 true（不会触发 WebView 后退）。Ctrl+, 打开设置，「视图与查找」里能看到「Alt + ← 返回上一篇打开的笔记」。人工复现：打开 A、再打开 B → 按 Alt+← 应回到 A，再按回到 B；输入框内按 Alt+← 不跳转；只有一篇笔记时按了无反应。
+
+---
+
 ## 第 137 轮 · 2026-10-30 14:24
 **用户需求**：用相对链接在笔记之间跳来跳去读一章，读完想回到原来那篇，只能在文件树里一层层找回；链接跳转后没有「上一页」，读长文像走单行道。
 
