@@ -22,7 +22,11 @@ export function ToastHost() {
           // 鼠标停上来时别急着消失，挪开后再留一点时间。
           onMouseEnter={() => pauseToast(toast.id)}
           onMouseLeave={() => resumeToast(toast.id, toast.kind)}
-          title={toast.action ? "点击在资源管理器中显示" : "点击关闭"}
+          title={
+            toast.action
+              ? (toast.actionTitle ?? "点击在资源管理器中显示")
+              : "点击关闭"
+          }
         >
           {toast.message}
         </button>

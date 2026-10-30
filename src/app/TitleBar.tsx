@@ -6,6 +6,7 @@ import {
   forgetWorkspace,
   listRecentWorkspaces,
   openWorkspaceAt,
+  rememberWorkspace,
 } from "../features/workspace/workspace-actions";
 import { useWindowControls } from "../features/window/use-window-controls";
 import { useDocumentStore } from "../stores/document";
@@ -116,9 +117,19 @@ export function TitleBar() {
         ? { ...recentMenu, paths: remaining }
         : null,
     );
-    useUiStore
-      .getState()
-      .toast(`已从最近工作区移除：${folderName(path)}`);
+    useUiStore.getState().toast(
+      `已从最近工作区移除：${folderName(path)} · 点击撤销`,
+      "info",
+      // 误点 × 时不用真的切过去再切回来，点提示即可放回列表。
+      () => {
+        void rememberWorkspace(path).then(() => {
+          useUiStore
+            .getState()
+            .toast(`已恢复最近工作区：${folderName(path)}`);
+        });
+      },
+      "点击撤销移除",
+    );
   };
 
   return (

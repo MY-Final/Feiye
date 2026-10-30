@@ -10,6 +10,8 @@ export interface ToastItem {
   kind: ToastKind;
   /** 点提示时执行的附加动作（例如在资源管理器中显示刚导出的文件）。 */
   action?: () => void;
+  /** 动作提示的悬停说明；不传沿用「在资源管理器中显示」。 */
+  actionTitle?: string;
 }
 
 export interface ConfirmButton {
@@ -53,7 +55,12 @@ interface UiStore {
   openSettings(): void;
   closeSettings(): void;
   toggleSettings(): void;
-  toast(message: string, kind?: ToastKind, action?: () => void): void;
+  toast(
+    message: string,
+    kind?: ToastKind,
+    action?: () => void,
+    actionTitle?: string,
+  ): void;
   dismissToast(id: number): void;
   ask(options: Omit<ConfirmRequest, "resolve">): Promise<string>;
   resolveConfirm(value: string): void;
@@ -131,10 +138,13 @@ export const useUiStore = create<UiStore>((set, get) => ({
     set((state) => ({ settingsOpen: !state.settingsOpen }));
   },
 
-  toast(message, kind = "info", action) {
+  toast(message, kind = "info", action, actionTitle) {
     const id = ++toastId;
     set((state) => {
-      const next = [...state.toasts, { id, message, kind, action }];
+      const next = [
+        ...state.toasts,
+        { id, message, kind, action, actionTitle },
+      ];
       // 最多同时留 3 条：连着操作几次也不会堆成一列糊住状态栏，
       // 被挤掉的旧提示计时器一并清掉。
       while (next.length > 3) {
