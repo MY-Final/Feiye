@@ -1,6 +1,10 @@
 import { basicSetup } from "codemirror";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
-import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import {
+  HighlightStyle,
+  syntaxHighlighting,
+  syntaxTree,
+} from "@codemirror/language";
 import { languages } from "@codemirror/language-data";
 import { Compartment, EditorState, Prec, type Extension } from "@codemirror/state";
 import { EditorView, keymap, placeholder } from "@codemirror/view";
@@ -23,6 +27,7 @@ export interface EditorHandlers {
   onSave(): void;
   onChange(): void;
   onStats(): void;
+  onOutline(): void;
   onCursor(line: number, column: number): void;
   onFormatState(state: FormatState): void;
 }
@@ -265,6 +270,14 @@ export function createEditorState(
           const head = update.state.selection.main.head;
           const line = update.state.doc.lineAt(head);
           handlers.onCursor(line.number, head - line.from + 1);
+        }
+        // 后台解析推进（滚动长文档时）会产生没有改文档的事务；大纲此时
+        // 也要跟着补齐，否则不输入就会一直停留在打开文档时的那一段。
+        if (
+          !update.docChanged &&
+          syntaxTree(update.startState) !== syntaxTree(update.state)
+        ) {
+          handlers.onOutline();
         }
         // 语法树解析完成时还会产生事务；每次都同步一次，保证工具栏
         // 的标题 / 列表等激活态不会停留在解析前的旧值。

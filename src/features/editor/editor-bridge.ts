@@ -32,6 +32,9 @@ const guardedHandlers: EditorHandlers = {
   onStats() {
     handlers?.onStats();
   },
+  onOutline() {
+    handlers?.onOutline();
+  },
   onCursor(line, column) {
     handlers?.onCursor(line, column);
   },

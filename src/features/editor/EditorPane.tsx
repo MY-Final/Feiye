@@ -103,6 +103,7 @@ function handleLinkClick(event: ReactMouseEvent<HTMLDivElement>): void {
 export function EditorPane() {
   const hostRef = useRef<HTMLDivElement>(null);
   const statsTimer = useRef<number | null>(null);
+  const outlineTimer = useRef<number | null>(null);
   const viewMode = useDocumentStore((state) => state.viewMode);
 
   useEffect(() => {
@@ -127,6 +128,18 @@ export function EditorPane() {
       }, STATS_DELAY_MS);
     };
 
+    // 后台解析推进时只补大纲，不重算字数（正文没变）。
+    const scheduleOutline = () => {
+      if (outlineTimer.current !== null) return;
+      outlineTimer.current = window.setTimeout(() => {
+        outlineTimer.current = null;
+        const state = getEditorView()?.state;
+        if (state) {
+          useOutlineStore.getState().setHeadings(readOutline(state));
+        }
+      }, STATS_DELAY_MS);
+    };
+
     mountEditor(
       host,
       {
@@ -144,6 +157,7 @@ export function EditorPane() {
           }
         },
         onStats: scheduleStats,
+        onOutline: scheduleOutline,
         onCursor(line, column) {
           useDocumentStore.getState().setCursor(line, column);
           const view = getEditorView();
@@ -176,6 +190,10 @@ export function EditorPane() {
       if (statsTimer.current !== null) {
         window.clearTimeout(statsTimer.current);
         statsTimer.current = null;
+      }
+      if (outlineTimer.current !== null) {
+        window.clearTimeout(outlineTimer.current);
+        outlineTimer.current = null;
       }
     };
   }, []);
