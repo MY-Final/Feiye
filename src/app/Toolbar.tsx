@@ -2,7 +2,11 @@ import { redo, undo } from "@codemirror/commands";
 import { useRef, type ReactNode } from "react";
 
 import { SlidingSegmented } from "../components/SlidingSegmented";
-import { getEditorText, runEditorCommand } from "../features/editor/editor-bridge";
+import {
+  getEditorText,
+  getEditorView,
+  runEditorCommand,
+} from "../features/editor/editor-bridge";
 import { insertImageFiles } from "../features/editor/image-insert";
 import {
   insertHorizontalRule,
@@ -32,16 +36,29 @@ import { copyHtml } from "../lib/clipboard";
 import { VIEW_MODES } from "../lib/view-modes";
 
 export async function copyActiveAsHtml(): Promise<void> {
-  const text = getEditorText();
+  const editorView = getEditorView();
+  const viewMode = useDocumentStore.getState().viewMode;
+  // 预览模式下编辑器可能留着旧选区，此时按整篇复制。
+  const selection =
+    viewMode !== "preview" ? editorView?.state.selection.main : undefined;
+  const selected =
+    selection && !selection.empty
+      ? editorView!.state.sliceDoc(selection.from, selection.to)
+      : "";
+  const useSelection = selected.trim().length > 0;
+  const text = useSelection ? selected : getEditorText();
   if (text === null) return;
 
   try {
     const html = await renderMarkdownToHtml(text);
     const copied = await copyHtml(html);
+    const okMessage = useSelection
+      ? "所选内容已复制为 HTML，可直接粘贴到邮件或公众号草稿"
+      : "HTML 已复制，可直接粘贴到邮件或公众号草稿";
     useUiStore
       .getState()
       .toast(
-        copied ? "HTML 已复制，可直接粘贴到邮件或公众号草稿" : "复制 HTML 失败，请重试",
+        copied ? okMessage : "复制 HTML 失败，请重试",
         copied ? "info" : "error",
       );
   } catch (error) {
@@ -223,7 +240,7 @@ export function Toolbar() {
         <button
           type="button"
           className="toolbar-text-btn"
-          title="按预览排版复制 HTML (Ctrl+Shift+E)，可直接粘贴到邮件或公众号草稿"
+          title="按预览排版复制 HTML (Ctrl+Shift+E)；选中正文时只复制所选部分"
           disabled={!hasDoc}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => void copyActiveAsHtml()}
