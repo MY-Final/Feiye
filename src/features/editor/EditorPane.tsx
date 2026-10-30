@@ -1,6 +1,7 @@
 import { useEffect, useRef, type MouseEvent as ReactMouseEvent } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
+import { isExternalHref } from "../../lib/links";
 import { baseName, resolveRelLink } from "../../lib/paths";
 import { countTextStats } from "../../lib/text-stats";
 import { useDocumentStore } from "../../stores/document";
@@ -56,7 +57,7 @@ function openEditorLink(href: string): void {
     return;
   }
 
-  if (/^https?:\/\//i.test(href)) {
+  if (isExternalHref(href)) {
     void openUrl(href).catch(() => {
       // 权限或系统调用失败时保持页面不动。
     });

@@ -6,6 +6,7 @@ import {
   resolveMarkdownImageSrc,
   rewritePreviewImages,
 } from "../../lib/images";
+import { isExternalHref } from "../../lib/links";
 import { baseName, resolveRelLink } from "../../lib/paths";
 import { useDocumentStore } from "../../stores/document";
 import { useOutlineStore } from "../../stores/outline";
@@ -121,7 +122,7 @@ export function PreviewPane() {
       if (!anchor) return;
 
       const href = anchor.getAttribute("href") ?? "";
-      if (/^https?:\/\//i.test(href)) {
+      if (isExternalHref(href)) {
         event.preventDefault();
         void openUrl(href).catch(() => {
           // 权限或系统调用失败时保持页面不动。
@@ -248,7 +249,7 @@ export function PreviewPane() {
       if (anchor.title && anchor.dataset.linkHint !== "1") return;
       const href = anchor.getAttribute("href") ?? "";
       if (!href || href.startsWith("#")) return;
-      anchor.title = /^https?:\/\//i.test(href)
+      anchor.title = isExternalHref(href)
         ? href
         : (docPath && resolveRelLink(href, docPath)) || href;
       anchor.dataset.linkHint = "1";
