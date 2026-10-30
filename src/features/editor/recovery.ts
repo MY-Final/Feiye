@@ -149,7 +149,6 @@ async function restoreSnapshot(snapshot: RecoverySnapshot): Promise<boolean> {
  */
 export async function promptPendingRecoveries(): Promise<void> {
   if (prompting) return;
-  if (useDocumentStore.getState().path) return;
 
   prompting = true;
   try {
@@ -157,6 +156,11 @@ export async function promptPendingRecoveries(): Promise<void> {
     if (snapshots.length === 0) return;
 
     for (const snapshot of snapshots) {
+      // 有其他文档开着时先不动编辑器；但当前文档自己的副本仍要提示，
+      // 否则启动时自动打开上次文档会把崩溃恢复整个挡掉。
+      const openPath = useDocumentStore.getState().path;
+      if (openPath && openPath !== snapshot.relPath) continue;
+
       let fileContent: string | null = null;
       let fileModifiedMs = 0;
       let missing = false;
