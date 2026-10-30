@@ -402,6 +402,11 @@
   white-space: nowrap;
 }
 
+.image-lightbox-hint {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+}
+
 .image-lightbox-count {
   color: rgba(255, 255, 255, 0.7);
   font-size: 12px;
