@@ -1,3 +1,4 @@
+import { redo, undo } from "@codemirror/commands";
 import { useRef, type ReactNode } from "react";
 
 import { SlidingSegmented } from "../components/SlidingSegmented";
@@ -24,6 +25,24 @@ import { useDocumentStore } from "../stores/document";
 import { useEditorStore } from "../stores/editor";
 import { useWorkspaceStore } from "../stores/workspace";
 import { VIEW_MODES } from "../lib/view-modes";
+
+function UndoIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M6 4 2.8 7.2 6 10.4" />
+      <path d="M3 7.2h5.6a3.4 3.4 0 0 1 0 6.8H6.4" />
+    </svg>
+  );
+}
+
+function RedoIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M10 4l3.2 3.2L10 10.4" />
+      <path d="M13 7.2H7.4a3.4 3.4 0 0 0 0 6.8h2.2" />
+    </svg>
+  );
+}
 
 function LinkIcon() {
   return (
@@ -145,6 +164,25 @@ export function Toolbar() {
         >
           重命名
         </button>
+      </div>
+
+      <span className="toolbar-sep" aria-hidden="true" />
+
+      <div className="toolbar-group" aria-label="撤销与重做">
+        <ToolButton
+          title="撤销 (Ctrl+Z)"
+          disabled={formattingDisabled || !format.canUndo}
+          onClick={() => runEditorCommand((view) => undo(view))}
+        >
+          <UndoIcon />
+        </ToolButton>
+        <ToolButton
+          title="重做 (Ctrl+Shift+Z)"
+          disabled={formattingDisabled || !format.canRedo}
+          onClick={() => runEditorCommand((view) => redo(view))}
+        >
+          <RedoIcon />
+        </ToolButton>
       </div>
 
       <span className="toolbar-sep" aria-hidden="true" />

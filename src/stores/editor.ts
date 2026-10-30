@@ -17,6 +17,8 @@ const EMPTY_FORMAT: FormatState = {
   codeBlock: false,
   math: "none",
   table: false,
+  canUndo: false,
+  canRedo: false,
 };
 
 interface EditorStore {

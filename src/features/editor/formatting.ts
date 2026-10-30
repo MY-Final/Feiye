@@ -1,3 +1,4 @@
+import { redoDepth, undoDepth } from "@codemirror/commands";
 import { syntaxTree } from "@codemirror/language";
 import {
   EditorSelection,
@@ -25,6 +26,9 @@ export interface FormatState {
   codeBlock: boolean;
   math: "none" | "inline" | "block";
   table: boolean;
+  /** 撤销 / 重做栈是否非空，供工具栏按钮置灰。 */
+  canUndo: boolean;
+  canRedo: boolean;
 }
 
 const INLINE_NODES: Record<
@@ -669,6 +673,8 @@ export function readFormatState(state: EditorState): FormatState {
     codeBlock,
     math,
     table: has("Table"),
+    canUndo: undoDepth(state) > 0,
+    canRedo: redoDepth(state) > 0,
   };
 }
 
@@ -685,6 +691,8 @@ export function sameFormatState(a: FormatState, b: FormatState): boolean {
     a.list === b.list &&
     a.codeBlock === b.codeBlock &&
     a.math === b.math &&
-    a.table === b.table
+    a.table === b.table &&
+    a.canUndo === b.canUndo &&
+    a.canRedo === b.canRedo
   );
 }
