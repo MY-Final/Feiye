@@ -122,6 +122,7 @@ const SHORTCUT_GROUPS: { title: string; items: [string, string][] }[] = [
     title: "视图与查找",
     items: [
       ["Ctrl + F", "查找与替换（预览模式下自动切到分栏）"],
+      ["Ctrl + = / Ctrl + -", "放大 / 缩小正文字号"],
       ["Ctrl + ,", "偏好设置"],
       ["Esc", "关闭对话框、查看大图"],
       ["Ctrl + 点击链接", "在应用内打开笔记"],

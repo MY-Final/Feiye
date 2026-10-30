@@ -32,7 +32,12 @@ import { baseName, parentRel } from "../lib/paths";
 import { getSetting, isAppError, readFile, setSetting } from "../lib/tauri";
 import { isViewMode } from "../lib/view-modes";
 import { useDocumentStore } from "../stores/document";
-import { flushPreferences, FONT_FAMILY_STACKS, useSettingsStore } from "../stores/settings";
+import {
+  flushPreferences,
+  FONT_FAMILY_STACKS,
+  PREFERENCE_LIMITS,
+  useSettingsStore,
+} from "../stores/settings";
 import { useUiStore } from "../stores/ui";
 import { useWorkspaceStore } from "../stores/workspace";
 import {
@@ -200,6 +205,18 @@ export default function App() {
             useUiStore.getState().toggleSidebar();
           }
           break;
+        // 正文太小 / 太大时不用开设置，直接按键调字号。
+        case "=":
+        case "+":
+        case "-": {
+          event.preventDefault();
+          const { preferences, update } = useSettingsStore.getState();
+          const { min, max, step } = PREFERENCE_LIMITS.fontSize;
+          const delta = event.key === "-" ? -step : step;
+          const next = Math.min(max, Math.max(min, preferences.fontSize + delta));
+          if (next !== preferences.fontSize) update({ fontSize: next });
+          break;
+        }
         default:
           break;
       }
