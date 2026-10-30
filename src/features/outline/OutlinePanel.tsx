@@ -111,6 +111,7 @@ export function OutlinePanel() {
           type="button"
           role="treeitem"
           aria-level={heading.level}
+          aria-selected={index === activeIndex}
           className={`outline-item${index === activeIndex ? " active" : ""}`}
           data-outline-index={index}
           style={{ paddingLeft: 10 + (heading.level - 1) * 13 }}
