@@ -583,7 +583,8 @@ export default function App() {
         {hasWorkspace && sidebarVisible && !zenMode ? <WorkspaceSidebar /> : null}
 
         <div className="main-column">
-          <TabBar />
+          {/* 专注模式只留正文：标签栏也一并收起，退出后原样回来。 */}
+          {zenMode ? null : <TabBar />}
           <main
           className={`workspace-main mode-${viewMode}${preferences.lineNumbers ? "" : " hide-line-numbers"}`}
           style={
