@@ -531,7 +531,9 @@ export async function changeViewMode(mode: ViewMode): Promise<void> {
     if (text !== null) requestPreview(text, true);
   }
   // 切回可编辑的视图后焦点交给正文，Ctrl+E 来回按也能直接接着写。
-  if (doc.path && mode !== "preview") {
+  // 设置面板里改「默认视图」也会走到这里，那时不能把焦点抢到遮罩后面。
+  const ui = useUiStore.getState();
+  if (doc.path && mode !== "preview" && !ui.settingsOpen && !ui.confirm && !ui.prompt) {
     requestAnimationFrame(() => getEditorView()?.focus());
   }
 }
