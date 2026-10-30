@@ -317,9 +317,11 @@ export async function renameEntry(entry: Entry): Promise<void> {
       doc.renameActive(renamed.relPath, renamed.name);
       void setSetting("lastDocument", renamed.relPath);
     } else if (entry.isDir && doc.path && isWithin(doc.path, entry.relPath)) {
-      // 当前文档所在目录被改名，路径已失效，直接关闭文档。
-      void clearRecoverySnapshot(doc.path);
-      resetDocument();
+      // 当前文档所在目录被改名：保持文档打开，只把路径前缀换成新目录，
+      // 正文、脏状态与自动保存都继续，避免静默丢失未保存内容。
+      const nextPath = `${renamed.relPath}${doc.path.slice(entry.relPath.length)}`;
+      doc.renameActive(nextPath, doc.name ?? baseName(nextPath));
+      void setSetting("lastDocument", nextPath);
     }
 
     if (entry.isDir) {
