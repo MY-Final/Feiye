@@ -7,6 +7,10 @@ import { useDocumentStore } from "../../stores/document";
 import { useEditorStore } from "../../stores/editor";
 import { useOutlineStore } from "../../stores/outline";
 import { requestPreview } from "../preview/preview-controller";
+import {
+  normalizeAnchor,
+  scrollPreviewToHeading,
+} from "../preview/preview-scroll";
 import { openFile } from "../workspace/workspace-actions";
 import { noteDocumentChange } from "./autosave";
 import { noteCursorOffset } from "./cursor-memory";
@@ -14,6 +18,7 @@ import { resolveEditorImage } from "./editor-images";
 import {
   getEditorText,
   getEditorView,
+  jumpToEditorPosition,
   linkAtPosition,
   mountEditor,
   refreshEditorLayout,
@@ -26,8 +31,31 @@ import { saveActiveDocument } from "./save";
 const STATS_DELAY_MS = 150;
 const MARKDOWN_LINK = /\.(md|markdown|mdx)$/i;
 
+/** 文档内锚点：按标题文字定位，移动光标；分栏时同步滚动预览。 */
+function openEditorAnchor(fragment: string): void {
+  const target = normalizeAnchor(fragment);
+  if (!target) return;
+
+  const headings = useOutlineStore.getState().headings;
+  const index = headings.findIndex(
+    (heading) => normalizeAnchor(heading.text) === target,
+  );
+  if (index < 0) return;
+
+  jumpToEditorPosition(headings[index].from);
+  if (useDocumentStore.getState().viewMode === "split") {
+    scrollPreviewToHeading(index);
+  }
+}
+
 /** 按预览里的同一套规则打开链接：外链交系统浏览器，笔记走应用内打开。 */
 function openEditorLink(href: string): void {
+  // 指向本文档标题的锚点，在编辑器里也直接跳过去，和预览一致。
+  if (href.startsWith("#")) {
+    openEditorAnchor(href.slice(1));
+    return;
+  }
+
   if (/^https?:\/\//i.test(href)) {
     void openUrl(href).catch(() => {
       // 权限或系统调用失败时保持页面不动。

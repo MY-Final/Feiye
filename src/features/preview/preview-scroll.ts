@@ -1,3 +1,17 @@
+/** 标题文本与链接片段归一到同一形式，兼容中文标题和常见 slug 写法。 */
+export function normalizeAnchor(value: string): string {
+  let text = value;
+  try {
+    text = decodeURIComponent(value);
+  } catch {
+    // 片段里有非法百分号转义时按原文比较。
+  }
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]/gu, "");
+}
+
 /** 预览区标题元素的纵坐标（相对滚动内容顶部）。 */
 export function previewHeadingTop(
   pane: HTMLElement,
