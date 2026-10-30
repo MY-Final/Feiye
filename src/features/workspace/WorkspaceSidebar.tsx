@@ -3,6 +3,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
@@ -189,6 +190,8 @@ function TreeNode({ entry, depth, onMenu }: TreeNodeProps) {
         className={`tree-row${active ? " active" : ""}`}
         style={{ paddingLeft: indent }}
         title={entry.name}
+        data-depth={depth}
+        aria-expanded={entry.isDir ? expanded : undefined}
         onClick={() => {
           if (entry.isDir) {
             void toggleDir(entry.relPath);
@@ -319,6 +322,74 @@ export function WorkspaceSidebar() {
     setMenu({ x: event.clientX, y: event.clientY, entry });
   };
 
+  // 文件树按文件管理器的习惯支持方向键：上下移动、左右折叠展开、
+  // Home / End 跳到首尾。行本身是按钮，Enter 由浏览器转成点击。
+  const handleTreeKeys = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    const row = (event.target as Element | null)?.closest<HTMLElement>(
+      ".tree-row",
+    );
+    if (!row) return;
+
+    const rows = Array.from(
+      event.currentTarget.querySelectorAll<HTMLElement>(".tree-row"),
+    );
+    const index = rows.indexOf(row);
+    if (index < 0) return;
+
+    const focusRow = (next: HTMLElement | undefined) => next?.focus();
+    const expanded = row.getAttribute("aria-expanded");
+
+    switch (event.key) {
+      case "ArrowDown":
+        event.preventDefault();
+        focusRow(rows[index + 1]);
+        break;
+      case "ArrowUp":
+        event.preventDefault();
+        focusRow(rows[index - 1]);
+        break;
+      case "Home":
+        event.preventDefault();
+        focusRow(rows[0]);
+        break;
+      case "End":
+        event.preventDefault();
+        focusRow(rows[rows.length - 1]);
+        break;
+      case "ArrowRight":
+        // 已展开就进到第一个子项，折叠的则就地展开。
+        if (expanded === "false") {
+          event.preventDefault();
+          row.click();
+        } else if (expanded === "true") {
+          event.preventDefault();
+          focusRow(rows[index + 1]);
+        }
+        break;
+      case "ArrowLeft": {
+        if (expanded === "true") {
+          event.preventDefault();
+          row.click();
+          break;
+        }
+        // 折叠状态或普通文件：回到同层的父文件夹。
+        const depth = Number(row.dataset.depth ?? "0");
+        if (depth <= 0) break;
+        for (let i = index - 1; i >= 0; i -= 1) {
+          if (Number(rows[i].dataset.depth) === depth - 1) {
+            event.preventDefault();
+            rows[i].focus();
+            break;
+          }
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  };
+
   const handleRefresh = async () => {
     if (refreshing) return;
     setRefreshing(true);
@@ -424,6 +495,7 @@ export function WorkspaceSidebar() {
       {tab === "files" ? (
         <div
           className="tree"
+          onKeyDown={handleTreeKeys}
           onContextMenu={(event) => {
             // 只在空白区域弹出根目录菜单，行上的右键由 TreeNode 处理。
             const target = event.target as HTMLElement;
