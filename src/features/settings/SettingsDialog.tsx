@@ -40,6 +40,12 @@ const FONT_FAMILY_OPTIONS: { value: FontFamily; label: string }[] = [
   { value: "kai", label: "楷体" },
 ];
 
+const ACCENT_OPTIONS: { value: Preferences["accent"]; label: string }[] = [
+  { value: "indigo", label: "靛青" },
+  { value: "umber", label: "赭石" },
+  { value: "pine", label: "松绿" },
+];
+
 const AUTO_SAVE_OPTIONS = [
   { value: 0, label: "关闭（手动保存）" },
   { value: 1000, label: "1 秒" },
@@ -351,6 +357,15 @@ export function SettingsDialog() {
                     value={preferences.theme}
                     ariaLabel="主题"
                     onChange={(theme) => update({ theme })}
+                  />
+                </Row>
+
+                <Row label="点缀色" hint="按钮、链接与选中态的强调色">
+                  <SlidingSegmented
+                    options={ACCENT_OPTIONS}
+                    value={preferences.accent}
+                    ariaLabel="点缀色"
+                    onChange={(accent) => update({ accent })}
                   />
                 </Row>
 

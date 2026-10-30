@@ -1,6 +1,13 @@
 import { create } from "zustand";
 
-import { applyTheme, isThemeMode, watchSystemTheme } from "../lib/theme";
+import {
+  applyAccent,
+  applyTheme,
+  isAccentPreset,
+  isThemeMode,
+  watchSystemTheme,
+  type AccentPreset,
+} from "../lib/theme";
 import { getSetting, setSetting } from "../lib/tauri";
 import { isViewMode } from "../lib/view-modes";
 import type { ViewMode } from "./document";
@@ -18,6 +25,7 @@ export const FONT_FAMILY_STACKS: Record<FontFamily, string> = {
 
 export interface Preferences {
   theme: "system" | "light" | "dark";
+  accent: AccentPreset;
   fontFamily: FontFamily;
   fontSize: number;
   lineHeight: number;
@@ -31,6 +39,7 @@ export interface Preferences {
 
 export const DEFAULT_PREFERENCES: Preferences = {
   theme: "system",
+  accent: "indigo",
   fontFamily: "system",
   fontSize: 16,
   lineHeight: 1.8,
@@ -81,6 +90,9 @@ export function normalizePreferences(value: unknown): Preferences {
     theme: isThemeMode(source.theme)
       ? source.theme
       : DEFAULT_PREFERENCES.theme,
+    accent: isAccentPreset(source.accent)
+      ? source.accent
+      : DEFAULT_PREFERENCES.accent,
     fontFamily: isFontFamily(source.fontFamily)
       ? source.fontFamily
       : DEFAULT_PREFERENCES.fontFamily,
@@ -182,6 +194,7 @@ export function loadPreferences(): Promise<void> {
     const preferences = normalizePreferences(raw);
     useSettingsStore.setState({ preferences, loaded: true });
     applyTheme(preferences.theme);
+    applyAccent(preferences.accent);
 
     watchSystemTheme(() => {
       if (useSettingsStore.getState().preferences.theme === "system") {
@@ -204,6 +217,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     if (next.theme !== current.theme) {
       applyTheme(next.theme);
     }
+    if (next.accent !== current.accent) {
+      applyAccent(next.accent);
+    }
     schedulePersist(next);
   },
 
@@ -211,6 +227,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     const next = DEFAULT_PREFERENCES;
     set({ preferences: next });
     applyTheme(next.theme);
+    applyAccent(next.accent);
     schedulePersist(next);
   },
 }));

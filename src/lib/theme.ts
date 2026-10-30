@@ -1,10 +1,32 @@
 export type ThemeMode = "system" | "light" | "dark";
+export type AccentPreset = "indigo" | "umber" | "pine";
 
 /** localStorage 中缓存主题模式，供 index.html 的首屏脚本读取，避免闪白。 */
 export const THEME_CACHE_KEY = "feiye.theme";
+/** 点缀色同样缓存，首屏脚本先套上，避免打开设置前闪一下默认色。 */
+export const ACCENT_CACHE_KEY = "feiye.accent";
 
 export function isThemeMode(value: unknown): value is ThemeMode {
   return value === "system" || value === "light" || value === "dark";
+}
+
+export function isAccentPreset(value: unknown): value is AccentPreset {
+  return value === "indigo" || value === "umber" || value === "pine";
+}
+
+/** 点缀色只换强调色，背景与正文仍由亮暗主题决定。 */
+export function applyAccent(preset: AccentPreset): void {
+  const root = document.documentElement;
+  if (preset === "indigo") {
+    delete root.dataset.accent;
+  } else {
+    root.dataset.accent = preset;
+  }
+  try {
+    localStorage.setItem(ACCENT_CACHE_KEY, preset);
+  } catch {
+    // 缓存失败不影响当前会话。
+  }
 }
 
 export function resolveTheme(mode: ThemeMode): "light" | "dark" {
