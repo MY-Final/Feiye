@@ -70,6 +70,35 @@ const RECENT_LIMIT = 5;
 /** 浏览历史只留最近 50 步，足够读完一长串链接；不落盘，随会话结束清空。 */
 const HISTORY_LIMIT = 50;
 
+/** 文件 / 目录改名、移动或删除后，把旧前缀换成新前缀；`nextPath` 为 null 时移除。 */
+function remapPath(
+  path: string,
+  oldPath: string,
+  nextPath: string | null,
+): string | null {
+  if (path === oldPath) return nextPath;
+  if (!path.startsWith(`${oldPath}/`)) return path;
+  return nextPath === null ? null : `${nextPath}${path.slice(oldPath.length)}`;
+}
+
+/** 批量重映射；没有变化时返回原数组，避免无谓的状态更新与落盘。 */
+function remapPaths(
+  paths: string[],
+  oldPath: string,
+  nextPath: string | null,
+): string[] {
+  const next = paths
+    .map((path) => remapPath(path, oldPath, nextPath))
+    .filter((path): path is string => path !== null);
+  if (
+    next.length === paths.length &&
+    next.every((path, index) => path === paths[index])
+  ) {
+    return paths;
+  }
+  return next;
+}
+
 /** 各工作区最近打开的文档；同样只在第一次读取后常驻。 */
 let recentByRoot: Record<string, string[]> | null = null;
 
@@ -141,6 +170,8 @@ interface WorkspaceStore {
   clearForward(): void;
   /** 重命名或删除后同步「最近打开」，避免留下打不开的旧路径。 */
   updateRecent(oldPath: string, nextPath: string | null): void;
+  /** 同上，同步浏览历史与前进栈：改名后「返回」仍能找到那篇笔记。 */
+  remapHistory(oldPath: string, nextPath: string | null): void;
   /** 一键清空最近打开；只影响历史列表，不动磁盘文件。 */
   clearRecent(): void;
   loadDir(relPath: string, silent?: boolean): Promise<void>;
@@ -243,18 +274,18 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     if (!root) return;
     const current = get().recent;
     // 目录改名 / 删除时，它下面的最近文档也要一起换前缀或移除。
-    const next = current
-      .map((path) => {
-        if (path === oldPath) return nextPath;
-        if (!path.startsWith(`${oldPath}/`)) return path;
-        return nextPath === null ? null : `${nextPath}${path.slice(oldPath.length)}`;
-      })
-      .filter((path): path is string => path !== null);
-    if (next.length === current.length && next.every((path, index) => path === current[index])) {
-      return;
-    }
+    const next = remapPaths(current, oldPath, nextPath);
+    if (next === current) return;
     set({ recent: next });
     persistRecent(root, next);
+  },
+
+  remapHistory(oldPath, nextPath) {
+    const { history, forward } = get();
+    const nextHistory = remapPaths(history, oldPath, nextPath);
+    const nextForward = remapPaths(forward, oldPath, nextPath);
+    if (nextHistory === history && nextForward === forward) return;
+    set({ history: nextHistory, forward: nextForward });
   },
 
   clearRecent() {

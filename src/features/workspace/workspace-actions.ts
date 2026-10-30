@@ -537,6 +537,7 @@ export async function renameEntry(entry: Entry): Promise<void> {
     const renamed = await apiRenameEntry(entry.relPath, target);
     await useWorkspaceStore.getState().refreshDir(parentRel(entry.relPath));
     useWorkspaceStore.getState().updateRecent(entry.relPath, renamed.relPath);
+    useWorkspaceStore.getState().remapHistory(entry.relPath, renamed.relPath);
     // 改名后路径变了，光标记录也换到新路径，重新打开时才能接着上次的位置写。
     migrateCursor(entry.relPath, renamed.relPath);
 
@@ -613,6 +614,7 @@ export async function moveEntry(
     await useWorkspaceStore.getState().refreshDir(targetParent);
 
     useWorkspaceStore.getState().updateRecent(entry.relPath, moved.relPath);
+    useWorkspaceStore.getState().remapHistory(entry.relPath, moved.relPath);
     migrateCursor(entry.relPath, moved.relPath);
 
     const doc = useDocumentStore.getState();
@@ -751,6 +753,8 @@ export async function deleteEntry(entry: Entry): Promise<void> {
     await apiDeleteEntry(entry.relPath);
     await useWorkspaceStore.getState().refreshDir(parentRel(entry.relPath));
     useWorkspaceStore.getState().updateRecent(entry.relPath, null);
+    // 删除目录时，历史和前进栈里它下面的笔记也一起摘掉，返回不再撞旧路径。
+    useWorkspaceStore.getState().remapHistory(entry.relPath, null);
 
     const doc = useDocumentStore.getState();
     if (doc.path && isWithin(doc.path, entry.relPath)) {
