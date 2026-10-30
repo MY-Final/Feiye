@@ -1,4 +1,5 @@
 import { redo, undo } from "@codemirror/commands";
+import katexCss from "katex/dist/katex.min.css?inline";
 import { invoke } from "@tauri-apps/api/core";
 import { useRef, type ReactNode } from "react";
 
@@ -38,7 +39,7 @@ import { useWorkspaceStore } from "../stores/workspace";
 import { copyHtml } from "../lib/clipboard";
 import { countLocalImages, normalizeImagePath } from "../lib/images";
 import { baseName, parentRel } from "../lib/paths";
-import { describeError, isAppError } from "../lib/tauri";
+import { describeError } from "../lib/tauri";
 import { VIEW_MODES } from "../lib/view-modes";
 
 /** 把预览 HTML 中的工作区图片换成 data URL，超过上限或读取失败时保留原地址。 */
@@ -186,27 +187,131 @@ function ensureHtmlName(value: string): string {
   return /\.html$/i.test(value) ? value : `${value}.html`;
 }
 
-// 文件树只列 Markdown，已导出的 `.html` 不会出现在 children 里；这里按会话记住导出记录，
-// 让连续导出（改完再导一份）也能避让，键是 `${parent}\u0000${文件名小写}`。
-const exportedHtml = new Set<string>();
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
 
-/** 同目录已有同名文件时退到 `名字-2.html`，与「另存为」连续保存的默认名一致。 */
-function nextFreeHtmlName(parent: string, leaf: string): string {
-  const entries = useWorkspaceStore.getState().children[parent] ?? [];
-  const used = new Set(
-    entries.filter((item) => !item.isDir).map((item) => item.name.toLowerCase()),
+// 渲染结果是片段，直接落盘用浏览器打开会没有标题、中文可能乱码、排版全塌；
+// 这里补上完整文档与一份自足的排版样式，让导出的文件离开应用也像预览。
+const EXPORT_STYLE = `
+body{margin:0;background:#fdfdfb;color:#22211d;font:16px/1.75 "Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+main{max-width:760px;margin:0 auto;padding:48px 24px 72px}
+h1,h2,h3,h4,h5,h6{font-family:Georgia,"Songti SC","SimSun",serif;line-height:1.35;margin:1.8em 0 .6em;font-weight:600}
+h1{font-size:2em}h2{font-size:1.5em}h3{font-size:1.25em}
+p,ul,ol{margin:0 0 1em}li>p{margin:0}
+a{color:#3455a8}
+img{max-width:100%;height:auto}
+blockquote{margin:0 0 1em;padding:.2em 1em;border-left:3px solid #c9c4b8;color:#555}
+pre{overflow:auto;padding:14px 16px;border-radius:8px;background:#f5f4ef;font-size:13px;line-height:1.55}
+code{font-family:Consolas,"SFMono-Regular",Menlo,monospace;font-size:.9em}
+:not(pre)>code{padding:.15em .35em;border-radius:4px;background:#f0efe8}
+table{border-collapse:collapse;margin:0 0 1em}
+th,td{border:1px solid #ddd8cc;padding:6px 10px}
+hr{border:0;border-top:1px solid #ddd8cc;margin:2em 0}
+`;
+
+function standaloneHtml(title: string, body: string, extraStyle = ""): string {
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="generator" content="扉页">
+<title>${escapeHtml(title)}</title>
+<style>${EXPORT_STYLE}${extraStyle}</style>
+</head>
+<body>
+<main class="markdown-body">
+${body}
+</main>
+</body>
+</html>
+`;
+}
+
+/** 打印版式：A4、白底、去掉应用里的页面边距，避免代码块与图片跨页断开。 */
+const PRINT_STYLE = `
+@page{size:A4;margin:18mm 16mm}
+body{background:#fff}
+main{max-width:none;padding:0}
+a{color:inherit;text-decoration:none}
+pre{white-space:pre-wrap;word-break:break-word;break-inside:avoid}
+img,table,blockquote{break-inside:avoid}
+h1,h2,h3,h4{break-after:avoid}
+`;
+
+let printFrame: HTMLIFrameElement | null = null;
+
+function ensurePrintFrame(): HTMLIFrameElement {
+  if (printFrame?.isConnected) return printFrame;
+  const frame = document.createElement("iframe");
+  frame.className = "print-frame";
+  frame.setAttribute("aria-hidden", "true");
+  frame.tabIndex = -1;
+  frame.style.cssText =
+    "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";
+  document.body.appendChild(frame);
+  printFrame = frame;
+  return frame;
+}
+
+/** 生成打印用的完整 HTML（已内联本地图片与 KaTeX 样式），供导出测试与打印共用。 */
+export async function buildPrintableHtml(): Promise<string | null> {
+  const docPath = useDocumentStore.getState().path;
+  if (!docPath) return null;
+  const text = getEditorText();
+  if (text === null) return null;
+  const rendered = await renderMarkdownToHtml(text);
+  const { html } = await inlineLocalImages(
+    rendered,
+    useWorkspaceStore.getState().root,
+    docPath,
   );
-  const prefix = `${parent}\u0000`;
-  for (const key of exportedHtml) {
-    if (key.startsWith(prefix)) used.add(key.slice(prefix.length));
+  const title = baseName(docPath).replace(/\.[^./\\]+$/, "") || "笔记";
+  return standaloneHtml(title, html, `${katexCss}
+${PRINT_STYLE}`);
+}
+
+/**
+ * 导出 PDF：在隐藏 iframe 里按打印版式渲染当前笔记，再打开系统打印对话框；
+ * 用户在对话框里选「另存为 PDF」并选择位置。应用本身不接管 PDF 文件写入。
+ */
+export async function printActiveDocument(): Promise<void> {
+  const ui = useUiStore.getState();
+  if (!useDocumentStore.getState().path) {
+    ui.toast("先打开一篇笔记再导出 PDF");
+    return;
   }
-  if (!used.has(leaf.toLowerCase())) return leaf;
-  const stem = leaf.replace(/\.html$/i, "");
-  for (let n = 2; n < 1000; n += 1) {
-    const candidate = `${stem}-${n}.html`;
-    if (!used.has(candidate.toLowerCase())) return candidate;
+  try {
+    const html = await buildPrintableHtml();
+    if (!html) return;
+    const frame = ensurePrintFrame();
+    await new Promise<void>((resolve) => {
+      frame.onload = () => resolve();
+      frame.srcdoc = html;
+    });
+    const win = frame.contentWindow;
+    if (!win) throw new Error("无法打开打印视图");
+    win.focus();
+    win.print();
+    ui.toast("在系统打印对话框中选择「另存为 PDF」即可导出", "info");
+  } catch (error) {
+    ui.toast(`导出 PDF 失败：${describeError(error)}`, "error");
   }
-  return leaf;
+}
+
+/** 同目录已有同名文件时退到 `名字-2.html`。
+ * 文件树只列 Markdown，前端看不到已有的 `.html`，所以交给后端扫磁盘，
+ * 跨会话或外部放入的文件也能正确避让。 */
+function nextFreeHtmlName(parent: string, leaf: string): Promise<string> {
+  return invoke<string>("next_export_name", {
+    parentRelPath: parent,
+    name: leaf,
+  });
 }
 
 /** 把整篇笔记导出成同目录下的 `.html` 文件；已存在时后端拒绝，不静默覆盖。 */
@@ -222,9 +327,10 @@ export async function exportActiveAsHtml(): Promise<void> {
   if (text === null) return;
 
   const parent = parentRel(docPath);
-  const defaultName = nextFreeHtmlName(
-    parent,
-    `${baseName(docPath).replace(/\.[^./\\]+$/, "") || "笔记"}.html`,
+  const baseLeaf = `${baseName(docPath).replace(/\.[^./\\]+$/, "") || "笔记"}.html`;
+  // 对话框里一打开就给出真正可用的名字，不让用户确认后再被悄悄改名。
+  const defaultName = await nextFreeHtmlName(parent, baseLeaf).catch(
+    () => baseLeaf,
   );
   const name = await ui.askInput({
     title: parent ? `导出 HTML · ${parent}` : "导出 HTML",
@@ -245,36 +351,26 @@ export async function exportActiveAsHtml(): Promise<void> {
 
   const leaf = ensureHtmlName(name.trim());
   const rendered = await renderMarkdownToHtml(text);
-  const { html } = await inlineLocalImages(rendered, root, docPath);
+  const { html: body } = await inlineLocalImages(rendered, root, docPath);
   const write = async (candidate: string) => {
     const candidateRel = parent ? `${parent}/${candidate}` : candidate;
-    await invoke("export_html", { relPath: candidateRel, content: html });
-    exportedHtml.add(`${parent}\u0000${candidate.toLowerCase()}`);
-    ui.toast(`已导出 HTML：${candidateRel}`);
+    // 用最终落盘的文件名做 `<title>`，撞名顺延后标签页仍与文件名一致。
+    const content = standaloneHtml(candidate.replace(/\.html$/i, ""), body);
+    await invoke("export_html", { relPath: candidateRel, content });
+    // 文件树只列 Markdown，导出的 `.html` 不会出现在树里；
+    // 提示里给一个直达入口，点一下就打开所在文件夹并选中文件。
+    ui.toast(`已导出 HTML：${candidateRel} · 点击在文件夹中显示`, "info", () => {
+      void invoke("reveal_entry", { relPath: candidateRel }).catch((error) => {
+        ui.toast(`打开资源管理器失败：${describeError(error)}`, "error");
+      });
+    });
     void useWorkspaceStore.getState().refreshDir(parent);
   };
-  const stem = leaf.replace(/\.html$/i, "");
   try {
-    await write(nextFreeHtmlName(parent, leaf));
+    // 写盘前再探测一次：对话框开着时可能有人从外部放进同名文件。
+    await write(await nextFreeHtmlName(parent, leaf));
   } catch (error) {
-    if (!(isAppError(error) && error.code === "already-exists")) {
-      ui.toast(`导出 HTML 失败：${describeError(error)}`, "error");
-      return;
-    }
-    // 同目录可能有别的会话 / 外部放入的 `.html`，会话记录看不到；
-    // 顺着 `名字-2.html`、`名字-3.html`… 试到第一个空闲名，始终不覆盖。
-    for (let n = 2; n <= 50; n += 1) {
-      try {
-        await write(`${stem}-${n}.html`);
-        return;
-      } catch (err) {
-        if (!(isAppError(err) && err.code === "already-exists")) {
-          ui.toast(`导出 HTML 失败：${describeError(err)}`, "error");
-          return;
-        }
-      }
-    }
-    ui.toast(`「${leaf}」及其后 50 个序号都被占用，换个文件名再试`, "error");
+    ui.toast(`导出 HTML 失败：${describeError(error)}`, "error");
   }
 }
 

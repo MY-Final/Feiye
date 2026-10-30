@@ -145,6 +145,64 @@
   border-radius: var(--radius-sm);
 }
 
+/* 图片宽度 / 对齐：![alt](src){width=60% align=center}；title 作图注。 */
+.markdown-body img.md-align-left {
+  display: block;
+  margin-right: auto;
+}
+
+.markdown-body img.md-align-center {
+  display: block;
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.markdown-body img.md-align-right {
+  display: block;
+  margin-left: auto;
+}
+
+.markdown-body .md-figure {
+  margin: 1.2em 0;
+  text-align: center;
+}
+
+.markdown-body .md-figure img {
+  margin-right: auto;
+  margin-left: auto;
+}
+
+/* figure 内的对齐要和 figure 的居中规则分开：更具体的选择器优先。 */
+.markdown-body .md-figure img.md-align-left {
+  margin-right: auto;
+  margin-left: 0;
+}
+
+.markdown-body .md-figure img.md-align-center {
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.markdown-body .md-figure img.md-align-right {
+  margin-right: 0;
+  margin-left: auto;
+}
+
+.markdown-body .md-figure.md-align-right figcaption {
+  text-align: right;
+}
+
+.markdown-body .md-figure.md-align-left figcaption {
+  text-align: left;
+}
+
+.markdown-body .md-figure figcaption {
+  margin-top: 0.5em;
+  color: var(--text-faint);
+  font-size: 0.82em;
+  line-height: 1.5;
+}
+
 .markdown-body img.preview-image-broken {
   display: inline-block;
   max-width: 100%;
@@ -257,6 +315,35 @@
   color: var(--accent);
 }
 
+.markdown-body .mermaid-figure {
+  margin: 1.2em 0;
+  text-align: center;
+}
+
+.markdown-body .mermaid-figure svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.markdown-body .mermaid-figure.is-error {
+  text-align: left;
+}
+
+.markdown-body .mermaid-figure.is-error .mermaid-source {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  overflow-x: auto;
+}
+
+.markdown-body .mermaid-error {
+  margin-top: 6px;
+  color: #c2410c;
+  font-size: 0.85em;
+}
+
 .markdown-body table {
   display: block;
   width: max-content;
@@ -345,6 +432,18 @@
   border-radius: var(--radius-sm);
   background: #fff;
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+}
+
+/* 放大后拖动图片看边角；拖拽过程中关掉动画，否则指针会追不上。 */
+.image-lightbox img.is-zoomed {
+  cursor: grab;
+  touch-action: none;
+}
+
+.image-lightbox img.is-dragging {
+  cursor: grabbing;
+  transition: none;
+  user-select: none;
 }
 
 /* 同篇文档有多张图时，左右两边的翻页按钮和底部的张数提示；滚轮可缩放。 */

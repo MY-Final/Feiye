@@ -1,8 +1,29 @@
-import { chooseWorkspace } from "../features/workspace/workspace-actions";
+import { useState, type MouseEvent } from "react";
+
+import { ContextMenu } from "../components/Menu";
+import {
+  chooseWorkspace,
+  forgetWorkspace,
+  listRecentWorkspaces,
+  openWorkspaceAt,
+  rememberWorkspace,
+} from "../features/workspace/workspace-actions";
 import { useWindowControls } from "../features/window/use-window-controls";
 import { useDocumentStore } from "../stores/document";
 import { useUiStore } from "../stores/ui";
 import { useWorkspaceStore } from "../stores/workspace";
+
+/** 工作区根目录是本机绝对路径，两种分隔符都要认。 */
+function folderName(path: string): string {
+  const parts = path.split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] ?? path;
+}
+
+/** 同名文件夹分布在不同位置时，用上一级目录帮用户分辨。 */
+function parentName(path: string): string {
+  const parts = path.split(/[\\/]/).filter(Boolean);
+  return parts.length > 1 ? (parts[parts.length - 2] ?? "") : "";
+}
 
 function SidebarIcon() {
   return (
@@ -16,6 +37,14 @@ function FolderIcon() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
       <path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.2l1.2 1.4h5.6A1.5 1.5 0 0 1 14 5.9v5.6A1.5 1.5 0 0 1 12.5 13h-9A1.5 1.5 0 0 1 2 11.5z" />
+    </svg>
+  );
+}
+
+function ChevronIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M4.5 6.5 8 10l3.5-3.5" />
     </svg>
   );
 }
@@ -68,6 +97,46 @@ export function TitleBar() {
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
   const toggleSettings = useUiStore((state) => state.toggleSettings);
   const controls = useWindowControls();
+  const [recentMenu, setRecentMenu] = useState<{
+    x: number;
+    y: number;
+    paths: string[];
+  } | null>(null);
+
+  // 没有历史时按原来的行为直接弹文件夹对话框，不让人多点一次。
+  const openRecentMenu = async (event: MouseEvent<HTMLButtonElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const paths = await listRecentWorkspaces();
+    if (paths.length === 0) {
+      void chooseWorkspace();
+      return;
+    }
+    setRecentMenu({ x: rect.left, y: rect.bottom + 4, paths });
+  };
+
+  // 只想清掉菜单里的一条记录，不必先切过去；只改设置里的路径列表。
+  const removeRecent = async (path: string) => {
+    await forgetWorkspace(path);
+    const remaining = recentMenu?.paths.filter((item) => item !== path) ?? [];
+    setRecentMenu(
+      remaining.length > 0 && recentMenu
+        ? { ...recentMenu, paths: remaining }
+        : null,
+    );
+    useUiStore.getState().toast(
+      `已从最近工作区移除：${folderName(path)} · 点击撤销`,
+      "info",
+      // 误点 × 时不用真的切过去再切回来，点提示即可放回列表。
+      () => {
+        void rememberWorkspace(path).then(() => {
+          useUiStore
+            .getState()
+            .toast(`已恢复最近工作区：${folderName(path)}`);
+        });
+      },
+      "点击撤销移除",
+    );
+  };
 
   return (
     <header
@@ -134,6 +203,16 @@ export function TitleBar() {
         <button
           type="button"
           className="icon-btn"
+          title="最近工作区"
+          aria-label="最近工作区"
+          onClick={(event) => void openRecentMenu(event)}
+        >
+          <ChevronIcon />
+        </button>
+
+        <button
+          type="button"
+          className="icon-btn"
           title="偏好设置 (Ctrl+,)"
           aria-label="偏好设置"
           onClick={toggleSettings}
@@ -184,6 +263,29 @@ export function TitleBar() {
           <CloseIcon />
         </button>
       </div>
+
+      {recentMenu ? (
+        <ContextMenu
+          x={recentMenu.x}
+          y={recentMenu.y}
+          onClose={() => setRecentMenu(null)}
+          actions={recentMenu.paths.map((path) => {
+            // 两个都叫「笔记」的库只显示文件夹名分不清，重名时补上上一级目录。
+            const name = folderName(path);
+            const duplicated =
+              recentMenu.paths.filter((item) => folderName(item) === name)
+                .length > 1;
+            const parent = parentName(path);
+            return {
+              label: `切换到 ${name}${duplicated && parent ? `（${parent}）` : ""}`,
+              title: path,
+              onSelect: () => void openWorkspaceAt(path, true),
+              onRemove: () => void removeRecent(path),
+              removeTitle: "从最近工作区移除",
+            };
+          })}
+        />
+      ) : null}
     </header>
   );
 }

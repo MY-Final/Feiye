@@ -16,6 +16,10 @@
               window.matchMedia("(prefers-color-scheme: dark)").matches);
           document.documentElement.dataset.theme = dark ? "dark" : "light";
           document.documentElement.style.colorScheme = dark ? "dark" : "light";
+          var accent = localStorage.getItem("feiye.accent");
+          if (accent && accent !== "indigo") {
+            document.documentElement.dataset.accent = accent;
+          }
         } catch (error) {
           document.documentElement.dataset.theme = "light";
         }

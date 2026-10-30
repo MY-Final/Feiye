@@ -212,3 +212,55 @@ export async function setSetting(key: string, value: unknown): Promise<void> {
     // 设置写入失败不应影响主流程。
   }
 }
+
+/** 开始监听工作区目录；切换工作区时后端会替换掉旧的监听器。 */
+export async function watchWorkspace(root: string): Promise<void> {
+  await invoke("watch_workspace", { root });
+}
+
+export async function unwatchWorkspace(): Promise<void> {
+  await invoke("unwatch_workspace");
+}
+
+export interface SearchHit {
+  relPath: string;
+  /** 1 开始的行号。 */
+  line: number;
+  text: string;
+}
+
+/** 在工作区所有 Markdown 里按行搜索，大小写不敏感。 */
+export function searchWorkspace(
+  query: string,
+  limit?: number,
+): Promise<SearchHit[]> {
+  return invoke<SearchHit[]>("search_workspace", { query, limit });
+}
+
+export interface HistoryEntry {
+  id: string;
+  savedAt: number;
+  size: number;
+}
+
+export interface HistoryRevision {
+  id: string;
+  savedAt: number;
+  content: string;
+}
+
+/** 保存成功后留一份历史快照；内容与上一版相同则后端自动跳过。 */
+export function saveHistory(relPath: string, content: string): Promise<boolean> {
+  return invoke<boolean>("save_history", { relPath, content });
+}
+
+export function listHistory(relPath: string): Promise<HistoryEntry[]> {
+  return invoke<HistoryEntry[]>("list_history", { relPath });
+}
+
+export function readHistory(
+  relPath: string,
+  id: string,
+): Promise<HistoryRevision> {
+  return invoke<HistoryRevision>("read_history", { relPath, id });
+}

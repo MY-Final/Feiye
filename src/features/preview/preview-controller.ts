@@ -1,6 +1,9 @@
 import type { PreviewRequest, PreviewResponse, PreviewResult } from "./preview-protocol";
 
 const DEBOUNCE_MS = 200;
+// 超长文档整篇解析更贵：停手后多等一会儿再刷新，输入时少跑几遍。
+const LARGE_DOC_CHARS = 120_000;
+const LARGE_DOC_DEBOUNCE_MS = 600;
 const MAX_PREVIEW_BYTES = 1_000_000;
 
 let worker: Worker | null = null;
@@ -40,7 +43,7 @@ function ensureWorker(): Worker | null {
       if (data.id !== latestId) return;
       lastResult = data.error
         ? { html: "", error: data.error }
-        : { html: data.html };
+        : { html: data.html, mermaid: data.mermaid };
       listener?.(lastResult);
     };
     worker.onerror = (event) => {
@@ -97,7 +100,9 @@ export function requestPreview(markdown: string, immediate = false): void {
   if (immediate) {
     flush();
   } else {
-    timer = window.setTimeout(flush, DEBOUNCE_MS);
+    const delay =
+      markdown.length > LARGE_DOC_CHARS ? LARGE_DOC_DEBOUNCE_MS : DEBOUNCE_MS;
+    timer = window.setTimeout(flush, delay);
   }
 }
 

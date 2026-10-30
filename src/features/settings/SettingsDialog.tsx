@@ -40,6 +40,12 @@ const FONT_FAMILY_OPTIONS: { value: FontFamily; label: string }[] = [
   { value: "kai", label: "楷体" },
 ];
 
+const ACCENT_OPTIONS: { value: Preferences["accent"]; label: string }[] = [
+  { value: "indigo", label: "靛青" },
+  { value: "umber", label: "赭石" },
+  { value: "pine", label: "松绿" },
+];
+
 const AUTO_SAVE_OPTIONS = [
   { value: 0, label: "关闭（手动保存）" },
   { value: 1000, label: "1 秒" },
@@ -130,6 +136,7 @@ const SHORTCUT_GROUPS: { title: string; items: [string, string][] }[] = [
       ["Alt + ← / Alt + →", "浏览历史里后退 / 前进"],
       ["Ctrl + Shift + F", "专注模式：收起侧栏与工具栏，再按一次恢复"],
       ["Ctrl + F", "查找与替换（预览模式下自动切到分栏）"],
+      ["Ctrl + Shift + P", "命令面板：搜索并执行应用内动作"],
       ["Ctrl + = / Ctrl + -", "放大 / 缩小正文字号"],
       ["Ctrl + ,", "偏好设置"],
       ["Ctrl + B（光标不在正文）", "收起 / 展开侧栏；专注模式下退出专注"],
@@ -354,6 +361,15 @@ export function SettingsDialog() {
                   />
                 </Row>
 
+                <Row label="点缀色" hint="按钮、链接与选中态的强调色">
+                  <SlidingSegmented
+                    options={ACCENT_OPTIONS}
+                    value={preferences.accent}
+                    ariaLabel="点缀色"
+                    onChange={(accent) => update({ accent })}
+                  />
+                </Row>
+
                 <Row
                   label="正文字体"
                   hint="编辑区与预览同步；标题保持衬线"
@@ -433,6 +449,30 @@ export function SettingsDialog() {
                     </output>
                   </div>
                 </Row>
+
+                <div className="settings-custom-css">
+                  <label
+                    className="settings-custom-css-label"
+                    htmlFor="settings-custom-css"
+                  >
+                    自定义 CSS
+                  </label>
+                  <p className="settings-custom-css-hint">
+                    作用于编辑器与预览，只保存在本机；留空即关闭。例如
+                    <code>.markdown-body h1 {"{"} color: #8a4f26; {"}"}</code>
+                  </p>
+                  <textarea
+                    id="settings-custom-css"
+                    className="settings-custom-css-input"
+                    rows={6}
+                    spellCheck={false}
+                    value={preferences.customCss}
+                    placeholder="/* 在这里写自定义样式 */"
+                    onChange={(event) =>
+                      update({ customCss: event.target.value })
+                    }
+                  />
+                </div>
               </section>
             ) : null}
 

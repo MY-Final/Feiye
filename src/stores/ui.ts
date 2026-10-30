@@ -8,6 +8,10 @@ export interface ToastItem {
   id: number;
   message: string;
   kind: ToastKind;
+  /** 点提示时执行的附加动作（例如在资源管理器中显示刚导出的文件）。 */
+  action?: () => void;
+  /** 动作提示的悬停说明；不传沿用「在资源管理器中显示」。 */
+  actionTitle?: string;
 }
 
 export interface ConfirmButton {
@@ -42,6 +46,15 @@ interface UiStore {
   /** 专注模式：临时收起侧栏和工具栏，只为写作让路，不写入偏好。 */
   zenMode: boolean;
   settingsOpen: boolean;
+  /** 命令面板（Ctrl+Shift+P）。 */
+  paletteOpen: boolean;
+  /** 侧栏「搜索」标签的打开请求；每 +1 就切过去并聚焦输入框。 */
+  searchRequest: number;
+  /** 文档历史（保存快照）面板。 */
+  historyOpen: boolean;
+  /** 分屏对照：右侧并排预览另一篇笔记。 */
+  splitOpen: boolean;
+  splitPath: string | null;
   toasts: ToastItem[];
   confirm: ConfirmRequest | null;
   prompt: PromptRequest | null;
@@ -51,7 +64,20 @@ interface UiStore {
   openSettings(): void;
   closeSettings(): void;
   toggleSettings(): void;
-  toast(message: string, kind?: ToastKind): void;
+  openPalette(): void;
+  closePalette(): void;
+  openSearchPanel(): void;
+  openHistory(): void;
+  closeHistory(): void;
+  toggleSplitPreview(): void;
+  closeSplitPreview(): void;
+  setSplitPath(path: string | null): void;
+  toast(
+    message: string,
+    kind?: ToastKind,
+    action?: () => void,
+    actionTitle?: string,
+  ): void;
   dismissToast(id: number): void;
   ask(options: Omit<ConfirmRequest, "resolve">): Promise<string>;
   resolveConfirm(value: string): void;
@@ -91,6 +117,11 @@ export const useUiStore = create<UiStore>((set, get) => ({
   sidebarVisible: true,
   zenMode: false,
   settingsOpen: false,
+  paletteOpen: false,
+  searchRequest: 0,
+  historyOpen: false,
+  splitOpen: false,
+  splitPath: null,
   toasts: [],
   confirm: null,
   prompt: null,
@@ -129,10 +160,49 @@ export const useUiStore = create<UiStore>((set, get) => ({
     set((state) => ({ settingsOpen: !state.settingsOpen }));
   },
 
-  toast(message, kind = "info") {
+  openPalette() {
+    set({ paletteOpen: true });
+  },
+
+  closePalette() {
+    set({ paletteOpen: false });
+  },
+
+  openSearchPanel() {
+    set((state) => ({
+      sidebarVisible: true,
+      searchRequest: state.searchRequest + 1,
+    }));
+    void setSetting("sidebarVisible", true);
+  },
+
+  openHistory() {
+    set({ historyOpen: true });
+  },
+
+  closeHistory() {
+    set({ historyOpen: false });
+  },
+
+  toggleSplitPreview() {
+    set((state) => ({ splitOpen: !state.splitOpen }));
+  },
+
+  closeSplitPreview() {
+    set({ splitOpen: false });
+  },
+
+  setSplitPath(path) {
+    set({ splitPath: path });
+  },
+
+  toast(message, kind = "info", action, actionTitle) {
     const id = ++toastId;
     set((state) => {
-      const next = [...state.toasts, { id, message, kind }];
+      const next = [
+        ...state.toasts,
+        { id, message, kind, action, actionTitle },
+      ];
       // 最多同时留 3 条：连着操作几次也不会堆成一列糊住状态栏，
       // 被挤掉的旧提示计时器一并清掉。
       while (next.length > 3) {

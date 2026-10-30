@@ -1,6 +1,8 @@
 .app {
   display: grid;
   grid-template-rows: 40px auto minmax(0, 1fr) 26px;
+  /* 单列也要压住最小宽度：标签一多时，标签栏不应把整个窗口撑出横向滚动。 */
+  grid-template-columns: minmax(0, 1fr);
   height: 100%;
   background: var(--bg);
   color: var(--text);
@@ -1392,6 +1394,9 @@ body.is-resizing-split * {
   font-size: 12.5px;
   text-align: left;
   cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .context-menu-item:hover {
@@ -1399,6 +1404,38 @@ body.is-resizing-split * {
 }
 
 .context-menu-item.danger {
+  color: var(--danger);
+}
+
+.context-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.context-menu-row .context-menu-item {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}
+
+.context-menu-remove {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.context-menu-remove:hover {
+  background: var(--bg-sunken);
   color: var(--danger);
 }
 

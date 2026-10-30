@@ -109,6 +109,41 @@
   color-scheme: dark;
 }
 
+/* 点缀色预设：只换强调色，背景与正文仍由亮暗主题决定。 */
+:root[data-accent="umber"] {
+  --accent: #8a4f26;
+  --accent-strong: #6f3e1c;
+  --accent-soft: rgba(138, 79, 38, 0.1);
+  --on-accent: #fbf8f4;
+  --editor-active-line: rgba(138, 79, 38, 0.035);
+  --editor-selection: rgba(138, 79, 38, 0.18);
+}
+
+:root[data-theme="dark"][data-accent="umber"] {
+  --accent: #d8a26b;
+  --accent-strong: #e8bc8c;
+  --accent-soft: rgba(216, 162, 107, 0.14);
+  --on-accent: #1a120a;
+  --editor-selection: rgba(216, 162, 107, 0.22);
+}
+
+:root[data-accent="pine"] {
+  --accent: #2f6144;
+  --accent-strong: #264d36;
+  --accent-soft: rgba(47, 97, 68, 0.1);
+  --on-accent: #f7fbf8;
+  --editor-active-line: rgba(47, 97, 68, 0.035);
+  --editor-selection: rgba(47, 97, 68, 0.18);
+}
+
+:root[data-theme="dark"][data-accent="pine"] {
+  --accent: #8fc7a4;
+  --accent-strong: #b3dcc2;
+  --accent-soft: rgba(143, 199, 164, 0.14);
+  --on-accent: #0d1711;
+  --editor-selection: rgba(143, 199, 164, 0.22);
+}
+
 *,
 *::before,
 *::after {

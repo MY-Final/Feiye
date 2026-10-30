@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties } from "react";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { DialogHost } from "../components/Dialog";
@@ -16,11 +17,17 @@ import {
   saveActiveDocument,
 } from "../features/editor/save";
 import { PreviewPane } from "../features/preview/PreviewPane";
+import { printActiveDocument } from "./Toolbar";
+import { CommandPalette } from "../features/commands/CommandPalette";
+import { HistoryDialog } from "../features/history/HistoryDialog";
+import { SplitPane } from "../features/split/SplitPane";
+import { TabBar } from "../features/tabs/TabBar";
 import { SettingsDialog } from "../features/settings/SettingsDialog";
 import { WorkspaceSidebar } from "../features/workspace/WorkspaceSidebar";
 import {
   changeViewMode,
   chooseWorkspace,
+  closeDocumentTab,
   createMarkdownFile,
   forwardDocumentPath,
   newDocumentNearActive,
@@ -31,10 +38,12 @@ import {
   renameActiveDocument,
   restoreLastWorkspace,
   saveDocumentAs,
+  switchDocumentTab,
 } from "../features/workspace/workspace-actions";
+import { rememberOpenTabs } from "../features/workspace/tabs-memory";
 import { APP_NAME, APP_TAGLINE } from "../lib/app-info";
 import { baseName, parentRel } from "../lib/paths";
-import { getSetting, isAppError, readFile, setSetting } from "../lib/tauri";
+import { getSetting, isAppError, readFile, setSetting, unwatchWorkspace, watchWorkspace } from "../lib/tauri";
 import { isViewMode } from "../lib/view-modes";
 import { useDocumentStore, type ViewMode } from "../stores/document";
 import {
@@ -43,6 +52,7 @@ import {
   PREFERENCE_LIMITS,
   useSettingsStore,
 } from "../stores/settings";
+import { useTabsStore } from "../stores/tabs";
 import { useUiStore } from "../stores/ui";
 import { useWorkspaceStore } from "../stores/workspace";
 import {
@@ -71,7 +81,13 @@ function noteLabel(name: string, hideExt: boolean): string {
 
 function dialogOpen(): boolean {
   const ui = useUiStore.getState();
-  return Boolean(ui.confirm || ui.prompt || ui.settingsOpen);
+  return Boolean(
+    ui.confirm ||
+      ui.prompt ||
+      ui.settingsOpen ||
+      ui.paletteOpen ||
+      ui.historyOpen,
+  );
 }
 
 export default function App() {
@@ -116,6 +132,15 @@ export default function App() {
       await restoreLastWorkspace();
     })();
   }, []);
+
+  // 标签开合后记住这一组，重启或切回库时原样摆回来。
+  useEffect(
+    () =>
+      useTabsStore.subscribe((state) =>
+        void rememberOpenTabs(state.tabs.map((tab) => tab.path)),
+      ),
+    [],
+  );
 
   // Windows 下关掉 Tauri 的原生拖放拦截后，文件由 WebView 自己分发：
   // 编辑区和预览区会拦下来插入图片，其它位置也统一挡住，别让 WebView
@@ -197,7 +222,61 @@ export default function App() {
         return;
       }
 
+      // 命令面板：Ctrl+Shift+P 打开 / 关闭；面板内自己处理方向键与回车。
+      if (mod && event.shiftKey && event.key.toLowerCase() === "p") {
+        if (ui.confirm || ui.prompt) return;
+        event.preventDefault();
+        if (ui.paletteOpen) ui.closePalette();
+        else ui.openPalette();
+        return;
+      }
+
+      // 文档历史：Ctrl+Alt+H，随手回看并恢复某个保存过的版本。
+      if (mod && event.altKey && event.key.toLowerCase() === "h") {
+        if (ui.confirm || ui.prompt) return;
+        if (!useDocumentStore.getState().path) {
+          useUiStore.getState().toast("先打开一篇笔记再查看历史");
+          return;
+        }
+        event.preventDefault();
+        if (ui.historyOpen) ui.closeHistory();
+        else ui.openHistory();
+        return;
+      }
+
       if (dialogOpen()) return;
+
+      // 导出 PDF：Ctrl+P 打开打印版式，系统对话框里可另存为 PDF。
+      if (mod && !event.shiftKey && event.key.toLowerCase() === "p") {
+        event.preventDefault();
+        void printActiveDocument();
+        return;
+      }
+
+      // 分屏对照：Ctrl+\，开关右侧另一篇笔记的预览。
+      if (mod && event.key === "\\") {
+        event.preventDefault();
+        const ui = useUiStore.getState();
+        if (!ui.splitOpen && useTabsStore.getState().tabs.length < 2) {
+          ui.toast("先打开至少两篇笔记再分屏对照");
+          return;
+        }
+        ui.toggleSplitPreview();
+        return;
+      }
+
+      // Ctrl+Tab / Ctrl+Shift+Tab 在已打开的标签之间切换；Ctrl+W 关闭当前标签。
+      if (mod && event.key === "Tab") {
+        event.preventDefault();
+        void switchDocumentTab(event.shiftKey ? -1 : 1);
+        return;
+      }
+      if (mod && !event.shiftKey && event.key.toLowerCase() === "w") {
+        event.preventDefault();
+        const path = useDocumentStore.getState().path;
+        if (path) void closeDocumentTab(path);
+        return;
+      }
 
       // 查找面板等输入框里，组合键交给输入框自己处理（全选、粘贴、再次查找）；
       // 只保留"保存"这个希望随时生效的动作。
@@ -427,7 +506,52 @@ export default function App() {
     };
     window.addEventListener("focus", onVisible);
     document.addEventListener("visibilitychange", onVisible);
+
+    // 目录监听：外部增删改不必等到窗口重新聚焦才可见。
+    // 事件可能一阵一阵地来（保存会触发多条），这里去抖后统一刷新。
+    let unlisten: UnlistenFn | null = null;
+    let watchTimer: number | null = null;
+    let watchingRoot: string | null = null;
+    let disposed = false;
+
+    const scheduleExternalCheck = () => {
+      if (watchTimer !== null) window.clearTimeout(watchTimer);
+      watchTimer = window.setTimeout(() => {
+        watchTimer = null;
+        void useWorkspaceStore.getState().refreshTree();
+        void checkExternalChange();
+      }, 350);
+    };
+
+    const attachWatch = async (root: string | null) => {
+      if (disposed || root === watchingRoot) return;
+      watchingRoot = root;
+      unlisten?.();
+      unlisten = null;
+      if (!root) {
+        void unwatchWorkspace().catch(() => {});
+        return;
+      }
+      try {
+        // 先挂监听再开始 watch，避免启动瞬间的变化被漏掉。
+        unlisten = await listen("workspace-changed", scheduleExternalCheck);
+        await watchWorkspace(root);
+      } catch {
+        // 监听不可用时保留「重新聚焦时刷新」的兜底。
+      }
+    };
+
+    void attachWatch(useWorkspaceStore.getState().root);
+    const unsubscribeRoot = useWorkspaceStore.subscribe((state, previous) => {
+      if (state.root !== previous.root) void attachWatch(state.root);
+    });
+
     return () => {
+      disposed = true;
+      unsubscribeRoot();
+      unlisten?.();
+      if (watchTimer !== null) window.clearTimeout(watchTimer);
+      void unwatchWorkspace().catch(() => {});
       window.removeEventListener("focus", onVisible);
       document.removeEventListener("visibilitychange", onVisible);
     };
@@ -490,7 +614,11 @@ export default function App() {
       <div className="app-body">
         {hasWorkspace && sidebarVisible && !zenMode ? <WorkspaceSidebar /> : null}
 
-        <main
+        <div className="main-column">
+          {/* 专注模式只留正文：标签栏也一并收起，退出后原样回来。 */}
+          {zenMode ? null : <TabBar />}
+          <div className="main-row">
+          <main
           className={`workspace-main mode-${viewMode}${preferences.lineNumbers ? "" : " hide-line-numbers"}`}
           style={
             {
@@ -537,9 +665,24 @@ export default function App() {
                           <button
                             type="button"
                             className="recent-clear"
-                            onClick={() =>
-                              useWorkspaceStore.getState().clearRecent()
-                            }
+                            onClick={() => {
+                              const store = useWorkspaceStore.getState();
+                              const root = store.root;
+                              const previous = store.clearRecent();
+                              if (previous.length === 0) return;
+                              useUiStore.getState().toast(
+                                `已清空最近打开（${previous.length} 篇） · 点击撤销`,
+                                "info",
+                                () => {
+                                  // 撤销窗口内换了库就不往回塞，免得把旧路径写进新库。
+                                  const current = useWorkspaceStore.getState();
+                                  if (current.root !== root) return;
+                                  current.restoreRecent(previous);
+                                  useUiStore.getState().toast("已恢复最近打开");
+                                },
+                                "点击撤销清空",
+                              );
+                            }}
                           >
                             清空
                           </button>
@@ -613,12 +756,17 @@ export default function App() {
               </div>
             </div>
           )}
-        </main>
-      </div>
+          </main>
+          <SplitPane />
+          </div>
+          </div>
+        </div>
 
       <StatusBar />
 
       <SettingsDialog />
+      <HistoryDialog />
+      <CommandPalette />
       <DialogHost />
       <ToastHost />
     </div>

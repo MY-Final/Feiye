@@ -11,6 +11,7 @@ import {
   deleteEntry as apiDeleteEntry,
   describeError,
   getSetting,
+  isAppError,
   listDir,
   moveEntry as apiMoveEntry,
   openWorkspace as apiOpenWorkspace,
@@ -23,6 +24,7 @@ import {
   type Entry,
 } from "../../lib/tauri";
 import { useDocumentStore, type ViewMode } from "../../stores/document";
+import { useTabsStore } from "../../stores/tabs";
 import { useOutlineStore } from "../../stores/outline";
 import { useUiStore } from "../../stores/ui";
 import { useWorkspaceStore } from "../../stores/workspace";
@@ -36,6 +38,10 @@ import {
   migrateCursor,
   restoreCursorFor,
 } from "../editor/cursor-memory";
+import {
+  clearEditorStateCache,
+  forgetEditorState,
+} from "../editor/editor-bridge";
 import {
   getEditorText,
   getEditorView,
@@ -58,6 +64,7 @@ import {
   scrollPreviewToHeading,
 } from "../preview/preview-scroll";
 import { recallLastDocument, rememberLastDocument } from "./last-document";
+import { pauseTabsSave, recallOpenTabs, resumeTabsSave } from "./tabs-memory";
 
 const MARKDOWN_NAME = /\.(md|markdown|mdx)$/i;
 const HAS_EXTENSION = /\.[^./\\]+$/;
@@ -135,6 +142,43 @@ function toastError(prefix: string, error: unknown): void {
   useUiStore.getState().toast(`${prefix}：${describeError(error)}`, "error");
 }
 
+const RECENT_WORKSPACES_KEY = "recentWorkspaces";
+const RECENT_WORKSPACES_LIMIT = 5;
+
+/** 切换过的笔记库只记路径；切回时重新扫盘，不留任何内容副本。 */
+export async function rememberWorkspace(path: string): Promise<void> {
+  const raw = await getSetting<unknown>(RECENT_WORKSPACES_KEY);
+  const others = Array.isArray(raw)
+    ? raw.filter(
+        (item): item is string => typeof item === "string" && item !== path,
+      )
+    : [];
+  await setSetting(
+    RECENT_WORKSPACES_KEY,
+    [path, ...others].slice(0, RECENT_WORKSPACES_LIMIT),
+  );
+}
+
+/** 库已不在（被删 / 被移走）时从最近列表摘掉，下次点菜单不再撞同一个错。 */
+export async function forgetWorkspace(path: string): Promise<void> {
+  const raw = await getSetting<unknown>(RECENT_WORKSPACES_KEY);
+  if (!Array.isArray(raw)) return;
+  const next = raw.filter(
+    (item): item is string => typeof item === "string" && item !== path,
+  );
+  await setSetting(RECENT_WORKSPACES_KEY, next.length > 0 ? next : null);
+}
+
+/** 「最近工作区」菜单：去掉当前库，只列可以切过去的路径。 */
+export async function listRecentWorkspaces(): Promise<string[]> {
+  const raw = await getSetting<unknown>(RECENT_WORKSPACES_KEY);
+  if (!Array.isArray(raw)) return [];
+  const current = useWorkspaceStore.getState().root;
+  return raw.filter(
+    (item): item is string => typeof item === "string" && item !== current,
+  );
+}
+
 export async function chooseWorkspace(): Promise<void> {
   try {
     const path = await pickWorkspaceFolder(
@@ -146,28 +190,38 @@ export async function chooseWorkspace(): Promise<void> {
   }
 }
 
-export async function openWorkspaceAt(path: string): Promise<void> {
+export async function openWorkspaceAt(
+  path: string,
+  fromRecent = false,
+): Promise<void> {
   if (!(await guardUnsaved())) return;
 
   try {
     const info = await apiOpenWorkspace(path);
+    const savedTabs = await recallOpenTabs(info.root);
+    pauseTabsSave();
     useWorkspaceStore.getState().setWorkspace(info);
     // 换库是重新开始浏览，专注模式不该延续到新库上；退出时照常提示。
     if (useUiStore.getState().zenMode) {
       useUiStore.getState().toggleZenMode();
     }
     resetDocument();
+    useTabsStore.getState().clear();
+    clearEditorStateCache();
     await useWorkspaceStore.getState().loadDir("");
     await setSetting("lastWorkspace", info.root);
+    await rememberWorkspace(info.root);
 
     // 每个工作区各自记着上次打开的文档：切换过来时直接打开它，
     // 和启动时一样；文件已不在时静默跳过。
     const lastDocument = await recallLastDocument(info.root);
-    if (lastDocument) {
+    const active = lastDocument ?? savedTabs[0] ?? null;
+    restoreSavedTabs(savedTabs, active);
+    if (active) {
       await openFile(
         {
-          relPath: lastDocument,
-          name: baseName(lastDocument),
+          relPath: active,
+          name: baseName(active),
           isDir: false,
         },
         true,
@@ -176,7 +230,18 @@ export async function openWorkspaceAt(path: string): Promise<void> {
 
     void promptPendingRecoveries();
   } catch (error) {
-    toastError("打开工作区失败", error);
+    // 从「最近工作区」点进来的库已经不存在：摘掉过期路径再提示，
+    // 否则这个点不开的条目会在菜单里一直留着。取消未保存提示不走这里。
+    const gone = fromRecent && isAppError(error) && error.code === "not-found";
+    if (gone) await forgetWorkspace(path);
+    useUiStore.getState().toast(
+      gone
+        ? `打开工作区失败：${describeError(error)}（已从最近工作区移除）`
+        : `打开工作区失败：${describeError(error)}`,
+      "error",
+    );
+  } finally {
+    resumeTabsSave();
   }
 }
 
@@ -196,16 +261,21 @@ export async function restoreLastWorkspace(): Promise<void> {
 
   try {
     const info = await apiOpenWorkspace(last);
+    const savedTabs = await recallOpenTabs(info.root);
+    pauseTabsSave();
     useWorkspaceStore.getState().setWorkspace(info);
     await useWorkspaceStore.getState().loadDir("");
+    await rememberWorkspace(info.root);
 
     // 恢复这个工作区上次打开的文档；文件已不存在时静默清除记录，不打扰启动。
     const lastDocument = await recallLastDocument(last);
-    if (lastDocument) {
+    const active = lastDocument ?? savedTabs[0] ?? null;
+    restoreSavedTabs(savedTabs, active);
+    if (active) {
       await openFile(
         {
-          relPath: lastDocument,
-          name: baseName(lastDocument),
+          relPath: active,
+          name: baseName(active),
           isDir: false,
         },
         true,
@@ -215,6 +285,16 @@ export async function restoreLastWorkspace(): Promise<void> {
     await promptPendingRecoveries();
   } catch {
     await setSetting("lastWorkspace", null);
+  } finally {
+    resumeTabsSave();
+  }
+}
+
+/** 把上次打开的标签摆回标签栏；当前文档仍由 openFile 打开，避免重复。 */
+function restoreSavedTabs(saved: string[], active: string | null): void {
+  for (const relPath of saved) {
+    if (relPath === active) continue;
+    useTabsStore.getState().addTab(relPath, baseName(relPath));
   }
 }
 
@@ -276,7 +356,8 @@ export async function openFile(
     useDocumentStore
       .getState()
       .setDocument(entry.relPath, entry.name, file.modifiedMs);
-    setEditorDocument(file.content);
+    setEditorDocument(file.content, entry.relPath);
+    useTabsStore.getState().addTab(entry.relPath, entry.name);
     requestPreview(file.content, true);
     void rememberLastDocument(entry.relPath);
     useWorkspaceStore.getState().noteRecent(entry.relPath);
@@ -298,8 +379,55 @@ export async function openFile(
     useWorkspaceStore.getState().updateRecent(entry.relPath, null);
     useWorkspaceStore.getState().forgetHistory(entry.relPath);
     useWorkspaceStore.getState().forgetForward(entry.relPath);
+    useTabsStore.getState().removeTab(entry.relPath);
     toastError("打开文件失败", error);
   }
+}
+
+/** 关闭一个标签；关闭当前文档时切到相邻标签，并先处理未保存内容。 */
+export async function closeDocumentTab(path: string): Promise<void> {
+  const tabs = useTabsStore.getState().tabs;
+  const index = tabs.findIndex((tab) => tab.path === path);
+  if (index < 0) return;
+
+  if (useDocumentStore.getState().path !== path) {
+    useTabsStore.getState().removeTab(path);
+    forgetEditorState(path);
+    return;
+  }
+  if (!(await guardUnsaved())) return;
+
+  // 先按关闭前的顺序找邻居，再从列表里摘掉。
+  const next = tabs[index + 1] ?? tabs[index - 1] ?? null;
+  useTabsStore.getState().removeTab(path);
+  forgetEditorState(path);
+  if (next) {
+    await openFile(
+      { name: next.name, relPath: next.path, isDir: false },
+      false,
+      undefined,
+      false,
+    );
+  } else {
+    resetDocument();
+  }
+}
+
+/** Ctrl+Tab / Ctrl+Shift+Tab 在已打开的标签之间循环切换。 */
+export async function switchDocumentTab(delta: number): Promise<void> {
+  const tabs = useTabsStore.getState().tabs;
+  if (tabs.length < 2) return;
+  const active = useDocumentStore.getState().path;
+  const index = tabs.findIndex((tab) => tab.path === active);
+  const target =
+    tabs[((index < 0 ? 0 : index) + delta + tabs.length) % tabs.length];
+  if (!target || target.path === active) return;
+  await openFile(
+    { name: target.name, relPath: target.path, isDir: false },
+    false,
+    undefined,
+    false,
+  );
 }
 
 /** 「上一篇」的目标：本次会话里真正上一步打开的笔记。 */
@@ -537,6 +665,8 @@ export async function renameEntry(entry: Entry): Promise<void> {
     const renamed = await apiRenameEntry(entry.relPath, target);
     await useWorkspaceStore.getState().refreshDir(parentRel(entry.relPath));
     useWorkspaceStore.getState().updateRecent(entry.relPath, renamed.relPath);
+    useWorkspaceStore.getState().remapHistory(entry.relPath, renamed.relPath);
+    useTabsStore.getState().remap(entry.relPath, renamed.relPath);
     // 改名后路径变了，光标记录也换到新路径，重新打开时才能接着上次的位置写。
     migrateCursor(entry.relPath, renamed.relPath);
 
@@ -560,7 +690,7 @@ export async function renameEntry(entry: Entry): Promise<void> {
     }
 
     if (entry.isDir) {
-      const { root, name, expanded, setWorkspace } =
+      const { root, name, expanded, setWorkspace, history, forward } =
         useWorkspaceStore.getState();
       if (root && name) {
         // 展开状态里的路径跟着改名换前缀，重建后再恢复，
@@ -575,6 +705,8 @@ export async function renameEntry(entry: Entry): Promise<void> {
           .sort((a, b) => a.split("/").length - b.split("/").length);
 
         setWorkspace({ root, name });
+        // 重建文件树只为刷新展开状态，会话内的浏览历史与前进栈不能跟着清空。
+        useWorkspaceStore.setState({ history, forward });
         await useWorkspaceStore.getState().loadDir("");
         await useWorkspaceStore.getState().expandDirs(openDirs);
       }
@@ -613,6 +745,8 @@ export async function moveEntry(
     await useWorkspaceStore.getState().refreshDir(targetParent);
 
     useWorkspaceStore.getState().updateRecent(entry.relPath, moved.relPath);
+    useWorkspaceStore.getState().remapHistory(entry.relPath, moved.relPath);
+    useTabsStore.getState().remap(entry.relPath, moved.relPath);
     migrateCursor(entry.relPath, moved.relPath);
 
     const doc = useDocumentStore.getState();
@@ -632,7 +766,7 @@ export async function moveEntry(
 
     if (entry.isDir) {
       // 整个目录换了前缀，展开状态要重映射后再重建，免得树收起来。
-      const { root, name, expanded, setWorkspace } =
+      const { root, name, expanded, setWorkspace, history, forward } =
         useWorkspaceStore.getState();
       if (root && name) {
         const remap = (path: string) =>
@@ -647,6 +781,8 @@ export async function moveEntry(
           openDirs.push(targetParent);
         }
         setWorkspace({ root, name });
+        // 重建文件树只为刷新展开状态，会话内的浏览历史与前进栈不能跟着清空。
+        useWorkspaceStore.setState({ history, forward });
         await useWorkspaceStore.getState().loadDir("");
         await useWorkspaceStore.getState().expandDirs(openDirs);
       }
@@ -751,6 +887,9 @@ export async function deleteEntry(entry: Entry): Promise<void> {
     await apiDeleteEntry(entry.relPath);
     await useWorkspaceStore.getState().refreshDir(parentRel(entry.relPath));
     useWorkspaceStore.getState().updateRecent(entry.relPath, null);
+    // 删除目录时，历史和前进栈里它下面的笔记也一起摘掉，返回不再撞旧路径。
+    useWorkspaceStore.getState().remapHistory(entry.relPath, null);
+    useTabsStore.getState().remap(entry.relPath, null);
 
     const doc = useDocumentStore.getState();
     if (doc.path && isWithin(doc.path, entry.relPath)) {

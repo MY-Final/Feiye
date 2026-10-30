@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { trapTab } from "../../components/Dialog";
@@ -33,10 +33,89 @@ function findHeadingByAnchor(body: HTMLElement, fragment: string): number {
     (heading) => normalizeAnchor(heading.textContent ?? "") === target,
   );
 }
+
 import { attachSplitScrollSync } from "./scroll-sync";
+import { wrapImageCaptions } from "./figures";
+import { renderMermaidBlocks, type MermaidTarget } from "./mermaid";
+import { useSettingsStore } from "../../stores/settings";
+
+/**
+ * 按顶层块替换预览：相同的前缀与后缀原样留在 DOM 里，只换中间变化的那几段。
+ * 代码高亮、已画好的图表和未变段落都不重建，长文档里输入一个字也不会整篇重排。
+ * 返回这次渲染各顶层块的 HTML，供下一次比对。
+ */
+function patchPreviewBlocks(
+  body: HTMLElement,
+  html: string,
+  previous: string[],
+): string[] {
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  const fresh = Array.from(template.content.children);
+  const signatures = fresh.map((node) => node.outerHTML);
+
+  let start = 0;
+  while (
+    start < previous.length &&
+    start < signatures.length &&
+    previous[start] === signatures[start]
+  ) {
+    start += 1;
+  }
+  let tail = 0;
+  while (
+    tail < previous.length - start &&
+    tail < signatures.length - start &&
+    previous[previous.length - 1 - tail] ===
+      signatures[signatures.length - 1 - tail]
+  ) {
+    tail += 1;
+  }
+
+  const staleEnd = previous.length - tail;
+  const freshEnd = signatures.length - tail;
+  if (start < staleEnd || start < freshEnd) {
+    const before = body.children[staleEnd] ?? null;
+    for (let index = start; index < staleEnd; index += 1) {
+      body.children[start]?.remove();
+    }
+    const fragment = document.createDocumentFragment();
+    for (let index = start; index < freshEnd; index += 1) {
+      fragment.append(fresh[index].cloneNode(true));
+    }
+    body.insertBefore(fragment, before);
+  }
+  return signatures;
+}
+
+/** 会话内记住每篇笔记在纯预览里的阅读位置，切走再切回能接着读。 */
+const PREVIEW_SCROLL_LIMIT = 100;
+const previewScrollPositions = new Map<string, number>();
+
+function rememberPreviewScroll(path: string, top: number): void {
+  if (top <= 0) {
+    previewScrollPositions.delete(path);
+    return;
+  }
+  // 重新插入，让最近读过的文档留在淘汰顺序的末尾。
+  previewScrollPositions.delete(path);
+  previewScrollPositions.set(path, top);
+  if (previewScrollPositions.size > PREVIEW_SCROLL_LIMIT) {
+    const oldest = previewScrollPositions.keys().next().value;
+    if (oldest !== undefined) previewScrollPositions.delete(oldest);
+  }
+}
+
+interface PanePreviewResult extends PreviewResult {
+  /** 这份 HTML 属于哪篇笔记：预览 Worker 异步返回，不能直接按当前路径判断。 */
+  path: string | null;
+}
 
 export function PreviewPane() {
-  const [result, setResult] = useState<PreviewResult>({ html: "" });
+  const [result, setResult] = useState<PanePreviewResult>({
+    html: "",
+    path: null,
+  });
   // 放大查看时带上同篇文档的全部图片，方向键可以一张张翻。
   const [lightbox, setLightbox] = useState<{
     images: { src: string; alt: string }[];
@@ -44,6 +123,22 @@ export function PreviewPane() {
   } | null>(null);
   // 截图里的字常常很小，浮层里用滚轮放大看细节。
   const [zoom, setZoom] = useState(1);
+  // 放大后图片会超出屏幕，按住拖动才能看到边角。
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  // 小图放大后仍不足一屏，没有可拖的余量；提示与光标要跟着收敛。
+  const [canPan, setCanPan] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const panStart = useRef<{
+    x: number;
+    y: number;
+    panX: number;
+    panY: number;
+  } | null>(null);
+  // 拖完那一次不算点击，别让浮层跟着关掉。
+  const panMoved = useRef(false);
+  // 放大时单击关闭要稍等，给双击复位留出时间，别让第一下就关掉浮层。
+  const closeTimer = useRef<number | null>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
   const paneRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const lightboxRef = useRef<HTMLDivElement>(null);
@@ -51,6 +146,7 @@ export function PreviewPane() {
   const docPath = useDocumentStore((state) => state.path);
   const viewMode = useDocumentStore((state) => state.viewMode);
   const cursorLine = useDocumentStore((state) => state.cursor.line);
+  const themeMode = useSettingsStore((state) => state.preferences.theme);
 
   // 本地图片走工作区作用域的 feiyeimg 协议；远程图片保持原样。
   const html = useMemo(
@@ -58,8 +154,32 @@ export function PreviewPane() {
     [result.html, root, docPath],
   );
 
+  // 增量上屏：同一篇笔记内只替换变动的块；换文档时整篇重来，免得沿用旧节点。
+  const rawBlocks = useRef<string[]>([]);
+  const patchedPath = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    const body = bodyRef.current;
+    if (!body) return;
+    if (patchedPath.current !== docPath) {
+      patchedPath.current = docPath;
+      body.innerHTML = html;
+      // innerHTML 生成的就是未经后处理的原样块，正好作为下次比对的基准。
+      rawBlocks.current = Array.from(body.children).map(
+        (node) => node.outerHTML,
+      );
+      return;
+    }
+    rawBlocks.current = patchPreviewBlocks(body, html, rawBlocks.current);
+  }, [html, docPath]);
+
   useEffect(() => {
-    setPreviewListener(setResult);
+    setPreviewListener((next) =>
+      setResult({
+        ...next,
+        // Worker 只回 HTML，落结果时记下当前文档；过期结果会被控制器丢弃。
+        path: useDocumentStore.getState().path,
+      }),
+    );
     return () => setPreviewListener(null);
   }, []);
 
@@ -72,6 +192,7 @@ export function PreviewPane() {
         )
       : [];
     setZoom(1);
+    setPan({ x: 0, y: 0 });
     const found = images.findIndex((image) => image.src === src);
     // 链接指向的图片可能没在正文里出现，单独补一张即可。
     setLightbox(
@@ -216,7 +337,78 @@ export function PreviewPane() {
   useEffect(() => {
     setLightbox(null);
     setZoom(1);
+    setPan({ x: 0, y: 0 });
   }, [docPath]);
+
+  // 翻到另一张图、或缩回 100% 时回到居中，免得新图从上一张的偏移位置开始。
+  useEffect(() => {
+    setPan({ x: 0, y: 0 });
+  }, [lightbox?.index]);
+
+  // 放大后拖动最多让图片边缘贴住可视区边缘，不让整张图被拖出屏幕。
+  // 某个方向放大后仍小于可视区时，该方向锁在居中。
+  const panLimits = () => {
+    const image = imageRef.current;
+    const box = lightboxRef.current;
+    if (!image || !box) return { x: 0, y: 0 };
+    const style = getComputedStyle(box);
+    const availW =
+      box.clientWidth -
+      parseFloat(style.paddingLeft) -
+      parseFloat(style.paddingRight);
+    const availH =
+      box.clientHeight -
+      parseFloat(style.paddingTop) -
+      parseFloat(style.paddingBottom);
+    return {
+      x: Math.max(0, (image.offsetWidth * zoom - availW) / 2),
+      y: Math.max(0, (image.offsetHeight * zoom - availH) / 2),
+    };
+  };
+
+  const clampPan = (x: number, y: number) => {
+    const limit = panLimits();
+    return {
+      x: Math.min(limit.x, Math.max(-limit.x, x)),
+      y: Math.min(limit.y, Math.max(-limit.y, y)),
+    };
+  };
+
+  // 图片加载完成、窗口大小变化都会改变可拖余量：
+  // 小图放大后仍不足一屏时不该给抓手光标，也不该提示「拖动平移」。
+  useEffect(() => {
+    if (!lightbox) {
+      setCanPan(false);
+      return;
+    }
+    const update = () => {
+      const limit = panLimits();
+      setCanPan(limit.x > 0 || limit.y > 0);
+    };
+    update();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(update);
+    if (imageRef.current) observer.observe(imageRef.current);
+    if (lightboxRef.current) observer.observe(lightboxRef.current);
+    return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lightbox !== null, lightbox?.index, zoom]);
+
+  useEffect(() => {
+    setPan((current) =>
+      zoom === 1 ? { x: 0, y: 0 } : clampPan(current.x, current.y),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoom]);
+
+  // 浮层关掉后取消还没触发的延迟关闭，别让它关掉下一次打开的浮层。
+  useEffect(() => {
+    if (lightbox) return;
+    if (closeTimer.current !== null) {
+      window.clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  }, [lightbox]);
 
   // 浮层打开时把焦点收进来，关闭后还回去：读屏和键盘都不会停在背后的正文上。
   useEffect(() => {
@@ -291,9 +483,30 @@ export function PreviewPane() {
     });
   }, [html, docPath]);
 
-  // 切到预览时停止在光标所在标题，而不是回到文档开头。
+  // 离开预览后不再沿用上次的阅读位置：回到编辑时以光标为准。
   useEffect(() => {
-    if (viewMode !== "preview") return;
+    if (viewMode === "preview" || !docPath) return;
+    previewScrollPositions.delete(docPath);
+  }, [viewMode, docPath]);
+
+  // 预览内容真正换成这篇笔记后，再恢复上次读到的地方；
+  // 不能只看文档路径，否则 Worker 还没返回时会拿旧 HTML 去滚。
+  useEffect(() => {
+    if (viewMode !== "preview" || !docPath || result.path !== docPath) return;
+    const saved = previewScrollPositions.get(docPath);
+    const pane = paneRef.current;
+    if (saved === undefined || !pane) return;
+    const frame = requestAnimationFrame(() => {
+      pane.scrollTop = saved;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [viewMode, docPath, result.path]);
+
+  // 切到预览时停止在光标所在标题，而不是回到文档开头；
+  // 从别的笔记切回来时，优先回到上次的阅读位置。
+  useEffect(() => {
+    if (viewMode !== "preview" || result.path !== docPath) return;
+    if (docPath && previewScrollPositions.has(docPath)) return;
     const headings = useOutlineStore.getState().headings;
     if (headings.length === 0) return;
 
@@ -308,7 +521,7 @@ export function PreviewPane() {
       scrollPreviewToHeading(index);
     });
     return () => cancelAnimationFrame(frame);
-  }, [viewMode, docPath, cursorLine]);
+  }, [viewMode, docPath, cursorLine, result.path]);
 
   // 纯预览模式下滚动阅读时，让左侧大纲跟着高亮当前章节；
   // 只更新大纲，不移动编辑器光标。
@@ -328,6 +541,11 @@ export function PreviewPane() {
       useOutlineStore.getState().setScrollIndex(index < 0 ? null : index);
     };
     const schedule = () => {
+      // 只有当前 HTML 真的属于这篇笔记时才记位置；切换文档的过渡帧里
+      // 面板还显示着上一篇，别把旧滚动位置存到新文档名下。
+      if (docPath && result.path === docPath) {
+        rememberPreviewScroll(docPath, pane.scrollTop);
+      }
       if (frame === null) frame = window.requestAnimationFrame(update);
     };
 
@@ -337,7 +555,7 @@ export function PreviewPane() {
       pane.removeEventListener("scroll", schedule);
       if (frame !== null) window.cancelAnimationFrame(frame);
     };
-  }, [viewMode, html, docPath]);
+  }, [viewMode, html, docPath, result.path]);
 
   // 分栏模式：按标题锚点同步编辑区与预览区滚动。
   useEffect(() => {
@@ -348,6 +566,46 @@ export function PreviewPane() {
     return attachSplitScrollSync(pane, body);
   }, [viewMode, html]);
 
+  // 图片的 title 显示成图注；宽高 / 对齐来自 Markdown 的 {width=… align=…}。
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (body) wrapImageCaptions(body);
+  }, [html]);
+
+  // ```mermaid 代码块画成图：Worker 只给源码，这里按需懒加载 Mermaid。
+  // 先打标记，避免下面给代码块补「复制」按钮时把图表源码也包一层。
+  // 增量上屏后，未变的图表留在原位：只有主题变化时才整批重画。
+  const mermaidTheme = useRef<string | null>(null);
+  useEffect(() => {
+    const body = bodyRef.current;
+    const sources = result.mermaid;
+    if (!body || !sources?.length) return;
+    const themeChanged = mermaidTheme.current !== themeMode;
+    mermaidTheme.current = themeMode;
+    const wanted = new Set(sources.map((source) => source.trim()));
+    const targets: MermaidTarget[] = [];
+    for (const pre of body.querySelectorAll("pre")) {
+      if (pre.closest("figure.mermaid-figure, .preview-code-block")) continue;
+      const source = (pre.textContent ?? "").trim();
+      if (!wanted.has(source)) continue;
+      pre.dataset.mermaid = "pending";
+      targets.push({ element: pre, source });
+    }
+    if (themeChanged) {
+      for (const figure of body.querySelectorAll<HTMLElement>(
+        "figure.mermaid-figure[data-source]",
+      )) {
+        targets.push({ element: figure, source: figure.dataset.source ?? "" });
+      }
+    }
+    if (!targets.length) return;
+    const cancel = { cancelled: false };
+    void renderMermaidBlocks(targets, cancel);
+    return () => {
+      cancel.cancelled = true;
+    };
+  }, [html, result.mermaid, themeMode]);
+
   // 给预览里的每段代码挂一个复制按钮。HTML 由 Worker 生成，
   // 这里在每次渲染后补齐按钮，不改动 Markdown 管线。
   useEffect(() => {
@@ -355,6 +613,7 @@ export function PreviewPane() {
     if (!body) return;
 
     for (const pre of body.querySelectorAll("pre")) {
+      if (pre.dataset.mermaid) continue;
       if (pre.parentElement?.classList.contains("preview-code-block")) {
         continue;
       }
@@ -456,11 +715,7 @@ export function PreviewPane() {
           </button>
         </div>
       ) : null}
-      <article
-        className="markdown-body"
-        ref={bodyRef}
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
+      <article className="markdown-body" ref={bodyRef} />
       {lightbox && lightboxImage ? (
         <div
           ref={lightboxRef}
@@ -470,12 +725,79 @@ export function PreviewPane() {
           aria-label={lightboxImage.alt || "图片预览"}
           tabIndex={-1}
           onKeyDown={trapTab}
-          onClick={() => setLightbox(null)}
+          onClick={() => {
+            if (panMoved.current) {
+              panMoved.current = false;
+              return;
+            }
+            // 放大时留一点时间判断是不是双击复位，再决定关不关。
+            if (zoom !== 1) {
+              if (closeTimer.current !== null) {
+                window.clearTimeout(closeTimer.current);
+              }
+              closeTimer.current = window.setTimeout(() => {
+                closeTimer.current = null;
+                setLightbox(null);
+              }, 250);
+              return;
+            }
+            setLightbox(null);
+          }}
         >
           <img
+            ref={imageRef}
             src={lightboxImage.src}
             alt={lightboxImage.alt}
-            style={{ transform: `scale(${zoom})` }}
+            draggable={false}
+            className={`${zoom > 1 && canPan ? "is-zoomed" : ""}${
+              dragging ? " is-dragging" : ""
+            }`}
+            style={{
+              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+            }}
+            onPointerDown={(event) => {
+              if (zoom <= 1) return;
+              event.preventDefault();
+              event.currentTarget.setPointerCapture(event.pointerId);
+              panStart.current = {
+                x: event.clientX,
+                y: event.clientY,
+                panX: pan.x,
+                panY: pan.y,
+              };
+              panMoved.current = false;
+              // 不足一屏时没有可拖的余量，但不把拖动当点击：松手别顺手关掉浮层。
+              if (canPan) setDragging(true);
+            }}
+            onPointerMove={(event) => {
+              const start = panStart.current;
+              if (!start) return;
+              const dx = event.clientX - start.x;
+              const dy = event.clientY - start.y;
+              if (Math.abs(dx) + Math.abs(dy) > 3) panMoved.current = true;
+              if (canPan) setPan(clampPan(start.panX + dx, start.panY + dy));
+            }}
+            onPointerUp={(event) => {
+              if (!panStart.current) return;
+              panStart.current = null;
+              setDragging(false);
+              if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                event.currentTarget.releasePointerCapture(event.pointerId);
+              }
+            }}
+            onPointerCancel={() => {
+              panStart.current = null;
+              setDragging(false);
+            }}
+            onDoubleClick={(event) => {
+              event.stopPropagation();
+              if (closeTimer.current !== null) {
+                window.clearTimeout(closeTimer.current);
+                closeTimer.current = null;
+              }
+              setZoom(1);
+              setPan({ x: 0, y: 0 });
+            }}
           />
           {lightbox.images.length > 1 ? (
             <>
@@ -515,7 +837,11 @@ export function PreviewPane() {
             ) : null}
             {/* 放大以后操作提示也留着：不然只看到百分比，不知道怎么缩回去。 */}
             <span className="image-lightbox-hint">
-              {zoom === 1 ? "滚轮缩放 · Esc 关闭" : "滚轮可调回 100% · Esc 关闭"}
+              {zoom === 1
+                ? "滚轮缩放 · Esc 关闭"
+                : canPan
+                  ? "拖动平移 · 双击复位 · 滚轮缩放 · Esc 关闭"
+                  : "双击复位 · 滚轮缩放 · Esc 关闭"}
             </span>
           </div>
         </div>
