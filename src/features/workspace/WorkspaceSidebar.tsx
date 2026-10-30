@@ -239,6 +239,7 @@ function TreeNode({ entry, depth, onMenu }: TreeNodeProps) {
 type SidebarTab = "files" | "outline";
 
 const SIDEBAR_WIDTH_KEY = "sidebarWidth";
+const SIDEBAR_TAB_KEY = "sidebarTab";
 const SIDEBAR_WIDTH = { min: 180, max: 420, default: 240 } as const;
 
 function clampSidebarWidth(value: number): number {
@@ -261,6 +262,13 @@ export function WorkspaceSidebar() {
   const widthRef = useRef<number>(SIDEBAR_WIDTH.default);
   const resizeStart = useRef<{ x: number; width: number } | null>(null);
 
+  // 记住上次看的标签：常看大纲的人重启后不用每次再点一下。
+  useEffect(() => {
+    void getSetting<unknown>(SIDEBAR_TAB_KEY).then((value) => {
+      if (value === "files" || value === "outline") setTab(value);
+    });
+  }, []);
+
   useEffect(() => {
     void getSetting<number>(SIDEBAR_WIDTH_KEY).then((value) => {
       if (typeof value !== "number" || !Number.isFinite(value)) return;
@@ -269,6 +277,12 @@ export function WorkspaceSidebar() {
       setWidth(next);
     });
   }, []);
+
+  const selectTab = (next: SidebarTab) => {
+    setMenu(null);
+    setTab(next);
+    void setSetting(SIDEBAR_TAB_KEY, next);
+  };
 
   const commitWidth = (value: number) => {
     const next = clampSidebarWidth(value);
@@ -340,10 +354,7 @@ export function WorkspaceSidebar() {
             role="tab"
             aria-selected={tab === "files"}
             className={`sidebar-tab${tab === "files" ? " active" : ""}`}
-            onClick={() => {
-              setMenu(null);
-              setTab("files");
-            }}
+            onClick={() => selectTab("files")}
           >
             文件
           </button>
@@ -352,10 +363,7 @@ export function WorkspaceSidebar() {
             role="tab"
             aria-selected={tab === "outline"}
             className={`sidebar-tab${tab === "outline" ? " active" : ""}`}
-            onClick={() => {
-              setMenu(null);
-              setTab("outline");
-            }}
+            onClick={() => selectTab("outline")}
           >
             大纲
             {headingCount > 0 ? (
