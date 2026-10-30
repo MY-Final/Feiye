@@ -1,7 +1,9 @@
+import { copyText } from "../lib/clipboard";
 import { saveActiveDocument } from "../features/editor/save";
 import { useDocumentStore } from "../stores/document";
 import { useEditorStore } from "../stores/editor";
 import { useSettingsStore } from "../stores/settings";
+import { useUiStore } from "../stores/ui";
 import { useWorkspaceStore } from "../stores/workspace";
 
 function formatSavedAt(ms: number): string {
@@ -24,6 +26,7 @@ function formatSavedAt(ms: number): string {
 
 export function StatusBar() {
   const hasWorkspace = useWorkspaceStore((state) => Boolean(state.root));
+  const root = useWorkspaceStore((state) => state.root);
   const docPath = useDocumentStore((state) => state.path);
   const dirty = useDocumentStore((state) => state.dirty);
   const saving = useDocumentStore((state) => state.saving);
@@ -68,9 +71,32 @@ export function StatusBar() {
 
   return (
     <footer className="statusbar">
-      <span className="status-path">
-        {docPath ?? (hasWorkspace ? "未选择文件" : "未打开工作区")}
-      </span>
+      {docPath && root ? (
+        // 状态栏一直显示着相对路径，点一下就能拿到完整路径贴到别处。
+        <button
+          type="button"
+          className="status-path status-path-button"
+          title={`${root}${root.includes("\\") ? "\\" : "/"}${docPath.split("/").join(root.includes("\\") ? "\\" : "/")}（点击复制完整路径）`}
+          onClick={() => {
+            const sep = root.includes("\\") ? "\\" : "/";
+            const full = `${root}${sep}${docPath.split("/").join(sep)}`;
+            void copyText(full).then((copied) => {
+              useUiStore
+                .getState()
+                .toast(
+                  copied ? "已复制完整路径" : "复制到剪贴板失败",
+                  copied ? "info" : "error",
+                );
+            });
+          }}
+        >
+          {docPath}
+        </button>
+      ) : (
+        <span className="status-path">
+          {hasWorkspace ? "未选择文件" : "未打开工作区"}
+        </span>
+      )}
       <span className="status-meta">
         {docPath ? (
           <>

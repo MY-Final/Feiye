@@ -1169,6 +1169,23 @@ body.is-resizing-split * {
   -webkit-user-select: text;
 }
 
+.status-path-button {
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.status-path-button:hover {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .status-meta {
   display: flex;
   flex: none;
