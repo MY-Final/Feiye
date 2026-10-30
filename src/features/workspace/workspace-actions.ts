@@ -238,6 +238,11 @@ export async function openFile(
     useWorkspaceStore.getState().noteRecent(entry.relPath);
     await expandAncestors(entry.relPath);
     await restoreCursorFor(entry.relPath);
+    // 从文件树点开笔记后默认就要接着写：把焦点交给正文，
+    // 纯预览模式没有可见的编辑区，不抢焦点。
+    if (useDocumentStore.getState().viewMode !== "preview") {
+      getEditorView()?.focus();
+    }
     if (anchor) jumpToAnchorInOpenDocument(anchor);
   } catch (error) {
     if (silent) {
