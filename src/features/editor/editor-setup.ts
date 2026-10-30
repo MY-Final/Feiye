@@ -113,6 +113,27 @@ const editorHighlightStyle = HighlightStyle.define([
   { tag: t.invalid, color: "var(--syn-invalid)" },
 ]);
 
+// 查找 / 替换面板默认是英文，这里统一成中文；未覆盖的短语回退英文。
+const searchPhrases = EditorState.phrases.of({
+  Find: "查找",
+  Replace: "替换",
+  next: "下一个",
+  previous: "上一个",
+  all: "全部",
+  "match case": "区分大小写",
+  regexp: "正则表达式",
+  close: "关闭",
+  replace: "替换",
+  "replace all": "全部替换",
+  "current match": "当前匹配",
+  "Go to line": "跳到行",
+  go: "跳转",
+  line: "行号",
+  "on line": "行",
+  "replaced $ matches": "已替换 $ 处",
+  "replaced match on line $": "已替换第 $ 行的匹配",
+});
+
 const editorTheme = EditorView.theme({
   "&": {
     height: "100%",
@@ -214,6 +235,7 @@ export function createEditorState(
     doc,
     extensions: [
       basicSetup,
+      searchPhrases,
       syntaxHighlighting(editorHighlightStyle),
       markdown({
         base: markdownLanguage,
