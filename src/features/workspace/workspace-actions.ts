@@ -64,6 +64,7 @@ import {
   scrollPreviewToHeading,
 } from "../preview/preview-scroll";
 import { recallLastDocument, rememberLastDocument } from "./last-document";
+import { pauseTabsSave, recallOpenTabs, resumeTabsSave } from "./tabs-memory";
 
 const MARKDOWN_NAME = /\.(md|markdown|mdx)$/i;
 const HAS_EXTENSION = /\.[^./\\]+$/;
@@ -197,6 +198,8 @@ export async function openWorkspaceAt(
 
   try {
     const info = await apiOpenWorkspace(path);
+    const savedTabs = await recallOpenTabs(info.root);
+    pauseTabsSave();
     useWorkspaceStore.getState().setWorkspace(info);
     // 换库是重新开始浏览，专注模式不该延续到新库上；退出时照常提示。
     if (useUiStore.getState().zenMode) {
@@ -212,11 +215,13 @@ export async function openWorkspaceAt(
     // 每个工作区各自记着上次打开的文档：切换过来时直接打开它，
     // 和启动时一样；文件已不在时静默跳过。
     const lastDocument = await recallLastDocument(info.root);
-    if (lastDocument) {
+    const active = lastDocument ?? savedTabs[0] ?? null;
+    restoreSavedTabs(savedTabs, active);
+    if (active) {
       await openFile(
         {
-          relPath: lastDocument,
-          name: baseName(lastDocument),
+          relPath: active,
+          name: baseName(active),
           isDir: false,
         },
         true,
@@ -235,6 +240,8 @@ export async function openWorkspaceAt(
         : `打开工作区失败：${describeError(error)}`,
       "error",
     );
+  } finally {
+    resumeTabsSave();
   }
 }
 
@@ -254,17 +261,21 @@ export async function restoreLastWorkspace(): Promise<void> {
 
   try {
     const info = await apiOpenWorkspace(last);
+    const savedTabs = await recallOpenTabs(info.root);
+    pauseTabsSave();
     useWorkspaceStore.getState().setWorkspace(info);
     await useWorkspaceStore.getState().loadDir("");
     await rememberWorkspace(info.root);
 
     // 恢复这个工作区上次打开的文档；文件已不存在时静默清除记录，不打扰启动。
     const lastDocument = await recallLastDocument(last);
-    if (lastDocument) {
+    const active = lastDocument ?? savedTabs[0] ?? null;
+    restoreSavedTabs(savedTabs, active);
+    if (active) {
       await openFile(
         {
-          relPath: lastDocument,
-          name: baseName(lastDocument),
+          relPath: active,
+          name: baseName(active),
           isDir: false,
         },
         true,
@@ -274,6 +285,16 @@ export async function restoreLastWorkspace(): Promise<void> {
     await promptPendingRecoveries();
   } catch {
     await setSetting("lastWorkspace", null);
+  } finally {
+    resumeTabsSave();
+  }
+}
+
+/** 把上次打开的标签摆回标签栏；当前文档仍由 openFile 打开，避免重复。 */
+function restoreSavedTabs(saved: string[], active: string | null): void {
+  for (const relPath of saved) {
+    if (relPath === active) continue;
+    useTabsStore.getState().addTab(relPath, baseName(relPath));
   }
 }
 

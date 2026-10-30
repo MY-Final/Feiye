@@ -40,6 +40,7 @@ import {
   saveDocumentAs,
   switchDocumentTab,
 } from "../features/workspace/workspace-actions";
+import { rememberOpenTabs } from "../features/workspace/tabs-memory";
 import { APP_NAME, APP_TAGLINE } from "../lib/app-info";
 import { baseName, parentRel } from "../lib/paths";
 import { getSetting, isAppError, readFile, setSetting, unwatchWorkspace, watchWorkspace } from "../lib/tauri";
@@ -131,6 +132,15 @@ export default function App() {
       await restoreLastWorkspace();
     })();
   }, []);
+
+  // 标签开合后记住这一组，重启或切回库时原样摆回来。
+  useEffect(
+    () =>
+      useTabsStore.subscribe((state) =>
+        void rememberOpenTabs(state.tabs.map((tab) => tab.path)),
+      ),
+    [],
+  );
 
   // Windows 下关掉 Tauri 的原生拖放拦截后，文件由 WebView 自己分发：
   // 编辑区和预览区会拦下来插入图片，其它位置也统一挡住，别让 WebView
