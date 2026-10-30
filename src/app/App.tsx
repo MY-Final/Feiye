@@ -229,6 +229,11 @@ export default function App() {
           break;
         case "s":
           event.preventDefault();
+          // 一篇都没打开时保存不会发生任何事，说清楚，别让人以为键位坏了。
+          if (!useDocumentStore.getState().path) {
+            useUiStore.getState().toast("先打开一篇笔记再保存");
+            break;
+          }
           if (event.shiftKey) {
             void saveDocumentAs();
           } else {
