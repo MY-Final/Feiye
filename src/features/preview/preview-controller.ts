@@ -10,6 +10,16 @@ let pending: string | null = null;
 let listener: ((result: PreviewResult) => void) | null = null;
 let lastResult: PreviewResult = { html: "" };
 
+interface PendingExport {
+  id: number;
+  resolve(html: string): void;
+  reject(error: Error): void;
+}
+
+// 导出请求与预览请求共用 Worker，但使用独立 id 区间，避免互相顶掉。
+let pendingExport: PendingExport | null = null;
+let exportSeq = 1_000_000_000;
+
 function ensureWorker(): Worker | null {
   if (worker) return worker;
 
@@ -19,6 +29,13 @@ function ensureWorker(): Worker | null {
     });
     worker.onmessage = (event: MessageEvent<PreviewResponse>) => {
       const data = event.data;
+      if (pendingExport?.id === data.id) {
+        const { resolve, reject } = pendingExport;
+        pendingExport = null;
+        if (data.error) reject(new Error(data.error));
+        else resolve(data.html);
+        return;
+      }
       // 丢弃过期结果。
       if (data.id !== latestId) return;
       lastResult = data.error
@@ -31,6 +48,10 @@ function ensureWorker(): Worker | null {
       // 丢掉它，用户点「重试」时按需重建。
       worker?.terminate();
       worker = null;
+      pendingExport?.reject(
+        new Error(event.message || "预览 Worker 运行失败"),
+      );
+      pendingExport = null;
       lastResult = { html: "", error: event.message || "预览 Worker 运行失败" };
       listener?.(lastResult);
     };
@@ -96,4 +117,29 @@ export function clearPreview(): void {
   latestId += 1;
   lastResult = { html: "" };
   listener?.(lastResult);
+}
+
+/**
+ * 用预览同一套管线把 Markdown 渲染成 HTML 片段。
+ * 不改变预览状态；导出请求与预览共用 Worker，因此不需要再建一个解析器。
+ */
+export function renderMarkdownToHtml(markdown: string): Promise<string> {
+  if (markdown.length > MAX_PREVIEW_BYTES) {
+    return Promise.reject(new Error("文档超过 1 MB，无法生成 HTML。"));
+  }
+
+  const current = ensureWorker();
+  if (!current) {
+    return Promise.reject(
+      new Error(lastResult.error ?? "预览 Worker 初始化失败"),
+    );
+  }
+
+  const id = ++exportSeq;
+  return new Promise((resolve, reject) => {
+    // 连点两次时以最后一次为准，前一次明确失败，避免永远悬挂。
+    pendingExport?.reject(new Error("已开始新的 HTML 导出。"));
+    pendingExport = { id, resolve, reject };
+    current.postMessage({ id, markdown });
+  });
 }

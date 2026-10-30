@@ -27,6 +27,7 @@ pub fn run() {
             commands::workspace::list_dir,
             commands::file::read_file,
             commands::file::write_file,
+            commands::file::export_html,
             commands::file::create_file,
             commands::file::create_folder,
             commands::file::reveal_entry,
@@ -38,6 +39,7 @@ pub fn run() {
             commands::recovery::delete_recovery,
             commands::recovery::clear_recovery,
             commands::image_asset::save_image_asset,
+            commands::image_asset::read_image_data_url,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

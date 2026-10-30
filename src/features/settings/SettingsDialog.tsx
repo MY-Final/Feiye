@@ -86,6 +86,7 @@ const SHORTCUT_GROUPS: { title: string; items: [string, string][] }[] = [
       ["Ctrl + N", "新建 Markdown"],
       ["Ctrl + S", "保存"],
       ["Ctrl + Shift + S", "另存为"],
+      ["Ctrl + Shift + E", "复制 HTML（按预览排版，可直接粘贴到邮件 / 公众号）"],
       ["F2", "重命名当前笔记；文件树里作用于选中的那一行"],
       ["Delete", "删除文件树里选中的项（进回收站，需确认）"],
       ["Shift + F10", "在文件树里打开右键菜单"],
@@ -126,6 +127,7 @@ const SHORTCUT_GROUPS: { title: string; items: [string, string][] }[] = [
     title: "视图与查找",
     items: [
       ["Ctrl + E", "阅读 / 编辑快速切换，切回时还原分栏"],
+      ["Alt + ← / Alt + →", "浏览历史里后退 / 前进"],
       ["Ctrl + Shift + F", "专注模式：收起侧栏与工具栏，再按一次恢复"],
       ["Ctrl + F", "查找与替换（预览模式下自动切到分栏）"],
       ["Ctrl + = / Ctrl + -", "放大 / 缩小正文字号"],

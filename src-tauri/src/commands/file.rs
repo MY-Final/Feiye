@@ -336,6 +336,40 @@ pub fn write_file(
     write_path(&path, &content, expected_modified_ms)
 }
 
+/// 导出 HTML 落盘：工作区内、只允许 `.html`、不覆盖已有文件、沿用原子写。
+fn export_to(root: &Path, rel: &str, content: &str) -> Result<FileMeta, AppError> {
+    let path = fs_path::resolve_in_workspace(root, rel)?;
+    let ext = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or_default();
+    if !ext.eq_ignore_ascii_case("html") {
+        return Err(AppError::InvalidPath("导出文件必须以 .html 结尾".into()));
+    }
+    if path.exists() {
+        return Err(AppError::AlreadyExists(fs_path::normalize_rel(rel)?));
+    }
+    let parent = path
+        .parent()
+        .ok_or_else(|| AppError::InvalidPath("无法确定导出目录".into()))?;
+    if !parent.is_dir() {
+        return Err(AppError::NotFound(
+            fs_path::parent_rel(&fs_path::normalize_rel(rel)?).to_string(),
+        ));
+    }
+    write_path(&path, content, None)
+}
+
+#[tauri::command]
+pub fn export_html(
+    rel_path: String,
+    content: String,
+    state: State<'_, WorkspaceState>,
+) -> Result<FileMeta, AppError> {
+    let root = state.root()?;
+    export_to(&root, &rel_path, &content)
+}
+
 #[tauri::command]
 pub fn create_file(
     parent_rel_path: String,
@@ -552,6 +586,35 @@ mod tests {
         let (_temp, root) = workspace();
         assert!(read_file_path(&root, "../a.md").is_err());
         assert!(write_file_path(&root, "../a.md").is_err());
+    }
+
+    #[test]
+    fn exports_html_inside_workspace_only() {
+        let (_temp, root) = workspace();
+        let meta = export_to(&root, "笔记.html", "<p>hi</p>").unwrap();
+        assert!(meta.size > 0);
+        assert_eq!(
+            fs::read_to_string(root.join("笔记.html")).unwrap(),
+            "<p>hi</p>"
+        );
+        // 只允许 .html。
+        assert!(export_to(&root, "笔记.md", "x").is_err());
+        assert!(export_to(&root, "笔记", "x").is_err());
+        // 不允许逃出工作区。
+        assert!(export_to(&root, "../逃逸.html", "x").is_err());
+        // 已有文件不覆盖。
+        assert!(matches!(
+            export_to(&root, "笔记.html", "y"),
+            Err(AppError::AlreadyExists(_))
+        ));
+        assert_eq!(
+            fs::read_to_string(root.join("笔记.html")).unwrap(),
+            "<p>hi</p>"
+        );
+        // 子目录内可写，目录不存在则拒绝。
+        fs::create_dir(root.join("导出")).unwrap();
+        assert!(export_to(&root, "导出/a.html", "z").is_ok());
+        assert!(export_to(&root, "缺失/a.html", "z").is_err());
     }
 
     fn read_file_path(root: &Path, rel: &str) -> Result<FileContent, AppError> {

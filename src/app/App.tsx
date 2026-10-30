@@ -22,8 +22,12 @@ import {
   changeViewMode,
   chooseWorkspace,
   createMarkdownFile,
+  forwardDocumentPath,
   newDocumentNearActive,
   openFile,
+  openNextDocument,
+  openPreviousDocument,
+  previousDocumentPath,
   renameActiveDocument,
   restoreLastWorkspace,
   saveDocumentAs,
@@ -48,7 +52,7 @@ import {
 } from "./SplitHandle";
 import { StatusBar } from "./StatusBar";
 import { TitleBar } from "./TitleBar";
-import { Toolbar } from "./Toolbar";
+import { Toolbar, copyActiveAsHtml } from "./Toolbar";
 import "./App.css";
 
 let bootstrapped = false;
@@ -214,6 +218,21 @@ export default function App() {
         return;
       }
 
+      // Alt + ← 与工具栏「返回」是同一动作：沿链接读下去后可以退回上一篇。
+      if (event.altKey && !mod && event.key === "ArrowLeft") {
+        // 拦掉 WebView 自带的「后退」，否则会整页退出应用界面。
+        event.preventDefault();
+        if (previousDocumentPath()) void openPreviousDocument();
+        return;
+      }
+
+      // Alt + → 前进：退回之后想再回到刚离开的那篇，与 Alt+← 对称。
+      if (event.altKey && !mod && event.key === "ArrowRight") {
+        event.preventDefault();
+        if (forwardDocumentPath()) void openNextDocument();
+        return;
+      }
+
       if (!(event.ctrlKey || event.metaKey)) return;
 
       switch (event.key.toLowerCase()) {
@@ -269,6 +288,17 @@ export default function App() {
           void chooseWorkspace();
           break;
         case "e": {
+          // Ctrl+Shift+E 与工具栏「复制 HTML」同一动作：导出 HTML 的第一步。
+          // 用 E 而不是 Ctrl+Shift+C，后者在 WebView2 / Edge 里是「检查元素」。
+          if (event.shiftKey) {
+            event.preventDefault();
+            if (!useDocumentStore.getState().path) {
+              useUiStore.getState().toast("先打开一篇笔记再复制 HTML");
+              break;
+            }
+            void copyActiveAsHtml();
+            break;
+          }
           // 阅读 / 编辑快速切换；分栏状态会被记住，切回来还原。
           if (!useDocumentStore.getState().path) {
             useUiStore.getState().toast("先打开一篇笔记再切换视图");

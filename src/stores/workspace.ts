@@ -67,6 +67,8 @@ async function restoreExpanded(root: string): Promise<void> {
 
 const RECENT_KEY = "recentDocuments";
 const RECENT_LIMIT = 5;
+/** 浏览历史只留最近 50 步，足够读完一长串链接；不落盘，随会话结束清空。 */
+const HISTORY_LIMIT = 50;
 
 /** 各工作区最近打开的文档；同样只在第一次读取后常驻。 */
 let recentByRoot: Record<string, string[]> | null = null;
@@ -114,9 +116,29 @@ interface WorkspaceStore {
   failed: Record<string, boolean>;
   /** 当前工作区最近打开的文档，最新的在前。 */
   recent: string[];
+  /**
+   * 本次会话的浏览历史：每打开一篇就把上一篇压栈，「返回」逐级退回，
+   * 而不是在最近两篇之间来回切换。换库时清空。
+   */
+  history: string[];
+  /**
+   * 「前进」栈：后退之后还能沿原路走回去。只有「返回」会往里放，
+   * 任何一次新的打开都会清空它，避免把旧分支混进来。
+   */
+  forward: string[];
 
   setWorkspace(info: WorkspaceInfo | null): void;
   noteRecent(relPath: string): void;
+  pushHistory(relPath: string): void;
+  /** 弹掉栈顶并返回它；历史为空时返回 null。 */
+  popHistory(): string | null;
+  /** 文件已读不到时，把它从浏览历史里摘掉，避免反复退回同一处报错。 */
+  forgetHistory(relPath: string): void;
+  pushForward(relPath: string): void;
+  popForward(): string | null;
+  /** 前进目标已读不到时摘掉它，避免每次 Alt+→ 都重试同一条失效路径。 */
+  forgetForward(relPath: string): void;
+  clearForward(): void;
   /** 重命名或删除后同步「最近打开」，避免留下打不开的旧路径。 */
   updateRecent(oldPath: string, nextPath: string | null): void;
   /** 一键清空最近打开；只影响历史列表，不动磁盘文件。 */
@@ -143,6 +165,8 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   root: null,
   name: null,
   recent: [],
+  history: [],
+  forward: [],
   ...EMPTY_MAPS,
 
   setWorkspace(info) {
@@ -150,6 +174,8 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       root: info?.root ?? null,
       name: info?.name ?? null,
       recent: [],
+      history: [],
+      forward: [],
       ...EMPTY_MAPS,
     });
     if (info) {
@@ -167,6 +193,49 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     ].slice(0, RECENT_LIMIT);
     set({ recent: next });
     persistRecent(root, next);
+  },
+
+  pushHistory(relPath) {
+    const current = get().history;
+    if (current[current.length - 1] === relPath) return;
+    set({ history: [...current, relPath].slice(-HISTORY_LIMIT) });
+  },
+
+  popHistory() {
+    const current = get().history;
+    if (current.length === 0) return null;
+    set({ history: current.slice(0, -1) });
+    return current[current.length - 1];
+  },
+
+  forgetHistory(relPath) {
+    const current = get().history;
+    if (!current.includes(relPath)) return;
+    set({ history: current.filter((path) => path !== relPath) });
+  },
+
+  pushForward(relPath) {
+    const current = get().forward;
+    if (current[current.length - 1] === relPath) return;
+    set({ forward: [...current, relPath].slice(-HISTORY_LIMIT) });
+  },
+
+  popForward() {
+    const current = get().forward;
+    if (current.length === 0) return null;
+    set({ forward: current.slice(0, -1) });
+    return current[current.length - 1];
+  },
+
+  forgetForward(relPath) {
+    const current = get().forward;
+    if (!current.includes(relPath)) return;
+    set({ forward: current.filter((path) => path !== relPath) });
+  },
+
+  clearForward() {
+    if (get().forward.length === 0) return;
+    set({ forward: [] });
   },
 
   updateRecent(oldPath, nextPath) {
