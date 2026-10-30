@@ -1,16 +1,20 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type MouseEvent as ReactMouseEvent } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
+import { baseName, resolveRelLink } from "../../lib/paths";
 import { countTextStats } from "../../lib/text-stats";
 import { useDocumentStore } from "../../stores/document";
 import { useEditorStore } from "../../stores/editor";
 import { useOutlineStore } from "../../stores/outline";
 import { requestPreview } from "../preview/preview-controller";
+import { openFile } from "../workspace/workspace-actions";
 import { noteDocumentChange } from "./autosave";
 import { noteCursorOffset } from "./cursor-memory";
 import { resolveEditorImage } from "./editor-images";
 import {
   getEditorText,
   getEditorView,
+  linkAtPosition,
   mountEditor,
   refreshEditorLayout,
   setEditorMode,
@@ -20,6 +24,40 @@ import { readOutline } from "./outline";
 import { saveActiveDocument } from "./save";
 
 const STATS_DELAY_MS = 150;
+const MARKDOWN_LINK = /\.(md|markdown|mdx)$/i;
+
+/** 按预览里的同一套规则打开链接：外链交系统浏览器，笔记走应用内打开。 */
+function openEditorLink(href: string): void {
+  if (/^https?:\/\//i.test(href)) {
+    void openUrl(href).catch(() => {
+      // 权限或系统调用失败时保持页面不动。
+    });
+    return;
+  }
+
+  const current = useDocumentStore.getState().path;
+  const relPath = current ? resolveRelLink(href, current) : null;
+  if (relPath && MARKDOWN_LINK.test(relPath)) {
+    void openFile({ relPath, name: baseName(relPath), isDir: false });
+  }
+}
+
+/** Ctrl/⌘ + 左键点链接时打开；捕获阶段拦截，避免编辑器先移动光标。 */
+function handleLinkClick(event: ReactMouseEvent<HTMLDivElement>): void {
+  if (event.button !== 0 || !(event.ctrlKey || event.metaKey)) return;
+
+  const view = getEditorView();
+  if (!view) return;
+  const position = view.posAtCoords({ x: event.clientX, y: event.clientY });
+  if (position === null) return;
+
+  const href = linkAtPosition(position);
+  if (!href) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+  openEditorLink(href);
+}
 
 export function EditorPane() {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -107,5 +145,11 @@ export function EditorPane() {
     requestAnimationFrame(() => refreshEditorLayout());
   }, [viewMode]);
 
-  return <div className="editor-host" ref={hostRef} />;
+  return (
+    <div
+      className="editor-host"
+      ref={hostRef}
+      onMouseDownCapture={handleLinkClick}
+    />
+  );
 }

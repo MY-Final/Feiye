@@ -160,6 +160,23 @@ export function refreshEditorLayout(): void {
   view?.requestMeasure();
 }
 
+/** 位置所在的链接地址；不在链接内返回 null。 */
+export function linkAtPosition(position: number): string | null {
+  if (!view) return null;
+  const state = view.state;
+  let node = syntaxTree(state).resolveInner(position, 1);
+  while (node.name !== "Link" && node.name !== "Autolink") {
+    if (!node.parent) return null;
+    node = node.parent;
+  }
+
+  const url = node.getChild("URL");
+  if (url) return state.doc.sliceString(url.from, url.to);
+
+  const raw = state.doc.sliceString(node.from, node.to);
+  return raw.startsWith("<") && raw.endsWith(">") ? raw.slice(1, -1) : raw;
+}
+
 /**
  * 预览里点击第 index 个任务复选框：翻转文档中对应的 [ ] / [x]。
  * 预览节点与语法树节点数量不一致时放弃，避免勾错行。
