@@ -55,6 +55,7 @@ import {
   normalizeAnchor,
   scrollPreviewToHeading,
 } from "../preview/preview-scroll";
+import { recallLastDocument, rememberLastDocument } from "./last-document";
 
 const MARKDOWN_NAME = /\.(md|markdown|mdx)$/i;
 const HAS_EXTENSION = /\.[^./\\]+$/;
@@ -118,7 +119,7 @@ export async function openWorkspaceAt(path: string): Promise<void> {
     resetDocument();
     await useWorkspaceStore.getState().loadDir("");
     await setSetting("lastWorkspace", info.root);
-    await setSetting("lastDocument", null);
+    // 每个工作区各自记着上次打开的文档，切换时不清空。
     void promptPendingRecoveries();
   } catch (error) {
     toastError("打开工作区失败", error);
@@ -144,8 +145,8 @@ export async function restoreLastWorkspace(): Promise<void> {
     useWorkspaceStore.getState().setWorkspace(info);
     await useWorkspaceStore.getState().loadDir("");
 
-    // 恢复上次打开的文档；文件已不存在时静默清除记录，不打扰启动。
-    const lastDocument = await getSetting<string>("lastDocument");
+    // 恢复这个工作区上次打开的文档；文件已不存在时静默清除记录，不打扰启动。
+    const lastDocument = await recallLastDocument(last);
     if (lastDocument) {
       await openFile(
         {
@@ -202,14 +203,14 @@ export async function openFile(
       .setDocument(entry.relPath, entry.name, file.modifiedMs);
     setEditorDocument(file.content);
     requestPreview(file.content, true);
-    void setSetting("lastDocument", entry.relPath);
+    void rememberLastDocument(entry.relPath);
     useWorkspaceStore.getState().noteRecent(entry.relPath);
     await expandAncestors(entry.relPath);
     await restoreCursorFor(entry.relPath);
     if (anchor) jumpToAnchorInOpenDocument(anchor);
   } catch (error) {
     if (silent) {
-      void setSetting("lastDocument", null);
+      void rememberLastDocument(null);
       return;
     }
     // 可能是文件已在应用外被删除：从最近打开里摘掉，避免反复点开报错。
@@ -288,7 +289,7 @@ export async function saveDocumentAs(): Promise<void> {
     resetAutoSave();
     if (stillDirty) noteDocumentChange();
     await clearRecoverySnapshot(oldPath);
-    void setSetting("lastDocument", created.relPath);
+    void rememberLastDocument(created.relPath);
 
     const workspace = useWorkspaceStore.getState();
     await workspace.refreshDir(parent);
@@ -387,7 +388,7 @@ export async function renameEntry(entry: Entry): Promise<void> {
       // 未保存的内容仍能找回。
       const oldPath = doc.path;
       doc.renameActive(renamed.relPath, renamed.name);
-      void setSetting("lastDocument", renamed.relPath);
+      void rememberLastDocument(renamed.relPath);
       void migrateRecoverySnapshot(oldPath, renamed.relPath);
     } else if (entry.isDir && doc.path && isWithin(doc.path, entry.relPath)) {
       // 当前文档所在目录被改名：保持文档打开，只把路径前缀换成新目录，
@@ -395,7 +396,7 @@ export async function renameEntry(entry: Entry): Promise<void> {
       const oldPath = doc.path;
       const nextPath = `${renamed.relPath}${oldPath.slice(entry.relPath.length)}`;
       doc.renameActive(nextPath, doc.name ?? baseName(nextPath));
-      void setSetting("lastDocument", nextPath);
+      void rememberLastDocument(nextPath);
       // 恢复副本按旧路径保存，迁移过去，避免下次启动误报「原文件已不在」。
       void migrateRecoverySnapshot(oldPath, nextPath);
     }
@@ -466,7 +467,7 @@ export async function deleteEntry(entry: Entry): Promise<void> {
     const doc = useDocumentStore.getState();
     if (doc.path && isWithin(doc.path, entry.relPath)) {
       void clearRecoverySnapshot(doc.path);
-      void setSetting("lastDocument", null);
+      void rememberLastDocument(null);
       resetDocument();
     }
     // resetDocument 会先把当前光标记下来，所以清理放在它之后，

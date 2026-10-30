@@ -6,7 +6,6 @@ import {
   listRecoveries,
   readFile,
   saveRecovery,
-  setSetting,
   writeFile as apiWriteFile,
   type RecoverySnapshot,
 } from "../../lib/tauri";
@@ -14,6 +13,7 @@ import { baseName, parentRel } from "../../lib/paths";
 import { useDocumentStore } from "../../stores/document";
 import { useUiStore } from "../../stores/ui";
 import { useWorkspaceStore } from "../../stores/workspace";
+import { rememberLastDocument } from "../workspace/last-document";
 import { getEditorText, setEditorDocument } from "./editor-bridge";
 import { requestPreview } from "../preview/preview-controller";
 
@@ -163,7 +163,7 @@ async function recreateFromSnapshot(snapshot: RecoverySnapshot): Promise<void> {
     doc.setDocument(created.relPath, created.name, meta.modifiedMs);
     setEditorDocument(snapshot.content);
     requestPreview(snapshot.content, true);
-    void setSetting("lastDocument", created.relPath);
+    void rememberLastDocument(created.relPath);
 
     const workspace = useWorkspaceStore.getState();
     workspace.noteRecent(created.relPath);
