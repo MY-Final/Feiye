@@ -238,7 +238,10 @@ export default function App() {
           break;
         case "e": {
           // 阅读 / 编辑快速切换；分栏状态会被记住，切回来还原。
-          if (!useDocumentStore.getState().path) break;
+          if (!useDocumentStore.getState().path) {
+            useUiStore.getState().toast("先打开一篇笔记再切换视图");
+            break;
+          }
           event.preventDefault();
           const current = useDocumentStore.getState().viewMode;
           if (current === "preview") {
