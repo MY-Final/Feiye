@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { trapTab } from "../../components/Dialog";
@@ -33,10 +33,60 @@ function findHeadingByAnchor(body: HTMLElement, fragment: string): number {
     (heading) => normalizeAnchor(heading.textContent ?? "") === target,
   );
 }
+
 import { attachSplitScrollSync } from "./scroll-sync";
 import { wrapImageCaptions } from "./figures";
 import { renderMermaidBlocks, type MermaidTarget } from "./mermaid";
 import { useSettingsStore } from "../../stores/settings";
+
+/**
+ * 按顶层块替换预览：相同的前缀与后缀原样留在 DOM 里，只换中间变化的那几段。
+ * 代码高亮、已画好的图表和未变段落都不重建，长文档里输入一个字也不会整篇重排。
+ * 返回这次渲染各顶层块的 HTML，供下一次比对。
+ */
+function patchPreviewBlocks(
+  body: HTMLElement,
+  html: string,
+  previous: string[],
+): string[] {
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  const fresh = Array.from(template.content.children);
+  const signatures = fresh.map((node) => node.outerHTML);
+
+  let start = 0;
+  while (
+    start < previous.length &&
+    start < signatures.length &&
+    previous[start] === signatures[start]
+  ) {
+    start += 1;
+  }
+  let tail = 0;
+  while (
+    tail < previous.length - start &&
+    tail < signatures.length - start &&
+    previous[previous.length - 1 - tail] ===
+      signatures[signatures.length - 1 - tail]
+  ) {
+    tail += 1;
+  }
+
+  const staleEnd = previous.length - tail;
+  const freshEnd = signatures.length - tail;
+  if (start < staleEnd || start < freshEnd) {
+    const before = body.children[staleEnd] ?? null;
+    for (let index = start; index < staleEnd; index += 1) {
+      body.children[start]?.remove();
+    }
+    const fragment = document.createDocumentFragment();
+    for (let index = start; index < freshEnd; index += 1) {
+      fragment.append(fresh[index].cloneNode(true));
+    }
+    body.insertBefore(fragment, before);
+  }
+  return signatures;
+}
 
 /** 会话内记住每篇笔记在纯预览里的阅读位置，切走再切回能接着读。 */
 const PREVIEW_SCROLL_LIMIT = 100;
@@ -103,6 +153,24 @@ export function PreviewPane() {
     () => rewritePreviewImages(result.html, root, docPath ?? ""),
     [result.html, root, docPath],
   );
+
+  // 增量上屏：同一篇笔记内只替换变动的块；换文档时整篇重来，免得沿用旧节点。
+  const rawBlocks = useRef<string[]>([]);
+  const patchedPath = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    const body = bodyRef.current;
+    if (!body) return;
+    if (patchedPath.current !== docPath) {
+      patchedPath.current = docPath;
+      body.innerHTML = html;
+      // innerHTML 生成的就是未经后处理的原样块，正好作为下次比对的基准。
+      rawBlocks.current = Array.from(body.children).map(
+        (node) => node.outerHTML,
+      );
+      return;
+    }
+    rawBlocks.current = patchPreviewBlocks(body, html, rawBlocks.current);
+  }, [html, docPath]);
 
   useEffect(() => {
     setPreviewListener((next) =>
@@ -506,23 +574,29 @@ export function PreviewPane() {
 
   // ```mermaid 代码块画成图：Worker 只给源码，这里按需懒加载 Mermaid。
   // 先打标记，避免下面给代码块补「复制」按钮时把图表源码也包一层。
-  // 主题切换时按记住的源码重画，图表不会停在旧配色上。
+  // 增量上屏后，未变的图表留在原位：只有主题变化时才整批重画。
+  const mermaidTheme = useRef<string | null>(null);
   useEffect(() => {
     const body = bodyRef.current;
     const sources = result.mermaid;
     if (!body || !sources?.length) return;
+    const themeChanged = mermaidTheme.current !== themeMode;
+    mermaidTheme.current = themeMode;
     const wanted = new Set(sources.map((source) => source.trim()));
     const targets: MermaidTarget[] = [];
     for (const pre of body.querySelectorAll("pre")) {
+      if (pre.closest("figure.mermaid-figure, .preview-code-block")) continue;
       const source = (pre.textContent ?? "").trim();
       if (!wanted.has(source)) continue;
       pre.dataset.mermaid = "pending";
       targets.push({ element: pre, source });
     }
-    for (const figure of body.querySelectorAll<HTMLElement>(
-      "figure.mermaid-figure[data-source]",
-    )) {
-      targets.push({ element: figure, source: figure.dataset.source ?? "" });
+    if (themeChanged) {
+      for (const figure of body.querySelectorAll<HTMLElement>(
+        "figure.mermaid-figure[data-source]",
+      )) {
+        targets.push({ element: figure, source: figure.dataset.source ?? "" });
+      }
     }
     if (!targets.length) return;
     const cancel = { cancelled: false };
@@ -641,11 +715,7 @@ export function PreviewPane() {
           </button>
         </div>
       ) : null}
-      <article
-        className="markdown-body"
-        ref={bodyRef}
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
+      <article className="markdown-body" ref={bodyRef} />
       {lightbox && lightboxImage ? (
         <div
           ref={lightboxRef}
