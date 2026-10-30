@@ -136,6 +136,10 @@ export async function openWorkspaceAt(path: string): Promise<void> {
   try {
     const info = await apiOpenWorkspace(path);
     useWorkspaceStore.getState().setWorkspace(info);
+    // 换库是重新开始浏览，专注模式不该延续到新库上；退出时照常提示。
+    if (useUiStore.getState().zenMode) {
+      useUiStore.getState().toggleZenMode();
+    }
     resetDocument();
     await useWorkspaceStore.getState().loadDir("");
     await setSetting("lastWorkspace", info.root);
