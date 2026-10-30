@@ -18,6 +18,7 @@ import {
   changeViewMode,
   newDocumentNearActive,
   renameActiveDocument,
+  saveDocumentAs,
 } from "../features/workspace/workspace-actions";
 import { useDocumentStore } from "../stores/document";
 import { useEditorStore } from "../stores/editor";
@@ -123,6 +124,16 @@ export function Toolbar() {
           onClick={() => void saveActiveDocument()}
         >
           保存
+        </button>
+        <button
+          type="button"
+          className="toolbar-text-btn"
+          title="另存为 (Ctrl+Shift+S)"
+          disabled={!hasDoc}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => void saveDocumentAs()}
+        >
+          另存为
         </button>
         <button
           type="button"

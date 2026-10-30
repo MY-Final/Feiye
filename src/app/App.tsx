@@ -16,6 +16,7 @@ import {
   newDocumentNearActive,
   renameActiveDocument,
   restoreLastWorkspace,
+  saveDocumentAs,
 } from "../features/workspace/workspace-actions";
 import { APP_NAME, APP_TAGLINE } from "../lib/app-info";
 import { getSetting, setSetting } from "../lib/tauri";
@@ -159,7 +160,11 @@ export default function App() {
           break;
         case "s":
           event.preventDefault();
-          void saveActiveDocument();
+          if (event.shiftKey) {
+            void saveDocumentAs();
+          } else {
+            void saveActiveDocument();
+          }
           break;
         case "o":
           event.preventDefault();

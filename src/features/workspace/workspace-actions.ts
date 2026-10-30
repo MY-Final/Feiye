@@ -10,6 +10,7 @@ import {
   readFile,
   renameEntry as apiRenameEntry,
   revealEntry as apiRevealEntry,
+  writeFile as apiWriteFile,
   setSetting,
   type Entry,
 } from "../../lib/tauri";
@@ -175,6 +176,52 @@ export async function createMarkdownFile(parent: string): Promise<void> {
     await openFile(created);
   } catch (error) {
     toastError("新建文件失败", error);
+  }
+}
+
+/** 把当前内容另存为同目录下的新笔记，并把编辑器切到新文件。 */
+export async function saveDocumentAs(): Promise<void> {
+  const doc = useDocumentStore.getState();
+  if (!doc.path || !doc.name) return;
+
+  const text = getEditorText();
+  if (text === null) return;
+
+  const parent = parentRel(doc.path);
+  const name = await useUiStore.getState().askInput({
+    title: "另存为",
+    label: "新文件名",
+    initialValue: `${doc.name.replace(MARKDOWN_NAME, "")}-副本.md`,
+    confirmLabel: "保存副本",
+    validate: (value) => {
+      const trimmed = value.trim();
+      if (!trimmed) return "文件名不能为空";
+      if (trimmed.includes("/") || trimmed.includes("\\")) {
+        return "文件名不能包含路径分隔符";
+      }
+      return markdownNameError(trimmed);
+    },
+  });
+
+  if (!name) return;
+
+  try {
+    const created = await apiCreateFile(parent, ensureMarkdownName(name.trim()));
+    const meta = await apiWriteFile(created.relPath, text, null);
+
+    // 内容已写入新文件：当前文档改指向它，保留光标与正文，视为已保存。
+    const oldPath = doc.path;
+    useDocumentStore.getState().renameActive(created.relPath, created.name);
+    useDocumentStore.getState().markSaved(meta.modifiedMs);
+    resetAutoSave();
+    await clearRecoverySnapshot(oldPath);
+    void setSetting("lastDocument", created.relPath);
+
+    const workspace = useWorkspaceStore.getState();
+    await workspace.refreshDir(parent);
+    if (parent) await workspace.expandDir(parent);
+  } catch (error) {
+    toastError("另存为失败", error);
   }
 }
 
