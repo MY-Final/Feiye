@@ -141,6 +141,8 @@ export async function copyActiveAsHtml(): Promise<void> {
   const docPath = useDocumentStore.getState().path;
   // 编辑区没有选区时，尊重在预览区里选中的那段。
   const previewHtml = useSelection ? null : previewSelectionHtml(root);
+  // 选区在 await 之后可能已被清掉，先记下纯文本，字数提示才准。
+  const previewPlain = previewHtml !== null ? (window.getSelection()?.toString() ?? "") : "";
   const usePreviewSelection = previewHtml !== null;
   const text = useSelection ? selected : getEditorText();
   if (!usePreviewSelection && text === null) return;
@@ -160,7 +162,7 @@ export async function copyActiveAsHtml(): Promise<void> {
     const plain = useSelection
       ? selected
       : usePreviewSelection
-        ? (window.getSelection()?.toString() ?? "")
+        ? previewPlain
         : "";
     const size = plain.replace(/\s+/g, "").length;
     const okMessage =
@@ -184,12 +186,20 @@ function ensureHtmlName(value: string): string {
   return /\.html$/i.test(value) ? value : `${value}.html`;
 }
 
+// 文件树只列 Markdown，已导出的 `.html` 不会出现在 children 里；这里按会话记住导出记录，
+// 让连续导出（改完再导一份）也能避让，键是 `${parent}\u0000${文件名小写}`。
+const exportedHtml = new Set<string>();
+
 /** 同目录已有同名文件时退到 `名字-2.html`，与「另存为」连续保存的默认名一致。 */
 function nextFreeHtmlName(parent: string, leaf: string): string {
   const entries = useWorkspaceStore.getState().children[parent] ?? [];
   const used = new Set(
     entries.filter((item) => !item.isDir).map((item) => item.name.toLowerCase()),
   );
+  const prefix = `${parent}\u0000`;
+  for (const key of exportedHtml) {
+    if (key.startsWith(prefix)) used.add(key.slice(prefix.length));
+  }
   if (!used.has(leaf.toLowerCase())) return leaf;
   const stem = leaf.replace(/\.html$/i, "");
   for (let n = 2; n < 1000; n += 1) {
@@ -239,6 +249,7 @@ export async function exportActiveAsHtml(): Promise<void> {
     const rendered = await renderMarkdownToHtml(text);
     const { html } = await inlineLocalImages(rendered, root, docPath);
     await invoke("export_html", { relPath: rel, content: html });
+    exportedHtml.add(`${parent}\u0000${leaf.toLowerCase()}`);
     ui.toast(`已导出 HTML：${rel}`);
     void useWorkspaceStore.getState().refreshDir(parent);
   } catch (error) {
