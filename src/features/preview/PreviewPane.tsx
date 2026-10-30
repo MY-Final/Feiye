@@ -41,6 +41,8 @@ export function PreviewPane() {
     images: { src: string; alt: string }[];
     index: number;
   } | null>(null);
+  // 截图里的字常常很小，浮层里用滚轮放大看细节。
+  const [zoom, setZoom] = useState(1);
   const paneRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const root = useWorkspaceStore((state) => state.root);
@@ -67,6 +69,7 @@ export function PreviewPane() {
           (image) => ({ src: image.currentSrc || image.src, alt: image.alt }),
         )
       : [];
+    setZoom(1);
     const found = images.findIndex((image) => image.src === src);
     // 链接指向的图片可能没在正文里出现，单独补一张即可。
     setLightbox(
@@ -210,17 +213,22 @@ export function PreviewPane() {
 
   useEffect(() => {
     setLightbox(null);
+    setZoom(1);
   }, [docPath]);
 
-  // 浮层是预览面板的子节点，滚轮会穿透到后面的正文：放大看图时把它挡住，
-  // 关掉浮层后阅读位置才不会被悄悄挪走。
+  // 浮层是预览面板的子节点，滚轮会穿透到后面的正文：看图时把它挡住，
+  // 关掉浮层后阅读位置才不会被悄悄挪走；挡住的同时拿滚轮调缩放。
   useEffect(() => {
     if (!lightbox) return;
     const pane = paneRef.current;
     if (!pane) return;
-    const blockWheel = (event: WheelEvent) => event.preventDefault();
-    pane.addEventListener("wheel", blockWheel, { passive: false });
-    return () => pane.removeEventListener("wheel", blockWheel);
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const step = event.deltaY < 0 ? 0.25 : -0.25;
+      setZoom((current) => Math.min(4, Math.max(0.5, current + step)));
+    };
+    pane.addEventListener("wheel", onWheel, { passive: false });
+    return () => pane.removeEventListener("wheel", onWheel);
   }, [lightbox]);
 
   // 给标题补上稳定锚点，供大纲跳转和滚动同步使用。
@@ -426,7 +434,11 @@ export function PreviewPane() {
           aria-label={lightboxImage.alt || "图片预览"}
           onClick={() => setLightbox(null)}
         >
-          <img src={lightboxImage.src} alt={lightboxImage.alt} />
+          <img
+            src={lightboxImage.src}
+            alt={lightboxImage.alt}
+            style={{ transform: `scale(${zoom})` }}
+          />
           {lightbox.images.length > 1 ? (
             <>
               <button
@@ -453,6 +465,7 @@ export function PreviewPane() {
               </button>
               <span className="image-lightbox-count">
                 {lightbox.index + 1} / {lightbox.images.length}
+                {zoom !== 1 ? ` · ${Math.round(zoom * 100)}%` : ""}
               </span>
             </>
           ) : null}

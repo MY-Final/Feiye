@@ -341,12 +341,13 @@
 .image-lightbox img {
   max-width: 100%;
   max-height: 100%;
+  transition: transform 0.12s ease;
   border-radius: var(--radius-sm);
   background: #fff;
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
 }
 
-/* 同篇文档有多张图时，左右两边的翻页按钮和底部的张数提示。 */
+/* 同篇文档有多张图时，左右两边的翻页按钮和底部的张数提示；滚轮可缩放。 */
 .image-lightbox-nav {
   position: absolute;
   top: 50%;
