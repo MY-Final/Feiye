@@ -623,8 +623,45 @@ body.is-resizing-split * {
 }
 
 /* 同名笔记靠所在目录区分，长路径整体省略。 */
+.empty-state .recent-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 372px;
+}
+
 .empty-state .recent-file {
   max-width: 340px;
+}
+
+/* 悬停或键盘聚焦时才露出移除按钮，平时不打扰。 */
+.empty-state .recent-remove {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-faint);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.recent-row:hover .recent-remove,
+.recent-remove:focus-visible {
+  opacity: 1;
+}
+
+.empty-state .recent-remove:hover {
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="dark"] .empty-state .recent-remove:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .empty-state .recent-name,

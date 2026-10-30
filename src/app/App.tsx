@@ -364,28 +364,42 @@ export default function App() {
                       <>
                         <p>最近打开</p>
                         {recent.map((relPath) => (
-                          <button
-                            key={relPath}
-                            type="button"
-                            className="btn ghost recent-file"
-                            title={relPath}
-                            onClick={() =>
-                              void openFile({
-                                relPath,
-                                name: baseName(relPath),
-                                isDir: false,
-                              })
-                            }
-                          >
-                            <span className="recent-name">
-                              {baseName(relPath)}
-                            </span>
-                            {parentRel(relPath) ? (
-                              <span className="recent-dir">
-                                {parentRel(relPath)}
+                          <div key={relPath} className="recent-row">
+                            <button
+                              type="button"
+                              className="btn ghost recent-file"
+                              title={relPath}
+                              onClick={() =>
+                                void openFile({
+                                  relPath,
+                                  name: baseName(relPath),
+                                  isDir: false,
+                                })
+                              }
+                            >
+                              <span className="recent-name">
+                                {baseName(relPath)}
                               </span>
-                            ) : null}
-                          </button>
+                              {parentRel(relPath) ? (
+                                <span className="recent-dir">
+                                  {parentRel(relPath)}
+                                </span>
+                              ) : null}
+                            </button>
+                            <button
+                              type="button"
+                              className="recent-remove"
+                              title="从「最近打开」移除"
+                              aria-label={`从「最近打开」移除 ${baseName(relPath)}`}
+                              onClick={() =>
+                                useWorkspaceStore
+                                  .getState()
+                                  .updateRecent(relPath, null)
+                              }
+                            >
+                              ×
+                            </button>
+                          </div>
                         ))}
                       </>
                     ) : null}
