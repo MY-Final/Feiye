@@ -327,6 +327,8 @@ export async function saveDocumentAs(): Promise<void> {
     if (stillDirty) noteDocumentChange();
     await clearRecoverySnapshot(oldPath);
     void rememberLastDocument(created.relPath);
+    // 当前打开的笔记一定在「最近打开」里，另存出来的副本也不例外。
+    useWorkspaceStore.getState().noteRecent(created.relPath);
 
     const workspace = useWorkspaceStore.getState();
     await workspace.refreshDir(parent);
