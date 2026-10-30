@@ -694,7 +694,7 @@ export class MathWidget extends WidgetType {
     );
   }
 
-  toDOM(): HTMLElement {
+  toDOM(view?: EditorView): HTMLElement {
     const element = document.createElement(this.display ? "div" : "span");
     element.className = this.display
       ? "cm-wysiwyg-math cm-wysiwyg-math-block"
@@ -708,6 +708,30 @@ export class MathWidget extends WidgetType {
       });
     } catch {
       element.textContent = this.display ? `$$${this.tex}$$` : `$${this.tex}$`;
+    }
+
+    // 块级 widget 的坐标映射以块中线为准：点下半部分会落到替换范围
+    // 末尾之外的空行，光标不在公式里，widget 也就不退出。这里让下半部分
+    // 直接定位到开头的 `$$` 之后，和点上半部分一致进入源码。
+    if (this.display && view) {
+      element.addEventListener("mousedown", (event) => {
+        const mouse = event as MouseEvent;
+        if (mouse.button !== 0) return;
+        const rect = element.getBoundingClientRect();
+        if (mouse.clientY < rect.top + rect.height / 2) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const from = view.posAtCoords({
+          x: rect.left + rect.width / 2,
+          y: rect.top + 1,
+        });
+        view.dispatch({
+          selection: {
+            anchor: Math.min((from ?? 0) + 2, view.state.doc.length),
+          },
+        });
+        view.focus();
+      });
     }
 
     return element;
