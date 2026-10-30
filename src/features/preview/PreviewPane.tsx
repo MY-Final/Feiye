@@ -442,16 +442,11 @@ export function PreviewPane() {
     return () => pane.removeEventListener("wheel", onWheel);
   }, [lightbox]);
 
-  // 给标题补上稳定锚点，供大纲跳转和滚动同步使用。
+  // 预览里的交互增强：任务复选框可点，链接悬停提示目标。
+  // 标题定位按文本与下标完成（`previewHeadingElements`），不再给每级标题写 id。
   useEffect(() => {
     const body = bodyRef.current;
     if (!body || !previewVisible) return;
-    body
-      .querySelectorAll<HTMLElement>("h1, h2, h3, h4, h5, h6")
-      .forEach((heading, index) => {
-        heading.id = `preview-heading-${index}`;
-        heading.dataset.headingIndex = String(index);
-      });
 
     // GFM 默认把任务复选框渲染成 disabled，这里放开以便在预览里直接勾选。
     body
