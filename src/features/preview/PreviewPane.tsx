@@ -492,11 +492,23 @@ export function PreviewPane() {
               >
                 ›
               </button>
-              <span className="image-lightbox-count">
-                {lightbox.index + 1} / {lightbox.images.length}
-                {zoom !== 1 ? ` · ${Math.round(zoom * 100)}%` : ""}
-              </span>
             </>
+          ) : null}
+          {lightboxImage.alt || lightbox.images.length > 1 ? (
+            <div className="image-lightbox-info">
+              {/* 连续截屏时分不清是哪张，把替代文字当作说明贴在底部。 */}
+              {lightboxImage.alt ? (
+                <span className="image-lightbox-caption">
+                  {lightboxImage.alt}
+                </span>
+              ) : null}
+              {lightbox.images.length > 1 ? (
+                <span className="image-lightbox-count">
+                  {lightbox.index + 1} / {lightbox.images.length}
+                  {zoom !== 1 ? ` · ${Math.round(zoom * 100)}%` : ""}
+                </span>
+              ) : null}
+            </div>
           ) : null}
         </div>
       ) : null}

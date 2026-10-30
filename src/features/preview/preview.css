@@ -379,15 +379,33 @@
   right: 16px;
 }
 
-.image-lightbox-count {
+/* 底部的图片说明与张数 / 缩放比例，纵向叠放在同一处。 */
+.image-lightbox-info {
   position: absolute;
   bottom: 16px;
   left: 50%;
   transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  max-width: 76vw;
+  pointer-events: none;
+}
+
+.image-lightbox-caption {
+  overflow: hidden;
+  max-width: 100%;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.image-lightbox-count {
   color: rgba(255, 255, 255, 0.7);
   font-size: 12px;
   letter-spacing: 0.04em;
-  pointer-events: none;
 }
 
 @keyframes lightbox-in {
