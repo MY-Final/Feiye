@@ -354,6 +354,8 @@ export async function saveDocumentAs(): Promise<void> {
     const workspace = useWorkspaceStore.getState();
     await workspace.refreshDir(parent);
     if (parent) await workspace.expandDir(parent);
+    // 编辑器已经切到副本，再明确说一句存在哪，避免以为只是切换了视图。
+    useUiStore.getState().toast(`已另存为 ${created.relPath}`);
   } catch (error) {
     toastError("另存为失败", error);
   }
