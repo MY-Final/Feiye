@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { copyText } from "../lib/clipboard";
 import { countTextStats } from "../lib/text-stats";
@@ -10,15 +10,22 @@ import { useSettingsStore } from "../stores/settings";
 import { useUiStore } from "../stores/ui";
 import { useWorkspaceStore } from "../stores/workspace";
 
-function formatSavedAt(ms: number): string {
+/** 已保存时间的时分部分。格式化较贵，只在保存时间变化时重算。 */
+function formatSavedTime(ms: number): string {
   const date = new Date(ms);
   if (Number.isNaN(date.getTime())) return "";
-  const now = new Date();
-  const time = date.toLocaleTimeString("zh-CN", {
+  return date.toLocaleTimeString("zh-CN", {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
   });
+}
+
+/** 同一天只显示时分，隔天补上日期；每次渲染重新判断日期，跨午夜也不会停在昨天。 */
+function formatSavedAt(ms: number, time: string): string {
+  if (!time) return "";
+  const date = new Date(ms);
+  const now = new Date();
   const sameDay =
     date.getFullYear() === now.getFullYear() &&
     date.getMonth() === now.getMonth() &&
@@ -85,8 +92,28 @@ export function StatusBar() {
         ? selectedWords
         : previewSelectedWords;
 
+  // 击键时状态栏会跟着光标频繁重渲染，保存时间是旧值，没必要每次重新格式化。
+  const savedTime = useMemo(
+    () => (savedModifiedMs !== null ? formatSavedTime(savedModifiedMs) : ""),
+    [savedModifiedMs],
+  );
+  const savedTitle = useMemo(
+    () =>
+      savedModifiedMs !== null
+        ? new Date(savedModifiedMs).toLocaleString("zh-CN")
+        : null,
+    [savedModifiedMs],
+  );
   const savedAt =
-    savedModifiedMs !== null ? formatSavedAt(savedModifiedMs) : "";
+    savedModifiedMs !== null ? formatSavedAt(savedModifiedMs, savedTime) : "";
+  const wordsLabel = useMemo(
+    () => stats.words.toLocaleString("zh-CN"),
+    [stats.words],
+  );
+  const charsLabel = useMemo(
+    () => stats.chars.toLocaleString("zh-CN"),
+    [stats.chars],
+  );
   const saveLabel = saving
     ? "保存中…"
     : dirty
@@ -104,9 +131,7 @@ export function StatusBar() {
       ? saveBlocked ?? "dirty"
       : `saved-${savedModifiedMs ?? 0}`;
   const saveTitle = [
-    savedModifiedMs !== null
-      ? new Date(savedModifiedMs).toLocaleString("zh-CN")
-      : null,
+    savedTitle,
     saveBlocked,
     dirty && autoSaveOff && !saveBlocked
       ? "自动保存已关闭，按 Ctrl+S 保存"
@@ -169,9 +194,9 @@ export function StatusBar() {
             ) : null}
             <span
               className="status-stat"
-              title={`${stats.chars.toLocaleString("zh-CN")} 个字符（不含空白）`}
+              title={`${charsLabel} 个字符（不含空白）`}
             >
-              {stats.words.toLocaleString("zh-CN")} 字
+              {wordsLabel} 字
             </span>
             <span>UTF-8</span>
             {saveBlocked ? (
