@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 
+import { trapTab } from "../../components/Dialog";
 import { SlidingSegmented } from "../../components/SlidingSegmented";
 import { APP_NAME, APP_NAME_EN, APP_TAGLINE } from "../../lib/app-info";
 import { VIEW_MODES } from "../../lib/view-modes";
@@ -186,6 +187,7 @@ export function SettingsDialog() {
         aria-modal="true"
         aria-label="偏好设置"
         tabIndex={-1}
+        onKeyDown={trapTab}
       >
         <header className="settings-header">
           <h2>偏好设置</h2>

@@ -1,10 +1,46 @@
-import { useEffect, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useState,
+  type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 
 import {
   useUiStore,
   type ConfirmRequest,
   type PromptRequest,
 } from "../stores/ui";
+
+/**
+ * 让 Tab / Shift+Tab 只在对话框内部循环。
+ * 否则焦点会跑到后面的编辑器里，接着打字就改到了正文。
+ */
+export function trapTab(event: ReactKeyboardEvent<HTMLElement>): void {
+  if (event.key !== "Tab") return;
+  const focusables = Array.from(
+    event.currentTarget.querySelectorAll<HTMLElement>(
+      "button, input, textarea, select, a[href], [tabindex]:not([tabindex='-1'])",
+    ),
+  ).filter((element) => !element.hasAttribute("disabled"));
+  if (focusables.length === 0) return;
+
+  const first = focusables[0];
+  const last = focusables[focusables.length - 1];
+  const active = document.activeElement;
+  const inside = active instanceof HTMLElement && event.currentTarget.contains(active);
+
+  if (event.shiftKey) {
+    if (!inside || active === first) {
+      event.preventDefault();
+      last.focus();
+    }
+    return;
+  }
+  if (!inside || active === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
 
 function ConfirmDialog({ request }: { request: ConfirmRequest }) {
   const cancelValue =
@@ -31,7 +67,13 @@ function ConfirmDialog({ request }: { request: ConfirmRequest }) {
         }
       }}
     >
-      <div className="modal" role="dialog" aria-modal="true" aria-label={request.title}>
+      <div
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={request.title}
+        onKeyDown={trapTab}
+      >
         <h2 className="modal-title">{request.title}</h2>
         {request.message ? <p className="modal-message">{request.message}</p> : null}
         <div className="modal-actions">
@@ -92,6 +134,7 @@ function PromptDialog({ request }: { request: PromptRequest }) {
         role="dialog"
         aria-modal="true"
         aria-label={request.title}
+        onKeyDown={trapTab}
         onSubmit={submit}
       >
         <h2 className="modal-title">{request.title}</h2>
