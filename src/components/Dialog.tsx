@@ -101,7 +101,16 @@ function PromptDialog({ request }: { request: PromptRequest }) {
             className="text-input"
             value={value}
             autoFocus
-            onFocus={(event) => event.currentTarget.select()}
+            onFocus={(event) => {
+              const input = event.currentTarget;
+              if (!request.selectBaseName) {
+                input.select();
+                return;
+              }
+              // 只选中「主名」部分，扩展名留着，避免改完还得重新补 `.md`。
+              const dot = input.value.lastIndexOf(".");
+              input.setSelectionRange(0, dot > 0 ? dot : input.value.length);
+            }}
             onChange={(event) => {
               setValue(event.currentTarget.value);
               setError(null);

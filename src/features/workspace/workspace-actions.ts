@@ -366,10 +366,14 @@ export async function revealEntry(entry: Entry | null): Promise<void> {
 
 export async function renameEntry(entry: Entry): Promise<void> {
   const nextName = await useUiStore.getState().askInput({
-    title: "重命名",
+    // 同名文件可能散在好几个目录里，标题带上路径才改得准。
+    title: parentRel(entry.relPath)
+      ? `重命名 · ${entry.relPath}`
+      : "重命名",
     label: "新名称",
     initialValue: entry.name,
     confirmLabel: "重命名",
+    selectBaseName: !entry.isDir,
     validate: (value) => {
       const trimmed = value.trim();
       if (!trimmed) return "名称不能为空";

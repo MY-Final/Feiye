@@ -26,6 +26,8 @@ export interface PromptRequest {
   label?: string;
   initialValue?: string;
   confirmLabel?: string;
+  /** 聚焦时只选中主文件名，保留扩展名，重命名时不用连 `.md` 一起重敲。 */
+  selectBaseName?: boolean;
   validate?: (value: string) => string | null;
   resolve: (value: string | null) => void;
 }
