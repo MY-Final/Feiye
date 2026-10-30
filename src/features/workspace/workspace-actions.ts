@@ -61,6 +61,21 @@ import { recallLastDocument, rememberLastDocument } from "./last-document";
 const MARKDOWN_NAME = /\.(md|markdown|mdx)$/i;
 const HAS_EXTENSION = /\.[^./\\]+$/;
 
+/** 已加载目录里同名文件的提示：输入阶段就告诉用户，省得关掉对话框再重来。 */
+function existingNameError(
+  parent: string,
+  name: string,
+  selfRel?: string,
+): string | null {
+  const entries = useWorkspaceStore.getState().children[parent];
+  if (!entries) return null;
+  const hit = entries.find(
+    (item) => item.name === name && item.relPath !== selfRel,
+  );
+  if (!hit) return null;
+  return hit.isDir ? "同名文件夹已存在" : "同名文件已存在";
+}
+
 /** 没写扩展名的 Markdown 名称补上 `.md`；已有非 Markdown 扩展名的由校验拦下。 */
 function ensureMarkdownName(value: string): string {
   return MARKDOWN_NAME.test(value) ? value : `${value}.md`;
@@ -288,7 +303,11 @@ export async function createMarkdownFile(parent: string): Promise<void> {
       if (trimmed.includes("/") || trimmed.includes("\\")) {
         return "文件名不能包含路径分隔符";
       }
-      return nameCharError(trimmed) ?? markdownNameError(trimmed);
+      return (
+        nameCharError(trimmed) ??
+        markdownNameError(trimmed) ??
+        existingNameError(parent, ensureMarkdownName(trimmed))
+      );
     },
   });
 
@@ -327,7 +346,11 @@ export async function saveDocumentAs(): Promise<void> {
       if (trimmed.includes("/") || trimmed.includes("\\")) {
         return "文件名不能包含路径分隔符";
       }
-      return nameCharError(trimmed) ?? markdownNameError(trimmed);
+      return (
+        nameCharError(trimmed) ??
+        markdownNameError(trimmed) ??
+        existingNameError(parent, ensureMarkdownName(trimmed))
+      );
     },
   });
 
@@ -373,7 +396,9 @@ export async function createFolderIn(parent: string): Promise<void> {
       if (trimmed.includes("/") || trimmed.includes("\\")) {
         return "名称不能包含路径分隔符";
       }
-      return nameCharError(trimmed);
+      return (
+        nameCharError(trimmed) ?? existingNameError(parent, trimmed.trim())
+      );
     },
   });
 
@@ -429,10 +454,15 @@ export async function renameEntry(entry: Entry): Promise<void> {
       if (trimmed.includes("/") || trimmed.includes("\\")) {
         return "名称不能包含路径分隔符";
       }
-      if (!entry.isDir) {
-        return nameCharError(trimmed) ?? markdownNameError(trimmed);
-      }
-      return nameCharError(trimmed);
+      const base = entry.isDir
+        ? nameCharError(trimmed)
+        : (nameCharError(trimmed) ?? markdownNameError(trimmed));
+      if (base) return base;
+      return existingNameError(
+        parentRel(entry.relPath),
+        entry.isDir ? trimmed : ensureMarkdownName(trimmed),
+        entry.relPath,
+      );
     },
   });
 

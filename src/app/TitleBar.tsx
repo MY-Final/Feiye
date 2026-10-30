@@ -64,6 +64,7 @@ export function TitleBar() {
   const docName = useDocumentStore((state) => state.name);
   const dirty = useDocumentStore((state) => state.dirty);
   const sidebarVisible = useUiStore((state) => state.sidebarVisible);
+  const zenMode = useUiStore((state) => state.zenMode);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
   const toggleSettings = useUiStore((state) => state.toggleSettings);
   const controls = useWindowControls();
@@ -82,7 +83,13 @@ export function TitleBar() {
         <button
           type="button"
           className="icon-btn"
-          title={sidebarVisible ? "收起侧栏 (Ctrl+B)" : "展开侧栏 (Ctrl+B)"}
+          title={
+            zenMode
+              ? "退出专注模式并显示侧栏"
+              : sidebarVisible
+                ? "收起侧栏 (Ctrl+B)"
+                : "展开侧栏 (Ctrl+B)"
+          }
           disabled={!root}
           onClick={() => {
             // 专注模式里侧栏是被整体收起的，单纯切换可见性看不出变化；
