@@ -19,6 +19,24 @@
 
 <!-- 从这里开始追加 -->
 
+## 第 86 轮 · 2026-10-30 13:23
+**用户需求**：偶尔预览区会红字提示「预览失败」，但从头到尾没有恢复的办法，只能关掉应用重开。期望提示旁边给个「重试」，按一下重新渲染。
+
+**产品经理**：做。预览 Worker 崩溃后原来不会被丢弃，后续请求石沉大海，表现为"预览彻底坏了"；给一个重试入口成本很低，能把偶发失败变成一次点击的事。
+
+**前端**：影响 `src/features/preview/preview-controller.ts`（`onerror` 时终止并丢弃 Worker，下次请求按需重建）、`src/features/preview/PreviewPane.tsx`（错误提示加重试按钮，用当前正文立刻重渲染）、`src/features/preview/preview.css`（错误条改成两端对齐，补按钮样式）。风险：文档超过 1 MB 时重试仍会提示暂停，属预期。工作量 S。
+
+**后端**：无改动。工作量 0。
+
+**裁决**：做
+
+**改动**：`src/features/preview/preview-controller.ts`、`src/features/preview/PreviewPane.tsx`、`src/features/preview/preview.css`
+
+**构建**：通过（bun run build，860ms）
+
+---
+
+
 ## 第 85 轮 · 2026-10-30 13:20
 **用户需求**：笔记放在好几层目录里，写的时候手一抖点「全部折叠」，正在写的这篇也从树里消失了，要重新一层层点开才找回来。期望全部折叠时把自己正在写的那篇留着显出来。
 

@@ -11,11 +11,11 @@ import { baseName, resolveRelLink } from "../../lib/paths";
 import { useDocumentStore } from "../../stores/document";
 import { useOutlineStore } from "../../stores/outline";
 import { useWorkspaceStore } from "../../stores/workspace";
-import { toggleTaskMarkerAt } from "../editor/editor-bridge";
+import { getEditorText, toggleTaskMarkerAt } from "../editor/editor-bridge";
 import { openFile } from "../workspace/workspace-actions";
 import "./preview.css";
 import type { PreviewResult } from "./preview-protocol";
-import { setPreviewListener } from "./preview-controller";
+import { requestPreview, setPreviewListener } from "./preview-controller";
 import {
   normalizeAnchor,
   previewActiveHeadingIndex,
@@ -386,7 +386,15 @@ export function PreviewPane() {
     <div className="preview-pane" ref={paneRef}>
       {result.error ? (
         <div className="preview-error" role="alert">
-          预览失败：{result.error}
+          <span>预览失败：{result.error}</span>
+          {/* 预览 Worker 崩溃或偶发渲染失败时，重试比重启应用省事。 */}
+          <button
+            type="button"
+            className="preview-retry"
+            onClick={() => requestPreview(getEditorText() ?? "", true)}
+          >
+            重试
+          </button>
         </div>
       ) : null}
       <article

@@ -27,6 +27,10 @@ function ensureWorker(): Worker | null {
       listener?.(lastResult);
     };
     worker.onerror = (event) => {
+      // 崩溃的 Worker 不会再回消息，留着只会让预览一直空白；
+      // 丢掉它，用户点「重试」时按需重建。
+      worker?.terminate();
+      worker = null;
       lastResult = { html: "", error: event.message || "预览 Worker 运行失败" };
       listener?.(lastResult);
     };
