@@ -481,3 +481,11 @@
   border-color: var(--accent);
   outline: none;
 }
+
+.settings-custom-css-count {
+  margin: 6px 0 0;
+  color: var(--text-faint);
+  font-size: 11px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

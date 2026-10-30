@@ -5,6 +5,7 @@ import { trapTab } from "../../components/Dialog";
 import { SlidingSegmented } from "../../components/SlidingSegmented";
 import { APP_NAME, APP_NAME_EN, APP_TAGLINE } from "../../lib/app-info";
 import { getSetting, setSetting } from "../../lib/tauri";
+import { CUSTOM_CSS_LIMIT } from "../../lib/theme";
 import { VIEW_MODES } from "../../lib/view-modes";
 import {
   flushPreferences,
@@ -278,6 +279,8 @@ export function SettingsDialog() {
 
   const [category, setCategory] = useState<Category>("appearance");
   const dialogRef = useRef<HTMLDivElement>(null);
+  // 到达上限后连续按键 / 粘贴只提示一次，删回上限内再重新提示。
+  const cssLimitWarned = useRef(false);
 
   useEffect(() => {
     if (!open) return;
@@ -308,6 +311,21 @@ export function SettingsDialog() {
   const close = () => {
     void flushPreferences();
     closeSettings();
+  };
+
+  const changeCustomCss = (raw: string) => {
+    // 存储与注入都会按上限截断；超出的那次明确说一声，别让用户以为全存下了。
+    if (raw.length > CUSTOM_CSS_LIMIT) {
+      if (!cssLimitWarned.current) {
+        cssLimitWarned.current = true;
+        useUiStore
+          .getState()
+          .toast(`自定义 CSS 最多 ${CUSTOM_CSS_LIMIT} 个字符，超出部分未保存`);
+      }
+    } else {
+      cssLimitWarned.current = false;
+    }
+    update({ customCss: raw });
   };
 
   // 一次性覆盖所有偏好，先确认，避免在面板底部误点后无从恢复。
@@ -538,10 +556,14 @@ export function SettingsDialog() {
                     spellCheck={false}
                     value={preferences.customCss}
                     placeholder="/* 在这里写自定义样式 */"
-                    onChange={(event) =>
-                      update({ customCss: event.target.value })
-                    }
+                    onChange={(event) => changeCustomCss(event.target.value)}
                   />
+                  <p className="settings-custom-css-count">
+                    {preferences.customCss.length} / {CUSTOM_CSS_LIMIT} 字符
+                    {preferences.customCss.length >= CUSTOM_CSS_LIMIT
+                      ? "（已达上限，超出部分不会保存）"
+                      : ""}
+                  </p>
                 </div>
               </section>
             ) : null}
