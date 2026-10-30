@@ -238,7 +238,7 @@ export function SettingsDialog() {
     const choice = await useUiStore.getState().ask({
       title: "恢复默认设置",
       message:
-        "主题、字体、字号、行高、保存间隔与默认视图都会改回默认值，当前设置会被覆盖。",
+        "主题、字体、字号、行高、行宽、保存与恢复间隔、行号、扩展名显示与默认视图都会改回默认值，当前设置会被覆盖。",
       buttons: [
         { label: "恢复默认", value: "reset", tone: "danger" },
         { label: "取消", value: "cancel" },
