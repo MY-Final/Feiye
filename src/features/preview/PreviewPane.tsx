@@ -45,6 +45,7 @@ export function PreviewPane() {
   const [zoom, setZoom] = useState(1);
   const paneRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
+  const lightboxRef = useRef<HTMLDivElement>(null);
   const root = useWorkspaceStore((state) => state.root);
   const docPath = useDocumentStore((state) => state.path);
   const viewMode = useDocumentStore((state) => state.viewMode);
@@ -215,6 +216,18 @@ export function PreviewPane() {
     setLightbox(null);
     setZoom(1);
   }, [docPath]);
+
+  // 浮层打开时把焦点收进来，关闭后还回去：读屏和键盘都不会停在背后的正文上。
+  useEffect(() => {
+    if (!lightbox) return;
+    const previous = document.activeElement;
+    lightboxRef.current?.focus();
+    return () => {
+      if (previous instanceof HTMLElement && previous.isConnected) {
+        previous.focus();
+      }
+    };
+  }, [lightbox !== null]);
 
   // 浮层是预览面板的子节点，滚轮会穿透到后面的正文：看图时把它挡住，
   // 关掉浮层后阅读位置才不会被悄悄挪走；挡住的同时拿滚轮调缩放。
@@ -428,10 +441,12 @@ export function PreviewPane() {
       />
       {lightbox && lightboxImage ? (
         <div
+          ref={lightboxRef}
           className="image-lightbox"
           role="dialog"
           aria-modal="true"
           aria-label={lightboxImage.alt || "图片预览"}
+          tabIndex={-1}
           onClick={() => setLightbox(null)}
         >
           <img
