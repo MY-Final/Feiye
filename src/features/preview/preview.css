@@ -290,3 +290,34 @@
 :root[data-theme="dark"] .markdown-body pre.shiki {
   background-color: var(--code-bg) !important;
 }
+
+/* 点击图片放大查看；单击任意位置或按 Esc 关闭。 */
+.image-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  background: rgba(24, 21, 18, 0.72);
+  cursor: zoom-out;
+  animation: lightbox-in 0.12s ease;
+}
+
+.image-lightbox img {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: var(--radius-sm);
+  background: #fff;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+}
+
+@keyframes lightbox-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

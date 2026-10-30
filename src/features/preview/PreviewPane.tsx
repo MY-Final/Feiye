@@ -31,6 +31,9 @@ import { attachSplitScrollSync } from "./scroll-sync";
 
 export function PreviewPane() {
   const [result, setResult] = useState<PreviewResult>({ html: "" });
+  const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(
+    null,
+  );
   const paneRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const root = useWorkspaceStore((state) => state.root);
@@ -68,6 +71,16 @@ export function PreviewPane() {
         if (index < 0) return;
         event.preventDefault();
         toggleTaskMarkerAt(index, boxes.length);
+        return;
+      }
+
+      // 点图片放大查看，方便看清截图里的细节；图片链接仍按链接处理。
+      if (target instanceof HTMLImageElement && !target.closest("a")) {
+        const src = target.currentSrc || target.src;
+        if (src) {
+          event.preventDefault();
+          setLightbox({ src, alt: target.alt });
+        }
         return;
       }
 
@@ -132,6 +145,20 @@ export function PreviewPane() {
       body.removeEventListener("error", onImageError, true);
     };
   }, []);
+
+  // 放大查看时按 Esc 关闭；切换文档时也一并关掉，避免停留在上一张图上。
+  useEffect(() => {
+    if (!lightbox) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setLightbox(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [lightbox]);
+
+  useEffect(() => {
+    setLightbox(null);
+  }, [docPath]);
 
   // 给标题补上稳定锚点，供大纲跳转和滚动同步使用。
   useEffect(() => {
@@ -279,6 +306,17 @@ export function PreviewPane() {
         ref={bodyRef}
         dangerouslySetInnerHTML={{ __html: html }}
       />
+      {lightbox ? (
+        <div
+          className="image-lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label={lightbox.alt || "图片预览"}
+          onClick={() => setLightbox(null)}
+        >
+          <img src={lightbox.src} alt={lightbox.alt} />
+        </div>
+      ) : null}
     </div>
   );
 }
