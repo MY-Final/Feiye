@@ -272,6 +272,11 @@
   accent-color: var(--accent);
 }
 
+/* 预览里的任务复选框可以直接点击，和所见模式保持一致。 */
+.markdown-body li > input[type="checkbox"] {
+  cursor: pointer;
+}
+
 /* Shiki 双主题：默认亮色，暗色下切换到 --shiki-dark 变量。 */
 :root[data-theme="dark"] .markdown-body .shiki,
 :root[data-theme="dark"] .markdown-body .shiki span {

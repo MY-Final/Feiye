@@ -9,6 +9,7 @@ import {
   PREFERENCE_LIMITS,
   useSettingsStore,
   type DefaultView,
+  type FontFamily,
   type Preferences,
 } from "../../stores/settings";
 import { useUiStore } from "../../stores/ui";
@@ -30,7 +31,14 @@ const THEME_OPTIONS: { value: Preferences["theme"]; label: string }[] = [
   { value: "dark", label: "深色" },
 ];
 
+const FONT_FAMILY_OPTIONS: { value: FontFamily; label: string }[] = [
+  { value: "system", label: "系统默认" },
+  { value: "serif", label: "宋体 / 衬线" },
+  { value: "kai", label: "楷体" },
+];
+
 const AUTO_SAVE_OPTIONS = [
+  { value: 0, label: "关闭（手动保存）" },
   { value: 1000, label: "1 秒" },
   { value: 1800, label: "1.8 秒（默认）" },
   { value: 3000, label: "3 秒" },
@@ -206,6 +214,26 @@ export function SettingsDialog() {
                   />
                 </Row>
 
+                <Row
+                  label="正文字体"
+                  hint="编辑区与预览同步；标题保持衬线"
+                >
+                  <select
+                    className="settings-select"
+                    value={preferences.fontFamily}
+                    aria-label="正文字体"
+                    onChange={(event) =>
+                      update({ fontFamily: event.target.value as FontFamily })
+                    }
+                  >
+                    {FONT_FAMILY_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </Row>
+
                 <Row label="正文字号" hint="编辑区与预览同步生效">
                   <div className="settings-range-wrap">
                     <input
@@ -274,7 +302,7 @@ export function SettingsDialog() {
 
                 <Row
                   label="自动保存"
-                  hint="停止输入后等待多久写入源文件"
+                  hint="停止输入后等待多久写入源文件；关闭后仍保留崩溃恢复副本"
                 >
                   <select
                     className="settings-select"

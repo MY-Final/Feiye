@@ -21,15 +21,24 @@ const EMPTY_FORMAT: FormatState = {
 
 interface EditorStore {
   format: FormatState;
+  selectedWords: number;
   setFormat(next: FormatState): void;
+  setSelectedWords(words: number): void;
 }
 
 export const useEditorStore = create<EditorStore>((set) => ({
   format: EMPTY_FORMAT,
+  selectedWords: 0,
 
   setFormat(next) {
     set((state) =>
       sameFormatState(state.format, next) ? state : { format: next },
+    );
+  },
+
+  setSelectedWords(words) {
+    set((state) =>
+      state.selectedWords === words ? state : { selectedWords: words },
     );
   },
 }));

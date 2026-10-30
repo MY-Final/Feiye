@@ -21,7 +21,7 @@ import { APP_NAME, APP_TAGLINE } from "../lib/app-info";
 import { getSetting, setSetting } from "../lib/tauri";
 import { isViewMode } from "../lib/view-modes";
 import { useDocumentStore } from "../stores/document";
-import { flushPreferences, useSettingsStore } from "../stores/settings";
+import { flushPreferences, FONT_FAMILY_STACKS, useSettingsStore } from "../stores/settings";
 import { useUiStore } from "../stores/ui";
 import { useWorkspaceStore } from "../stores/workspace";
 import {
@@ -186,6 +186,7 @@ export default function App() {
     const frame = requestAnimationFrame(() => refreshEditorLayout());
     return () => cancelAnimationFrame(frame);
   }, [
+    preferences.fontFamily,
     preferences.fontSize,
     preferences.lineHeight,
     preferences.editorWidth,
@@ -210,6 +211,8 @@ export default function App() {
               "--editor-font-size": `${preferences.fontSize}px`,
               "--editor-line-height": String(preferences.lineHeight),
               "--editor-measure": `min(${preferences.editorWidth}px, 100% - 80px)`,
+              "--font-body": FONT_FAMILY_STACKS[preferences.fontFamily],
+              "--font-editor": FONT_FAMILY_STACKS[preferences.fontFamily],
             } as CSSProperties
           }
         >

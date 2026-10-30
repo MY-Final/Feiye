@@ -106,6 +106,26 @@ async function insertImages(
   view.focus();
 }
 
+/** 从文件选择器等外部来源插入图片，沿用当前选区。 */
+export function insertImageFiles(files: File[]): void {
+  const images = files.filter(isImageFile);
+  if (images.length === 0) {
+    useUiStore
+      .getState()
+      .toast("只支持 PNG、JPEG、GIF、WebP、AVIF 或 BMP 图片", "error");
+    return;
+  }
+
+  const view = getEditorView();
+  const range = view
+    ? {
+        from: view.state.selection.main.from,
+        to: view.state.selection.main.to,
+      }
+    : null;
+  void insertImages(images, range);
+}
+
 export function handleEditorPaste(
   event: ClipboardEvent,
   view: EditorView,

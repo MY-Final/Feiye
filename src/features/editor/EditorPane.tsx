@@ -6,6 +6,7 @@ import { useEditorStore } from "../../stores/editor";
 import { useOutlineStore } from "../../stores/outline";
 import { requestPreview } from "../preview/preview-controller";
 import { noteDocumentChange } from "./autosave";
+import { noteCursorOffset } from "./cursor-memory";
 import { resolveEditorImage } from "./editor-images";
 import {
   getEditorText,
@@ -66,6 +67,19 @@ export function EditorPane() {
         onStats: scheduleStats,
         onCursor(line, column) {
           useDocumentStore.getState().setCursor(line, column);
+          const view = getEditorView();
+          const range = view?.state.selection.main;
+          if (view) {
+            noteCursorOffset(
+              useDocumentStore.getState().path,
+              range?.head ?? 0,
+            );
+          }
+          const words =
+            view && range && !range.empty
+              ? countTextStats(view.state.sliceDoc(range.from, range.to)).words
+              : 0;
+          useEditorStore.getState().setSelectedWords(words);
         },
         onFormatState(state) {
           useEditorStore.getState().setFormat(state);

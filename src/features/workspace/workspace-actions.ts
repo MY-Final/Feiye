@@ -1,4 +1,4 @@
-import { isWithin, parentRel } from "../../lib/paths";
+import { baseName, isWithin, parentRel } from "../../lib/paths";
 import {
   createFile as apiCreateFile,
   createFolder as apiCreateFolder,
@@ -17,6 +17,7 @@ import { useOutlineStore } from "../../stores/outline";
 import { useUiStore } from "../../stores/ui";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { resetAutoSave } from "../editor/autosave";
+import { captureActiveCursor, restoreCursorFor } from "../editor/cursor-memory";
 import { getEditorText, setEditorDocument } from "../editor/editor-bridge";
 import {
   clearRecoverySnapshot,
@@ -32,6 +33,7 @@ const MARKDOWN_NAME = /\.(md|markdown|mdx)$/i;
 
 function resetDocument(): void {
   resetAutoSave();
+  captureActiveCursor();
   setEditorDocument("");
   useDocumentStore.getState().clearDocument();
   useOutlineStore.getState().clear();
@@ -60,6 +62,7 @@ export async function openWorkspaceAt(path: string): Promise<void> {
     resetDocument();
     await useWorkspaceStore.getState().loadDir("");
     await setSetting("lastWorkspace", info.root);
+    await setSetting("lastDocument", null);
     void promptPendingRecoveries();
   } catch (error) {
     toastError("打开工作区失败", error);
@@ -74,26 +77,59 @@ export async function restoreLastWorkspace(): Promise<void> {
     const info = await apiOpenWorkspace(last);
     useWorkspaceStore.getState().setWorkspace(info);
     await useWorkspaceStore.getState().loadDir("");
+
+    // 恢复上次打开的文档；文件已不存在时静默清除记录，不打扰启动。
+    const lastDocument = await getSetting<string>("lastDocument");
+    if (lastDocument) {
+      // 展开文件所在的所有父目录，让文件树能定位到它。
+      const segments = lastDocument.split("/").slice(0, -1);
+      let dir = "";
+      for (const segment of segments) {
+        dir = dir ? `${dir}/${segment}` : segment;
+        await useWorkspaceStore.getState().expandDir(dir);
+      }
+
+      await openFile(
+        {
+          relPath: lastDocument,
+          name: baseName(lastDocument),
+          isDir: false,
+        },
+        true,
+      );
+    }
+
     await promptPendingRecoveries();
   } catch {
     await setSetting("lastWorkspace", null);
   }
 }
 
-export async function openFile(entry: Entry): Promise<void> {
+export async function openFile(
+  entry: Entry,
+  silent = false,
+): Promise<void> {
   if (entry.isDir) return;
   if (useDocumentStore.getState().path === entry.relPath) return;
   if (!(await guardUnsaved())) return;
 
   try {
     const file = await readFile(entry.relPath);
+    // 离开当前文档前记下光标，打开新文档后再恢复到它上次的位置。
+    captureActiveCursor();
     // 先更新文档路径，图片 widget 需要在构建时解析相对地址。
     useDocumentStore
       .getState()
       .setDocument(entry.relPath, entry.name, file.modifiedMs);
     setEditorDocument(file.content);
     requestPreview(file.content, true);
+    void setSetting("lastDocument", entry.relPath);
+    await restoreCursorFor(entry.relPath);
   } catch (error) {
+    if (silent) {
+      void setSetting("lastDocument", null);
+      return;
+    }
     toastError("打开文件失败", error);
   }
 }
@@ -189,6 +225,7 @@ export async function renameEntry(entry: Entry): Promise<void> {
     if (doc.path === entry.relPath) {
       void clearRecoverySnapshot(entry.relPath);
       doc.renameActive(renamed.relPath, renamed.name);
+      void setSetting("lastDocument", renamed.relPath);
     } else if (entry.isDir && doc.path && isWithin(doc.path, entry.relPath)) {
       // 当前文档所在目录被改名，路径已失效，直接关闭文档。
       void clearRecoverySnapshot(doc.path);
@@ -226,6 +263,7 @@ export async function deleteEntry(entry: Entry): Promise<void> {
     const doc = useDocumentStore.getState();
     if (doc.path && isWithin(doc.path, entry.relPath)) {
       void clearRecoverySnapshot(doc.path);
+      void setSetting("lastDocument", null);
       resetDocument();
     }
   } catch (error) {

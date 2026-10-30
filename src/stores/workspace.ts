@@ -2,11 +2,65 @@ import { create } from "zustand";
 
 import {
   describeError,
+  getSetting,
   listDir,
+  setSetting,
   type Entry,
   type WorkspaceInfo,
 } from "../lib/tauri";
 import { useUiStore } from "./ui";
+
+const EXPANDED_KEY = "expandedDirs";
+
+/** 各工作区上次展开的目录；第一次读取后常驻，避免反复读盘。 */
+let expandedByRoot: Record<string, string[]> | null = null;
+
+async function readExpandedMap(): Promise<Record<string, string[]>> {
+  if (expandedByRoot) return expandedByRoot;
+
+  const raw = await getSetting<unknown>(EXPANDED_KEY);
+  const map: Record<string, string[]> = {};
+  if (raw && typeof raw === "object") {
+    for (const [root, paths] of Object.entries(raw as Record<string, unknown>)) {
+      if (Array.isArray(paths)) {
+        map[root] = paths.filter(
+          (path): path is string => typeof path === "string",
+        );
+      }
+    }
+  }
+  expandedByRoot = map;
+  return map;
+}
+
+function persistExpanded(
+  root: string | null,
+  expanded: Record<string, boolean>,
+): void {
+  if (!root) return;
+  const openPaths = Object.keys(expanded).filter((path) => expanded[path]);
+  void (async () => {
+    const map = await readExpandedMap();
+    expandedByRoot = { ...map, [root]: openPaths };
+    await setSetting(EXPANDED_KEY, expandedByRoot);
+  })();
+}
+
+/** 打开工作区后恢复上次展开的目录；失效目录静默跳过。 */
+async function restoreExpanded(root: string): Promise<void> {
+  const map = await readExpandedMap();
+  if (useWorkspaceStore.getState().root !== root) return;
+
+  const paths = map[root] ?? [];
+  if (paths.length === 0) return;
+
+  const expanded: Record<string, boolean> = {};
+  for (const path of paths) expanded[path] = true;
+  useWorkspaceStore.setState({ expanded });
+  await Promise.all(
+    paths.map((path) => useWorkspaceStore.getState().loadDir(path, true)),
+  );
+}
 
 interface WorkspaceStore {
   root: string | null;
@@ -16,7 +70,7 @@ interface WorkspaceStore {
   loading: Record<string, boolean>;
 
   setWorkspace(info: WorkspaceInfo | null): void;
-  loadDir(relPath: string): Promise<void>;
+  loadDir(relPath: string, silent?: boolean): Promise<void>;
   refreshDir(relPath: string): Promise<void>;
   refreshTree(): Promise<void>;
   toggleDir(relPath: string): Promise<void>;
@@ -42,9 +96,10 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       name: info?.name ?? null,
       ...EMPTY_MAPS,
     });
+    if (info) void restoreExpanded(info.root);
   },
 
-  async loadDir(relPath) {
+  async loadDir(relPath, silent = false) {
     if (get().loading[relPath]) return;
     set((state) => ({ loading: { ...state.loading, [relPath]: true } }));
 
@@ -56,6 +111,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       }));
     } catch (error) {
       set((state) => ({ loading: { ...state.loading, [relPath]: false } }));
+      if (silent) return;
       useUiStore.getState().toast(`读取目录失败：${describeError(error)}`, "error");
     }
   },
@@ -81,19 +137,24 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
   collapseAll() {
     set({ expanded: {} });
+    persistExpanded(get().root, {});
   },
 
   async toggleDir(relPath) {
     const expanded = get().expanded[relPath];
     if (expanded) {
-      set((state) => ({ expanded: { ...state.expanded, [relPath]: false } }));
+      const next = { ...get().expanded, [relPath]: false };
+      set({ expanded: next });
+      persistExpanded(get().root, next);
       return;
     }
     await get().expandDir(relPath);
   },
 
   async expandDir(relPath) {
-    set((state) => ({ expanded: { ...state.expanded, [relPath]: true } }));
+    const next = { ...get().expanded, [relPath]: true };
+    set({ expanded: next });
+    persistExpanded(get().root, next);
     if (!get().children[relPath]) {
       await get().loadDir(relPath);
     }

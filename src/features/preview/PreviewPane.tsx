@@ -3,11 +3,39 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { copyText } from "../../lib/clipboard";
 import { rewritePreviewImages } from "../../lib/images";
+import { baseName, resolveRelLink } from "../../lib/paths";
 import { useDocumentStore } from "../../stores/document";
+import { useOutlineStore } from "../../stores/outline";
 import { useWorkspaceStore } from "../../stores/workspace";
+import { toggleTaskMarkerAt } from "../editor/editor-bridge";
+import { openFile } from "../workspace/workspace-actions";
 import "./preview.css";
 import type { PreviewResult } from "./preview-protocol";
 import { setPreviewListener } from "./preview-controller";
+import { previewHeadingElements, scrollPreviewToHeading } from "./preview-scroll";
+
+/** 标题文本与链接片段归一到同一形式，兼容中文标题和常见 slug 写法。 */
+function normalizeAnchor(value: string): string {
+  let text = value;
+  try {
+    text = decodeURIComponent(value);
+  } catch {
+    // 片段里有非法百分号转义时按原文比较。
+  }
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]/gu, "");
+}
+
+/** 按 `#` 后面的片段在预览标题里定位，找不到返回 -1。 */
+function findHeadingByAnchor(body: HTMLElement, fragment: string): number {
+  const target = normalizeAnchor(fragment);
+  if (!target) return -1;
+  return previewHeadingElements(body).findIndex(
+    (heading) => normalizeAnchor(heading.textContent ?? "") === target,
+  );
+}
 import { attachSplitScrollSync } from "./scroll-sync";
 
 export function PreviewPane() {
@@ -17,6 +45,7 @@ export function PreviewPane() {
   const root = useWorkspaceStore((state) => state.root);
   const docPath = useDocumentStore((state) => state.path);
   const viewMode = useDocumentStore((state) => state.viewMode);
+  const cursorLine = useDocumentStore((state) => state.cursor.line);
 
   // 本地图片走工作区作用域的 feiyeimg 协议；远程图片保持原样。
   const html = useMemo(
@@ -29,13 +58,28 @@ export function PreviewPane() {
     return () => setPreviewListener(null);
   }, []);
 
-  // 外部链接交给系统浏览器；相对链接暂不跳转，避免 WebView 离开应用。
+  // 外部链接交给系统浏览器；笔记间的相对链接在应用内打开。
   useEffect(() => {
     const body = bodyRef.current;
     if (!body) return;
 
     const onClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
+
+      // 预览里的任务复选框：翻转源文档中对应的 [ ] / [x]。
+      if (target instanceof HTMLInputElement && target.type === "checkbox") {
+        const boxes = Array.from(
+          body.querySelectorAll<HTMLInputElement>(
+            "li > input[type='checkbox']",
+          ),
+        );
+        const index = boxes.indexOf(target);
+        if (index < 0) return;
+        event.preventDefault();
+        toggleTaskMarkerAt(index, boxes.length);
+        return;
+      }
+
       const anchor = target?.closest("a");
       if (!anchor) return;
 
@@ -45,8 +89,26 @@ export function PreviewPane() {
         void openUrl(href).catch(() => {
           // 权限或系统调用失败时保持页面不动。
         });
-      } else if (!href.startsWith("#")) {
+        return;
+      }
+
+      if (!href) return;
+
+      // 文档内锚点：预览标题用的是内部 id，这里按标题文字找回目标标题。
+      if (href.startsWith("#")) {
+        const index = findHeadingByAnchor(body, href.slice(1));
+        if (index < 0) return;
         event.preventDefault();
+        scrollPreviewToHeading(index);
+        return;
+      }
+
+      // 指向其他笔记的相对链接：解析成工作区路径后直接打开。
+      event.preventDefault();
+      const current = useDocumentStore.getState().path;
+      const relPath = current ? resolveRelLink(href, current) : null;
+      if (relPath && /\.(md|markdown|mdx)$/i.test(relPath)) {
+        void openFile({ relPath, name: baseName(relPath), isDir: false });
       }
     };
 
@@ -75,7 +137,36 @@ export function PreviewPane() {
         heading.id = `preview-heading-${index}`;
         heading.dataset.headingIndex = String(index);
       });
+
+    // GFM 默认把任务复选框渲染成 disabled，这里放开以便在预览里直接勾选。
+    body
+      .querySelectorAll<HTMLInputElement>(
+        "li > input[type='checkbox']",
+      )
+      .forEach((input) => {
+        input.disabled = false;
+        input.setAttribute("aria-label", "切换任务完成状态");
+      });
   }, [html]);
+
+  // 切到预览时停止在光标所在标题，而不是回到文档开头。
+  useEffect(() => {
+    if (viewMode !== "preview") return;
+    const headings = useOutlineStore.getState().headings;
+    if (headings.length === 0) return;
+
+    let index = 0;
+    for (let i = 0; i < headings.length; i += 1) {
+      if (headings[i].line <= cursorLine) index = i;
+      else break;
+    }
+
+    // 等一帧，让预览从 display:none 恢复布局后再量标题位置。
+    const frame = requestAnimationFrame(() => {
+      scrollPreviewToHeading(index);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [viewMode, docPath, cursorLine]);
 
   // 分栏模式：按标题锚点同步编辑区与预览区滚动。
   useEffect(() => {

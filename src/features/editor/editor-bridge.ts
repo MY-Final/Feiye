@@ -1,3 +1,4 @@
+import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
 import { EditorView } from "@codemirror/view";
 
 import {
@@ -157,4 +158,43 @@ export function focusEditor(): void {
 
 export function refreshEditorLayout(): void {
   view?.requestMeasure();
+}
+
+/**
+ * 预览里点击第 index 个任务复选框：翻转文档中对应的 [ ] / [x]。
+ * 预览节点与语法树节点数量不一致时放弃，避免勾错行。
+ */
+export function toggleTaskMarkerAt(
+  index: number,
+  expectedTotal: number,
+): boolean {
+  if (!view) return false;
+  const state = view.state;
+  const tree =
+    ensureSyntaxTree(state, state.doc.length, 1000) ?? syntaxTree(state);
+  const markers: { from: number; to: number }[] = [];
+  tree.iterate({
+    enter(node) {
+      if (node.name === "TaskMarker") {
+        markers.push({ from: node.from, to: node.to });
+      }
+    },
+  });
+
+  if (markers.length !== expectedTotal) return false;
+  const target = markers[index];
+  if (!target) return false;
+
+  const marker = state.doc.sliceString(target.from, target.to);
+  if (!/^\[[ xX]\]$/.test(marker)) return false;
+
+  view.dispatch({
+    changes: {
+      from: target.from,
+      to: target.to,
+      insert: /^\[[xX]\]$/.test(marker) ? "[ ]" : "[x]",
+    },
+    userEvent: "input.format",
+  });
+  return true;
 }
