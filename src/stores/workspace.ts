@@ -110,6 +110,8 @@ interface WorkspaceStore {
   children: Record<string, Entry[]>;
   expanded: Record<string, boolean>;
   loading: Record<string, boolean>;
+  /** 读取失败的目录：树里给出重试入口，而不是留一块空白。 */
+  failed: Record<string, boolean>;
   /** 当前工作区最近打开的文档，最新的在前。 */
   recent: string[];
 
@@ -134,6 +136,7 @@ const EMPTY_MAPS = {
   children: {} as Record<string, Entry[]>,
   expanded: {} as Record<string, boolean>,
   loading: {} as Record<string, boolean>,
+  failed: {} as Record<string, boolean>,
 };
 
 export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
@@ -201,9 +204,13 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       set((state) => ({
         children: { ...state.children, [relPath]: entries },
         loading: { ...state.loading, [relPath]: false },
+        failed: { ...state.failed, [relPath]: false },
       }));
     } catch (error) {
-      set((state) => ({ loading: { ...state.loading, [relPath]: false } }));
+      set((state) => ({
+        loading: { ...state.loading, [relPath]: false },
+        failed: { ...state.failed, [relPath]: true },
+      }));
       if (silent) return;
       useUiStore.getState().toast(`读取目录失败：${describeError(error)}`, "error");
     }

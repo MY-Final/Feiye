@@ -200,6 +200,10 @@ function TreeNode({ entry, depth, onMenuAt }: TreeNodeProps) {
     Boolean(state.loading[entry.relPath]),
   );
   const active = useDocumentStore((state) => state.path === entry.relPath);
+  const failed = useWorkspaceStore((state) =>
+    Boolean(state.failed[entry.relPath]),
+  );
+  const loadDir = useWorkspaceStore((state) => state.loadDir);
   const hideExt = useSettingsStore(
     (state) => state.preferences.hideFileExtensions,
   );
@@ -323,6 +327,19 @@ function TreeNode({ entry, depth, onMenuAt }: TreeNodeProps) {
           {children && children.length === 0 ? (
             <div className="tree-hint" style={{ paddingLeft: indent + 36 }}>
               空
+            </div>
+          ) : null}
+          {failed && !children && !loading ? (
+            // 读取失败时别留空白，给一个就地重试的入口。
+            <div className="tree-hint" style={{ paddingLeft: indent + 36 }}>
+              读取失败，
+              <button
+                type="button"
+                className="tree-hint-action"
+                onClick={() => void loadDir(entry.relPath)}
+              >
+                重试
+              </button>
             </div>
           ) : null}
         </div>
