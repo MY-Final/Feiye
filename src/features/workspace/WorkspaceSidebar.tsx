@@ -4,7 +4,6 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
-  type MouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
@@ -181,10 +180,10 @@ function CollapseIcon() {
 interface TreeNodeProps {
   entry: Entry;
   depth: number;
-  onMenu(event: MouseEvent, entry: Entry): void;
+  onMenuAt(x: number, y: number, entry: Entry): void;
 }
 
-function TreeNode({ entry, depth, onMenu }: TreeNodeProps) {
+function TreeNode({ entry, depth, onMenuAt }: TreeNodeProps) {
   const expanded = useWorkspaceStore((state) =>
     Boolean(state.expanded[entry.relPath]),
   );
@@ -220,7 +219,10 @@ function TreeNode({ entry, depth, onMenu }: TreeNodeProps) {
             void openFile(entry);
           }
         }}
-        onContextMenu={(event) => onMenu(event, entry)}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          onMenuAt(event.clientX, event.clientY, entry);
+        }}
         // 和文件管理器一致：F2 / Delete 针对的是获得焦点这一行，
         // 而不是编辑器里打开的那篇；删除仍走确认框。
         onKeyDown={(event) => {
@@ -232,6 +234,15 @@ function TreeNode({ entry, depth, onMenu }: TreeNodeProps) {
             event.preventDefault();
             event.stopPropagation();
             void deleteEntry(entry);
+          } else if (
+            event.key === "ContextMenu" ||
+            (event.shiftKey && event.key === "F10")
+          ) {
+            // 键盘也能叫出右键菜单，打开后可以直接用方向键选。
+            event.preventDefault();
+            event.stopPropagation();
+            const rect = event.currentTarget.getBoundingClientRect();
+            onMenuAt(rect.left + 16, rect.bottom - 4, entry);
           }
         }}
       >
@@ -259,7 +270,7 @@ function TreeNode({ entry, depth, onMenu }: TreeNodeProps) {
               key={child.relPath}
               entry={child}
               depth={depth + 1}
-              onMenu={onMenu}
+              onMenuAt={onMenuAt}
             />
           ))}
           {children && children.length === 0 ? (
@@ -362,9 +373,8 @@ export function WorkspaceSidebar() {
     commitWidth(next);
   };
 
-  const openMenu = (event: MouseEvent, entry: Entry | null) => {
-    event.preventDefault();
-    setMenu({ x: event.clientX, y: event.clientY, entry });
+  const openMenuAt = (x: number, y: number, entry: Entry | null) => {
+    setMenu({ x, y, entry });
   };
 
   // 文件树按文件管理器的习惯支持方向键：上下移动、左右折叠展开、
@@ -559,7 +569,10 @@ export function WorkspaceSidebar() {
           onContextMenu={(event) => {
             // 只在空白区域弹出根目录菜单，行上的右键由 TreeNode 处理。
             const target = event.target as HTMLElement;
-            if (!target.closest(".tree-row")) openMenu(event, null);
+            if (!target.closest(".tree-row")) {
+              event.preventDefault();
+              openMenuAt(event.clientX, event.clientY, null);
+            }
           }}
           onMouseDown={(event) => {
             // 点击空白区域关闭右键菜单。
@@ -567,7 +580,12 @@ export function WorkspaceSidebar() {
           }}
         >
           {children?.map((entry) => (
-            <TreeNode key={entry.relPath} entry={entry} depth={0} onMenu={openMenu} />
+            <TreeNode
+              key={entry.relPath}
+              entry={entry}
+              depth={0}
+              onMenuAt={openMenuAt}
+            />
           ))}
 
           {!children && rootLoading ? (
