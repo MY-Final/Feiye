@@ -166,11 +166,15 @@ export function saveImageAsset(
   });
 }
 
-export async function pickWorkspaceFolder(): Promise<string | null> {
+export async function pickWorkspaceFolder(
+  defaultPath?: string,
+): Promise<string | null> {
   const selected = await open({
     directory: true,
     multiple: false,
     title: "选择工作区文件夹",
+    // 从当前库的位置开始找，换库时不用再从头翻目录。
+    defaultPath,
   });
   return typeof selected === "string" ? selected : null;
 }

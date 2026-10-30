@@ -121,7 +121,9 @@ function toastError(prefix: string, error: unknown): void {
 
 export async function chooseWorkspace(): Promise<void> {
   try {
-    const path = await pickWorkspaceFolder();
+    const path = await pickWorkspaceFolder(
+      useWorkspaceStore.getState().root ?? undefined,
+    );
     if (path) await openWorkspaceAt(path);
   } catch (error) {
     toastError("选择文件夹失败", error);
