@@ -243,7 +243,21 @@ function TreeNode({ entry, depth, onMenuAt }: TreeNodeProps) {
           if (event.key === "F2") {
             event.preventDefault();
             event.stopPropagation();
-            void renameEntry(entry);
+            // 改名后这一行会被重建，按位置把焦点找回来，方便接着改下一篇。
+            const row = event.currentTarget;
+            const tree = row.closest(".tree");
+            const before = tree
+              ? Array.from(tree.querySelectorAll<HTMLElement>(".tree-row"))
+              : [];
+            const index = before.indexOf(row);
+            void renameEntry(entry).then(() => {
+              if (!tree?.isConnected) return;
+              const rows = Array.from(
+                tree.querySelectorAll<HTMLElement>(".tree-row"),
+              );
+              if (rows.length === 0) return;
+              rows[Math.min(Math.max(index, 0), rows.length - 1)]?.focus();
+            });
           } else if (event.key === "Delete") {
             event.preventDefault();
             event.stopPropagation();
