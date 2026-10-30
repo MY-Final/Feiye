@@ -9,11 +9,13 @@ import {
 } from "react";
 
 import { ContextMenu, type MenuAction } from "../../components/Menu";
+import { copyText } from "../../lib/clipboard";
 import { OutlinePanel } from "../outline/OutlinePanel";
 import { parentRel } from "../../lib/paths";
 import { getSetting, setSetting, type Entry } from "../../lib/tauri";
 import { useDocumentStore } from "../../stores/document";
 import { useOutlineStore } from "../../stores/outline";
+import { useUiStore } from "../../stores/ui";
 import { useWorkspaceStore } from "../../stores/workspace";
 import {
   copyEntryLink,
@@ -64,6 +66,24 @@ function buildMenuActions(entry: Entry | null): MenuAction[] {
       label: "复制链接",
       onSelect: () => {
         void copyEntryLink(entry);
+      },
+    });
+  }
+
+  if (entry) {
+    actions.push({
+      // 贴到终端、别的应用里用的是完整路径，按工作区根拼出来。
+      label: "复制路径",
+      onSelect: () => {
+        const root = useWorkspaceStore.getState().root;
+        if (!root) return;
+        const sep = root.includes("\\") ? "\\" : "/";
+        const full = `${root}${sep}${entry.relPath.split("/").join(sep)}`;
+        void copyText(full).then((copied) => {
+          useUiStore
+            .getState()
+            .toast(copied ? "已复制路径" : "复制到剪贴板失败", copied ? "info" : "error");
+        });
       },
     });
   }
