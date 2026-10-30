@@ -286,7 +286,26 @@ export function SettingsDialog() {
         </header>
 
         <div className="settings-body">
-          <nav className="settings-nav" role="tablist" aria-label="设置分类">
+          <nav
+            className="settings-nav"
+            role="tablist"
+            aria-label="设置分类"
+            onKeyDown={(event) => {
+              if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+              const tabs = Array.from(
+                event.currentTarget.querySelectorAll<HTMLElement>(
+                  "[role='tab']",
+                ),
+              );
+              const index = tabs.indexOf(document.activeElement as HTMLElement);
+              if (index < 0) return;
+              event.preventDefault();
+              const delta = event.key === "ArrowRight" ? 1 : -1;
+              const target = tabs[(index + delta + tabs.length) % tabs.length];
+              target?.focus();
+              target?.click();
+            }}
+          >
             {CATEGORIES.map((item) => (
               <button
                 key={item.id}

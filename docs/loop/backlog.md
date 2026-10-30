@@ -19,6 +19,24 @@
 
 <!-- 从这里开始追加 -->
 
+## 第 102 轮 · 2026-10-30 14:12
+**用户需求**：侧栏的「文件 / 大纲」和设置里的几个分类都是标签页样式，但按左右方向键没反应，只能再按 Tab 逐个跳。期望标签页之间能用方向键切换。
+
+**产品经理**：做。这两处都声明了 `role="tablist"`，方向键切换是标签页的基本无障碍约定；补上之后外观与鼠标行为都不变。
+
+**前端**：影响 `src/features/workspace/WorkspaceSidebar.tsx` 与 `src/features/settings/SettingsDialog.tsx`（在 tablist 上处理左右方向键，焦点跟随到目标标签并选中）。风险：焦点不在标签上时不拦截按键。工作量 S。
+
+**后端**：无改动。工作量 0。
+
+**裁决**：做
+
+**改动**：`src/features/workspace/WorkspaceSidebar.tsx`、`src/features/settings/SettingsDialog.tsx`
+
+**构建**：通过（bun run build，576ms）
+
+---
+
+
 ## 第 101 轮 · 2026-10-30 14:09
 **用户需求**：大图打开后用 Tab 在翻页按钮之间切换，按两下焦点就跑到背后的编辑区去了，浮层还在最前面，键盘却已经不在它上面。期望 Tab 只在这个浮层里循环。
 

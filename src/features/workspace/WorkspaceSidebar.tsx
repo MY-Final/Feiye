@@ -492,7 +492,25 @@ export function WorkspaceSidebar() {
         onDoubleClick={() => commitWidth(SIDEBAR_WIDTH.default)}
       />
       <div className="sidebar-header">
-        <div className="sidebar-tabs" role="tablist" aria-label="侧栏内容">
+        <div
+          className="sidebar-tabs"
+          role="tablist"
+          aria-label="侧栏内容"
+          onKeyDown={(event) => {
+            // 标签之间用左右方向键切换，和设置面板的习惯一致。
+            if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+            const tabs = Array.from(
+              event.currentTarget.querySelectorAll<HTMLElement>("[role='tab']"),
+            );
+            const index = tabs.indexOf(document.activeElement as HTMLElement);
+            if (index < 0) return;
+            event.preventDefault();
+            const delta = event.key === "ArrowRight" ? 1 : -1;
+            const target = tabs[(index + delta + tabs.length) % tabs.length];
+            target?.focus();
+            target?.click();
+          }}
+        >
           <button
             type="button"
             role="tab"
