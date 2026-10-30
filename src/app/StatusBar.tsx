@@ -1,4 +1,7 @@
+import { useEffect, useState } from "react";
+
 import { copyText } from "../lib/clipboard";
+import { countTextStats } from "../lib/text-stats";
 import { saveActiveDocument } from "../features/editor/save";
 import { chooseWorkspace } from "../features/workspace/workspace-actions";
 import { useDocumentStore } from "../stores/document";
@@ -31,6 +34,7 @@ export function StatusBar() {
   const hasWorkspace = useWorkspaceStore((state) => Boolean(state.root));
   const root = useWorkspaceStore((state) => state.root);
   const docPath = useDocumentStore((state) => state.path);
+  const viewMode = useDocumentStore((state) => state.viewMode);
   const dirty = useDocumentStore((state) => state.dirty);
   const saving = useDocumentStore((state) => state.saving);
   const saveBlocked = useDocumentStore((state) => state.saveBlocked);
@@ -42,6 +46,44 @@ export function StatusBar() {
   const autoSaveOff = useSettingsStore(
     (state) => state.preferences.autoSaveDelay <= 0,
   );
+
+  // 预览里也能选中正文，和编辑区一样在状态栏报出选中字数。
+  // 纯预览时编辑器可能还留着切走前的选区，此时以预览里的选择为准。
+  const [previewSelectedWords, setPreviewSelectedWords] = useState(0);
+  useEffect(() => {
+    const sync = () => {
+      const mode = useDocumentStore.getState().viewMode;
+      if (mode !== "preview" && mode !== "split") {
+        setPreviewSelectedWords((prev) => (prev === 0 ? prev : 0));
+        return;
+      }
+      const body = document.querySelector<HTMLElement>(
+        ".preview-pane .markdown-body",
+      );
+      const selection = window.getSelection();
+      let words = 0;
+      if (
+        body &&
+        selection &&
+        selection.rangeCount > 0 &&
+        !selection.isCollapsed &&
+        body.contains(selection.getRangeAt(0).commonAncestorContainer)
+      ) {
+        words = countTextStats(selection.toString()).words;
+      }
+      setPreviewSelectedWords((prev) => (prev === words ? prev : words));
+    };
+    document.addEventListener("selectionchange", sync);
+    sync();
+    return () => document.removeEventListener("selectionchange", sync);
+  }, [viewMode, docPath]);
+
+  const shownSelectedWords =
+    viewMode === "preview"
+      ? previewSelectedWords
+      : selectedWords > 0
+        ? selectedWords
+        : previewSelectedWords;
 
   const savedAt =
     savedModifiedMs !== null ? formatSavedAt(savedModifiedMs) : "";
@@ -117,9 +159,9 @@ export function StatusBar() {
             <span>
               {cursor.line}:{cursor.column}
             </span>
-            {selectedWords > 0 ? (
+            {shownSelectedWords > 0 ? (
               <span className="status-stat" title="当前选区的字数（不含空白）">
-                选中 {selectedWords.toLocaleString("zh-CN")} 字
+                选中 {shownSelectedWords.toLocaleString("zh-CN")} 字
               </span>
             ) : null}
             <span
