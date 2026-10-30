@@ -291,6 +291,22 @@ export async function openFile(
   }
 }
 
+/** 「上一篇」的目标：最近打开里除当前文档外的第一篇。 */
+export function previousDocumentPath(): string | null {
+  const current = useDocumentStore.getState().path;
+  if (!current) return null;
+  return (
+    useWorkspaceStore.getState().recent.find((path) => path !== current) ?? null
+  );
+}
+
+/** 回到上一篇打开的笔记：沿着链接读下去之后，不用再去文件树里找回来的路。 */
+export async function openPreviousDocument(): Promise<void> {
+  const relPath = previousDocumentPath();
+  if (!relPath) return;
+  await openFile({ relPath, name: baseName(relPath), isDir: false });
+}
+
 export async function createMarkdownFile(parent: string): Promise<void> {
   const name = await useUiStore.getState().askInput({
     // 从文件树右键新建时，标题里带上目标目录，避免建到别的文件夹里。

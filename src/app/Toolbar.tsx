@@ -18,6 +18,7 @@ import { saveActiveDocument } from "../features/editor/save";
 import {
   changeViewMode,
   newDocumentNearActive,
+  openPreviousDocument,
   renameActiveDocument,
   saveDocumentAs,
 } from "../features/workspace/workspace-actions";
@@ -109,6 +110,9 @@ export function Toolbar() {
   const docPath = useDocumentStore((state) => state.path);
   const viewMode = useDocumentStore((state) => state.viewMode);
   const format = useEditorStore((state) => state.format);
+  const previousPath = useWorkspaceStore((state) =>
+    docPath ? (state.recent.find((path) => path !== docPath) ?? null) : null,
+  );
   const imageInput = useRef<HTMLInputElement>(null);
 
   const hasDoc = Boolean(docPath);
@@ -133,6 +137,20 @@ export function Toolbar() {
         }}
       />
       <div className="toolbar-group file-actions">
+        <button
+          type="button"
+          className="toolbar-text-btn"
+          title={
+            previousPath
+              ? `返回上一篇笔记：${previousPath}`
+              : "返回上一篇笔记（最近打开里还没有其他笔记）"
+          }
+          disabled={!previousPath}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => void openPreviousDocument()}
+        >
+          返回
+        </button>
         <button
           type="button"
           className="toolbar-text-btn"
