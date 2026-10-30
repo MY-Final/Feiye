@@ -361,6 +361,7 @@ export function Toolbar() {
           {/* 快捷键之外也给一个看得见的入口，不然只有翻快捷键表才知道。 */}
           <ToolButton
             title="专注模式 (Ctrl + Shift + F)"
+            disabled={!hasDoc}
             onClick={() => useUiStore.getState().toggleZenMode()}
           >
             <FocusIcon />

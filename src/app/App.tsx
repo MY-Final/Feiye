@@ -186,7 +186,8 @@ export default function App() {
         case "f":
           // 带 Shift 是专注模式：写作时眼前只剩正文，不再先去找查找框。
           if (event.shiftKey) {
-            if (!useWorkspaceStore.getState().root) break;
+            // 专注是"专心写这一篇"，没有打开笔记时没有意义。
+            if (!useDocumentStore.getState().path) break;
             event.preventDefault();
             useUiStore.getState().toggleZenMode();
             break;
@@ -351,6 +352,13 @@ export default function App() {
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
+
+  // 专注模式里把当前笔记删掉 / 关掉后没有正文可看，自动退出并提示。
+  useEffect(() => {
+    if (zenMode && !docPath) {
+      useUiStore.getState().toggleZenMode();
+    }
+  }, [zenMode, docPath]);
 
   // 从工具栏按钮进入专注模式时焦点还在那个按钮上，按钮随后被收起，
   // 焦点掉到页面本身，敲键盘没反应；这里把焦点交回正文。
