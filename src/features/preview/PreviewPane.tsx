@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
+import { trapTab } from "../../components/Dialog";
 import { copyText } from "../../lib/clipboard";
 import {
   resolveMarkdownImageSrc,
@@ -447,6 +448,7 @@ export function PreviewPane() {
           aria-modal="true"
           aria-label={lightboxImage.alt || "图片预览"}
           tabIndex={-1}
+          onKeyDown={trapTab}
           onClick={() => setLightbox(null)}
         >
           <img
