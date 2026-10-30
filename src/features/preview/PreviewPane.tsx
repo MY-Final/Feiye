@@ -271,7 +271,19 @@ export function PreviewPane() {
       // 自己加过的提示在切换文档后要按新路径重算，用户写的则不动。
       if (anchor.title && anchor.dataset.linkHint !== "1") return;
       const href = anchor.getAttribute("href") ?? "";
-      if (!href || href.startsWith("#")) return;
+      if (!href) return;
+      // 文档内锚点也告诉用户会跳到哪一节，别让人猜。
+      if (href.startsWith("#")) {
+        let fragment = href.slice(1);
+        try {
+          fragment = decodeURIComponent(fragment);
+        } catch {
+          // 片段里有非法转义时按原文提示。
+        }
+        if (fragment) anchor.title = `跳转到「${fragment}」`;
+        anchor.dataset.linkHint = "1";
+        return;
+      }
       anchor.title = isExternalHref(href)
         ? href
         : (docPath && resolveRelLink(href, docPath)) || href;
