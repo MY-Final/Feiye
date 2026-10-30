@@ -149,6 +149,22 @@ export function SettingsDialog() {
     closeSettings();
   };
 
+  // 一次性覆盖所有偏好，先确认，避免在面板底部误点后无从恢复。
+  const restoreDefaults = async () => {
+    const choice = await useUiStore.getState().ask({
+      title: "恢复默认设置",
+      message:
+        "主题、字体、字号、行高、保存间隔与默认视图都会改回默认值，当前设置会被覆盖。",
+      buttons: [
+        { label: "恢复默认", value: "reset", tone: "danger" },
+        { label: "取消", value: "cancel" },
+      ],
+    });
+    if (choice !== "reset") return;
+    reset();
+    useUiStore.getState().toast("已恢复默认设置");
+  };
+
   const changeDefaultView = (value: DefaultView) => {
     update({ defaultView: value });
     if (value !== "last") {
@@ -385,7 +401,11 @@ export function SettingsDialog() {
         </div>
 
         <footer className="settings-footer">
-          <button type="button" className="btn ghost" onClick={() => reset()}>
+          <button
+            type="button"
+            className="btn ghost"
+            onClick={() => void restoreDefaults()}
+          >
             恢复默认设置
           </button>
           <button type="button" className="btn primary" onClick={close}>
