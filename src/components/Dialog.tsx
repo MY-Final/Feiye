@@ -199,17 +199,31 @@ function PromptDialog({ request }: { request: PromptRequest }) {
 export function DialogHost() {
   const confirm = useUiStore((state) => state.confirm);
   const prompt = useUiStore((state) => state.prompt);
-  const open = Boolean(confirm || prompt);
+  const request = confirm ?? prompt;
   const wasOpen = useRef(false);
+  const restoreRef = useRef<HTMLElement | null>(null);
 
-  // 对话框关掉后把焦点还给正文：接着敲键盘不用先用鼠标点一下。
+  // 关掉对话框后把焦点还回打开前的位置：从文件树按 F2 取消，焦点就留在那一行，
+  // 键盘操作不会跳到正文里；原来的元素已经没了（比如刚删掉那行）才回到正文。
   useEffect(() => {
+    if (request) {
+      restoreRef.current = request.restoreFocus ?? null;
+      wasOpen.current = true;
+      return;
+    }
+    if (!wasOpen.current) return;
+    wasOpen.current = false;
+    const previous = restoreRef.current;
+    restoreRef.current = null;
+    if (previous?.isConnected) {
+      previous.focus();
+      return;
+    }
     // 设置面板还开着时不抢焦点，否则焦点会跑到遮罩后面的正文里。
-    if (wasOpen.current && !open && !useUiStore.getState().settingsOpen) {
+    if (!useUiStore.getState().settingsOpen) {
       document.querySelector<HTMLElement>(".cm-content")?.focus();
     }
-    wasOpen.current = open;
-  }, [open]);
+  }, [request]);
 
   if (confirm) return <ConfirmDialog request={confirm} />;
   if (prompt) return <PromptDialog key={prompt.title} request={prompt} />;

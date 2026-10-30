@@ -21,6 +21,8 @@ export interface ConfirmRequest {
   message?: string;
   buttons: ConfirmButton[];
   resolve: (value: string) => void;
+  /** 打开对话框前焦点在哪：关掉后还回去，文件树里的键盘操作不会断档。 */
+  restoreFocus?: HTMLElement | null;
 }
 
 export interface PromptRequest {
@@ -32,6 +34,7 @@ export interface PromptRequest {
   selectBaseName?: boolean;
   validate?: (value: string) => string | null;
   resolve: (value: string | null) => void;
+  restoreFocus?: HTMLElement | null;
 }
 
 interface UiStore {
@@ -151,7 +154,14 @@ export const useUiStore = create<UiStore>((set, get) => ({
 
   ask(options) {
     return new Promise<string>((resolve) => {
-      set({ confirm: { ...options, resolve } });
+      const active = document.activeElement;
+      set({
+        confirm: {
+          ...options,
+          resolve,
+          restoreFocus: active instanceof HTMLElement ? active : null,
+        },
+      });
     });
   },
 
@@ -164,7 +174,14 @@ export const useUiStore = create<UiStore>((set, get) => ({
 
   askInput(options) {
     return new Promise<string | null>((resolve) => {
-      set({ prompt: { ...options, resolve } });
+      const active = document.activeElement;
+      set({
+        prompt: {
+          ...options,
+          resolve,
+          restoreFocus: active instanceof HTMLElement ? active : null,
+        },
+      });
     });
   },
 
