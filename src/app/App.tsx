@@ -72,6 +72,7 @@ export default function App() {
   const dirty = useDocumentStore((state) => state.dirty);
   const viewMode = useDocumentStore((state) => state.viewMode);
   const sidebarVisible = useUiStore((state) => state.sidebarVisible);
+  const zenMode = useUiStore((state) => state.zenMode);
   const preferences = useSettingsStore((state) => state.preferences);
   const [splitRatio, setSplitRatio] = useState(DEFAULT_SPLIT_RATIO);
 
@@ -177,6 +178,13 @@ export default function App() {
 
       switch (event.key.toLowerCase()) {
         case "f":
+          // 带 Shift 是专注模式：写作时眼前只剩正文，不再先去找查找框。
+          if (event.shiftKey) {
+            if (!useWorkspaceStore.getState().root) break;
+            event.preventDefault();
+            useUiStore.getState().toggleZenMode();
+            break;
+          }
           // 预览模式下编辑器被 CSS 隐藏，CodeMirror 的查找面板收不到焦点，
           // Ctrl+F 会毫无反应；先切到分栏，再打开查找面板。
           if (!useDocumentStore.getState().path) break;
@@ -353,10 +361,11 @@ export default function App() {
   return (
     <div className="app">
       <TitleBar />
-      <Toolbar />
+      {/* 专注模式把工具栏和侧栏都收起来，退出后按原来的偏好还原。 */}
+      {zenMode ? null : <Toolbar />}
 
       <div className="app-body">
-        {hasWorkspace && sidebarVisible ? <WorkspaceSidebar /> : null}
+        {hasWorkspace && sidebarVisible && !zenMode ? <WorkspaceSidebar /> : null}
 
         <main
           className={`workspace-main mode-${viewMode}${preferences.lineNumbers ? "" : " hide-line-numbers"}`}

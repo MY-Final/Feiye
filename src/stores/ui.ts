@@ -36,12 +36,15 @@ export interface PromptRequest {
 
 interface UiStore {
   sidebarVisible: boolean;
+  /** 专注模式：临时收起侧栏和工具栏，只为写作让路，不写入偏好。 */
+  zenMode: boolean;
   settingsOpen: boolean;
   toasts: ToastItem[];
   confirm: ConfirmRequest | null;
   prompt: PromptRequest | null;
   toggleSidebar(): void;
   setSidebarVisible(visible: boolean): void;
+  toggleZenMode(): void;
   openSettings(): void;
   closeSettings(): void;
   toggleSettings(): void;
@@ -83,6 +86,7 @@ export function resumeToast(id: number, kind: ToastKind): void {
 
 export const useUiStore = create<UiStore>((set, get) => ({
   sidebarVisible: true,
+  zenMode: false,
   settingsOpen: false,
   toasts: [],
   confirm: null,
@@ -98,6 +102,16 @@ export const useUiStore = create<UiStore>((set, get) => ({
   setSidebarVisible(visible) {
     set({ sidebarVisible: visible });
     void setSetting("sidebarVisible", visible);
+  },
+
+  toggleZenMode() {
+    const zenMode = !get().zenMode;
+    set({ zenMode });
+    // 只是这一次的阅读 / 写作状态，不落盘：下次启动还是常规布局。
+    // 进入时顺带说一句怎么退出来，免得找不到工具栏。
+    get().toast(
+      zenMode ? "专注模式：Ctrl + Shift + F 退出" : "已退出专注模式",
+    );
   },
 
   openSettings() {
