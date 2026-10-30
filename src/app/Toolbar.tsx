@@ -244,23 +244,37 @@ export async function exportActiveAsHtml(): Promise<void> {
   if (!name) return;
 
   const leaf = ensureHtmlName(name.trim());
-  const rel = parent ? `${parent}/${leaf}` : leaf;
-  try {
-    const rendered = await renderMarkdownToHtml(text);
-    const { html } = await inlineLocalImages(rendered, root, docPath);
-    await invoke("export_html", { relPath: rel, content: html });
-    exportedHtml.add(`${parent}\u0000${leaf.toLowerCase()}`);
-    ui.toast(`已导出 HTML：${rel}`);
+  const rendered = await renderMarkdownToHtml(text);
+  const { html } = await inlineLocalImages(rendered, root, docPath);
+  const write = async (candidate: string) => {
+    const candidateRel = parent ? `${parent}/${candidate}` : candidate;
+    await invoke("export_html", { relPath: candidateRel, content: html });
+    exportedHtml.add(`${parent}\u0000${candidate.toLowerCase()}`);
+    ui.toast(`已导出 HTML：${candidateRel}`);
     void useWorkspaceStore.getState().refreshDir(parent);
+  };
+  const stem = leaf.replace(/\.html$/i, "");
+  try {
+    await write(nextFreeHtmlName(parent, leaf));
   } catch (error) {
-    if (isAppError(error) && error.code === "already-exists") {
-      const suggestion = nextFreeHtmlName(parent, leaf);
-      const hint =
-        suggestion === leaf ? "换个文件名再试" : `可改用「${suggestion}」`;
-      ui.toast(`「${leaf}」已存在，未覆盖；${hint}`, "error");
-    } else {
+    if (!(isAppError(error) && error.code === "already-exists")) {
       ui.toast(`导出 HTML 失败：${describeError(error)}`, "error");
+      return;
     }
+    // 同目录可能有别的会话 / 外部放入的 `.html`，会话记录看不到；
+    // 顺着 `名字-2.html`、`名字-3.html`… 试到第一个空闲名，始终不覆盖。
+    for (let n = 2; n <= 50; n += 1) {
+      try {
+        await write(`${stem}-${n}.html`);
+        return;
+      } catch (err) {
+        if (!(isAppError(err) && err.code === "already-exists")) {
+          ui.toast(`导出 HTML 失败：${describeError(err)}`, "error");
+          return;
+        }
+      }
+    }
+    ui.toast(`「${leaf}」及其后 50 个序号都被占用，换个文件名再试`, "error");
   }
 }
 
