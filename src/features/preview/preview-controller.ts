@@ -6,10 +6,14 @@ const LARGE_DOC_CHARS = 120_000;
 const LARGE_DOC_DEBOUNCE_MS = 600;
 const MAX_PREVIEW_BYTES = 1_000_000;
 
+/** 待渲染的 Markdown：打字时先存一个取文本的函数，去抖后再真正取出全文。 */
+type PreviewSource = string | (() => string);
+
 let worker: Worker | null = null;
 let latestId = 0;
 let timer: number | null = null;
-let pending: string | null = null;
+let pending: PreviewSource | null = null;
+let pendingLength = 0;
 let listener: ((result: PreviewResult) => void) | null = null;
 let lastResult: PreviewResult = { html: "" };
 
@@ -74,8 +78,22 @@ function flush(): void {
   timer = null;
   if (pending === null) return;
 
-  const markdown = pending;
+  const source = pending;
+  const length = pendingLength;
+  pendingLength = 0;
   pending = null;
+
+  // 超过上限的文档不解析；先看长度，连整篇文本都不用取出来。
+  if (length > MAX_PREVIEW_BYTES) {
+    lastResult = {
+      html: "",
+      error: "文档超过 1 MB，实时预览已暂停。",
+    };
+    listener?.(lastResult);
+    return;
+  }
+
+  const markdown = typeof source === "string" ? source : source();
 
   if (markdown.length > MAX_PREVIEW_BYTES) {
     lastResult = {
@@ -94,14 +112,23 @@ function flush(): void {
   current.postMessage(request);
 }
 
-export function requestPreview(markdown: string, immediate = false): void {
-  pending = markdown;
+/**
+ * 请求刷新预览。`source` 可以是文本，也可以是「到去抖结束再取文本」的函数：
+ * 长文档每敲一个字就 `doc.toString()` 复制整篇，改用函数后一次输入只取一次。
+ * 传函数时请同时给出 `length`，用于判断是否走大文档的较长去抖。
+ */
+export function requestPreview(
+  source: PreviewSource,
+  immediate = false,
+  length = typeof source === "string" ? source.length : 0,
+): void {
+  pending = source;
+  pendingLength = length;
   if (timer !== null) window.clearTimeout(timer);
   if (immediate) {
     flush();
   } else {
-    const delay =
-      markdown.length > LARGE_DOC_CHARS ? LARGE_DOC_DEBOUNCE_MS : DEBOUNCE_MS;
+    const delay = length > LARGE_DOC_CHARS ? LARGE_DOC_DEBOUNCE_MS : DEBOUNCE_MS;
     timer = window.setTimeout(flush, delay);
   }
 }
@@ -119,6 +146,7 @@ export function clearPreview(): void {
     timer = null;
   }
   pending = null;
+  pendingLength = 0;
   latestId += 1;
   lastResult = { html: "" };
   listener?.(lastResult);

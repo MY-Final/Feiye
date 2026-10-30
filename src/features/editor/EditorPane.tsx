@@ -149,11 +149,16 @@ export function EditorPane() {
         onChange() {
           useDocumentStore.getState().markDirty(true);
           noteDocumentChange();
-          if (useDocumentStore.getState().viewMode === "wysiwyg") return;
+          // 所见模式与纯源码模式下预览都不可见，切回去时 changeViewMode
+          // 会立即补一次预览，输入途中没必要跟着刷新。
+          const mode = useDocumentStore.getState().viewMode;
+          if (mode === "wysiwyg" || mode === "source") return;
 
-          const text = getEditorText();
-          if (text !== null && useDocumentStore.getState().path) {
-            requestPreview(text);
+          const view = getEditorView();
+          if (view && useDocumentStore.getState().path) {
+            // 去抖结束再取全文：长文档输入时不必每一击键都复制整篇文档。
+            const length = view.state.doc.length;
+            requestPreview(() => getEditorText() ?? "", false, length);
           }
         },
         onStats: scheduleStats,
