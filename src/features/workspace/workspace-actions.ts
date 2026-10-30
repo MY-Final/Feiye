@@ -154,6 +154,8 @@ export async function openFile(
       void setSetting("lastDocument", null);
       return;
     }
+    // 可能是文件已在应用外被删除：从最近打开里摘掉，避免反复点开报错。
+    useWorkspaceStore.getState().updateRecent(entry.relPath, null);
     toastError("打开文件失败", error);
   }
 }
@@ -311,6 +313,7 @@ export async function renameEntry(entry: Entry): Promise<void> {
   try {
     const renamed = await apiRenameEntry(entry.relPath, target);
     await useWorkspaceStore.getState().refreshDir(parentRel(entry.relPath));
+    useWorkspaceStore.getState().updateRecent(entry.relPath, renamed.relPath);
 
     const doc = useDocumentStore.getState();
     if (doc.path === entry.relPath) {
@@ -352,6 +355,7 @@ export async function deleteEntry(entry: Entry): Promise<void> {
   try {
     await apiDeleteEntry(entry.relPath);
     await useWorkspaceStore.getState().refreshDir(parentRel(entry.relPath));
+    useWorkspaceStore.getState().updateRecent(entry.relPath, null);
 
     const doc = useDocumentStore.getState();
     if (doc.path && isWithin(doc.path, entry.relPath)) {

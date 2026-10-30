@@ -112,6 +112,8 @@ interface WorkspaceStore {
 
   setWorkspace(info: WorkspaceInfo | null): void;
   noteRecent(relPath: string): void;
+  /** 重命名或删除后同步「最近打开」，避免留下打不开的旧路径。 */
+  updateRecent(oldPath: string, nextPath: string | null): void;
   loadDir(relPath: string, silent?: boolean): Promise<void>;
   refreshDir(relPath: string): Promise<void>;
   refreshTree(): Promise<void>;
@@ -153,6 +155,25 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       relPath,
       ...get().recent.filter((path) => path !== relPath),
     ].slice(0, RECENT_LIMIT);
+    set({ recent: next });
+    persistRecent(root, next);
+  },
+
+  updateRecent(oldPath, nextPath) {
+    const root = get().root;
+    if (!root) return;
+    const current = get().recent;
+    // 目录改名 / 删除时，它下面的最近文档也要一起换前缀或移除。
+    const next = current
+      .map((path) => {
+        if (path === oldPath) return nextPath;
+        if (!path.startsWith(`${oldPath}/`)) return path;
+        return nextPath === null ? null : `${nextPath}${path.slice(oldPath.length)}`;
+      })
+      .filter((path): path is string => path !== null);
+    if (next.length === current.length && next.every((path, index) => path === current[index])) {
+      return;
+    }
     set({ recent: next });
     persistRecent(root, next);
   },
