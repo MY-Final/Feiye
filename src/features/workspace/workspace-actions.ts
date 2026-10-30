@@ -71,6 +71,23 @@ function markdownNameError(value: string): string | null {
   return MARKDOWN_NAME.test(value) ? null : "只支持 .md / .markdown / .mdx";
 }
 
+const ILLEGAL_NAME_CHAR = /[<>:"|?*\u0000-\u001f]/;
+const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
+
+/** 文件系统层面的命名限制提前拦下，不要等创建失败才报一句看不懂的错。 */
+function nameCharError(value: string): string | null {
+  if (ILLEGAL_NAME_CHAR.test(value)) {
+    return '名称不能包含 < > : " | ? * 等字符';
+  }
+  if (/[. ]$/.test(value)) {
+    return "名称不能以句点或空格结尾";
+  }
+  if (WINDOWS_RESERVED.test(value)) {
+    return "名称与系统保留字冲突（如 CON、NUL、COM1）";
+  }
+  return null;
+}
+
 /** 在已加载的同级条目里找一个不重名的默认名称，避免连续新建时撞名。 */
 function nextAvailableName(
   parent: string,
@@ -246,7 +263,7 @@ export async function createMarkdownFile(parent: string): Promise<void> {
       if (trimmed.includes("/") || trimmed.includes("\\")) {
         return "文件名不能包含路径分隔符";
       }
-      return markdownNameError(trimmed);
+      return nameCharError(trimmed) ?? markdownNameError(trimmed);
     },
   });
 
@@ -284,7 +301,7 @@ export async function saveDocumentAs(): Promise<void> {
       if (trimmed.includes("/") || trimmed.includes("\\")) {
         return "文件名不能包含路径分隔符";
       }
-      return markdownNameError(trimmed);
+      return nameCharError(trimmed) ?? markdownNameError(trimmed);
     },
   });
 
@@ -326,7 +343,7 @@ export async function createFolderIn(parent: string): Promise<void> {
       if (trimmed.includes("/") || trimmed.includes("\\")) {
         return "名称不能包含路径分隔符";
       }
-      return null;
+      return nameCharError(trimmed);
     },
   });
 
@@ -383,9 +400,9 @@ export async function renameEntry(entry: Entry): Promise<void> {
         return "名称不能包含路径分隔符";
       }
       if (!entry.isDir) {
-        return markdownNameError(trimmed);
+        return nameCharError(trimmed) ?? markdownNameError(trimmed);
       }
-      return null;
+      return nameCharError(trimmed);
     },
   });
 
