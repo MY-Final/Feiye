@@ -2,7 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { copyText } from "../../lib/clipboard";
-import { rewritePreviewImages } from "../../lib/images";
+import {
+  resolveMarkdownImageSrc,
+  rewritePreviewImages,
+} from "../../lib/images";
 import { baseName, resolveRelLink } from "../../lib/paths";
 import { useDocumentStore } from "../../stores/document";
 import { useOutlineStore } from "../../stores/outline";
@@ -74,7 +77,7 @@ export function PreviewPane() {
         return;
       }
 
-      // 点图片放大查看，方便看清截图里的细节；图片链接仍按链接处理。
+      // 点图片放大查看，方便看清截图里的细节；包在链接里的图片交给下面的链接分支。
       if (target instanceof HTMLImageElement && !target.closest("a")) {
         const src = target.currentSrc || target.src;
         if (src) {
@@ -111,6 +114,15 @@ export function PreviewPane() {
       event.preventDefault();
       const current = useDocumentStore.getState().path;
       const relPath = current ? resolveRelLink(href, current) : null;
+
+      // 链到图片（如 `[截图](assets/a.png)`）时用放大浮层打开，别做无效点击。
+      if (relPath && /\.(png|jpe?g|gif|webp|avif|bmp|svg)$/i.test(relPath)) {
+        const root = useWorkspaceStore.getState().root;
+        const image = resolveMarkdownImageSrc(root, "", relPath);
+        if (image) setLightbox({ src: image.url, alt: baseName(relPath) });
+        return;
+      }
+
       if (relPath && /\.(md|markdown|mdx)$/i.test(relPath)) {
         const hash = href.indexOf("#");
         const fragment = hash >= 0 ? href.slice(hash + 1) : undefined;
