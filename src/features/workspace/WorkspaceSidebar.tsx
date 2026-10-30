@@ -3,23 +3,31 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type MouseEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
 import { ContextMenu, type MenuAction } from "../../components/Menu";
+import { copyText } from "../../lib/clipboard";
 import { OutlinePanel } from "../outline/OutlinePanel";
-import { parentRel } from "../../lib/paths";
+import { MoveDialog } from "./MoveDialog";
+import { isWithin, parentRel } from "../../lib/paths";
 import { getSetting, setSetting, type Entry } from "../../lib/tauri";
 import { useDocumentStore } from "../../stores/document";
 import { useOutlineStore } from "../../stores/outline";
+import { useSettingsStore } from "../../stores/settings";
+import { useUiStore } from "../../stores/ui";
 import { useWorkspaceStore } from "../../stores/workspace";
 import {
+  collapseAllKeepingActive,
+  copyEntryLink,
   createFolderIn,
   createMarkdownFile,
   deleteEntry,
+  moveEntry,
   openFile,
   renameEntry,
+  revealEntry,
 } from "./workspace-actions";
 
 interface MenuState {
@@ -28,7 +36,22 @@ interface MenuState {
   entry: Entry | null;
 }
 
-function buildMenuActions(entry: Entry | null): MenuAction[] {
+/** 正在拖的文件 / 文件夹：dragstart 记下来，drop 时直接用，省得从 dataTransfer 猜。 */
+let draggedEntry: Entry | null = null;
+
+/** 拖到这一行时能不能放下：不能拖回原目录，也不能把文件夹拖进它自己里面。 */
+function canDropInto(dragged: Entry, target: Entry): boolean {
+  if (!target.isDir) return false;
+  if (dragged.relPath === target.relPath) return false;
+  if (parentRel(dragged.relPath) === target.relPath) return false;
+  if (dragged.isDir && isWithin(target.relPath, dragged.relPath)) return false;
+  return true;
+}
+
+function buildMenuActions(
+  entry: Entry | null,
+  onMove: (entry: Entry) => void,
+): MenuAction[] {
   const parent = entry
     ? entry.isDir
       ? entry.relPath
@@ -48,9 +71,56 @@ function buildMenuActions(entry: Entry | null): MenuAction[] {
         void createFolderIn(parent);
       },
     },
+    {
+      // 外面改过文件时，右键就地刷新，不用再去右上角找按钮。
+      label: "刷新文件树",
+      onSelect: () => {
+        void useWorkspaceStore.getState().refreshTree();
+      },
+    },
+    {
+      label: "在资源管理器中显示",
+      onSelect: () => {
+        void revealEntry(entry);
+      },
+    },
   ];
 
+  if (entry && !entry.isDir) {
+    actions.push({
+      label: "复制链接",
+      onSelect: () => {
+        void copyEntryLink(entry);
+      },
+    });
+  }
+
   if (entry) {
+    actions.push({
+      // 贴到终端、别的应用里用的是完整路径，按工作区根拼出来。
+      label: "复制路径",
+      onSelect: () => {
+        const root = useWorkspaceStore.getState().root;
+        if (!root) return;
+        const sep = root.includes("\\") ? "\\" : "/";
+        const full = `${root}${sep}${entry.relPath.split("/").join(sep)}`;
+        void copyText(full).then((copied) => {
+          useUiStore
+            .getState()
+            .toast(copied ? "已复制路径" : "复制到剪贴板失败", copied ? "info" : "error");
+        });
+      },
+    });
+  }
+
+  if (entry) {
+    actions.push({
+      // 键盘也能移动：不依赖拖拽，选一个目标文件夹即可。
+      label: "移动到…",
+      onSelect: () => {
+        onMove(entry);
+      },
+    });
     actions.push({
       label: "重命名",
       onSelect: () => {
@@ -142,10 +212,18 @@ function CollapseIcon() {
 interface TreeNodeProps {
   entry: Entry;
   depth: number;
-  onMenu(event: MouseEvent, entry: Entry): void;
+  dropTarget: string | null;
+  onDropTarget(path: string | null): void;
+  onMenuAt(x: number, y: number, entry: Entry): void;
 }
 
-function TreeNode({ entry, depth, onMenu }: TreeNodeProps) {
+function TreeNode({
+  entry,
+  depth,
+  dropTarget,
+  onDropTarget,
+  onMenuAt,
+}: TreeNodeProps) {
   const expanded = useWorkspaceStore((state) =>
     Boolean(state.expanded[entry.relPath]),
   );
@@ -154,7 +232,20 @@ function TreeNode({ entry, depth, onMenu }: TreeNodeProps) {
     Boolean(state.loading[entry.relPath]),
   );
   const active = useDocumentStore((state) => state.path === entry.relPath);
+  const failed = useWorkspaceStore((state) =>
+    Boolean(state.failed[entry.relPath]),
+  );
+  const loadDir = useWorkspaceStore((state) => state.loadDir);
+  const hideExt = useSettingsStore(
+    (state) => state.preferences.hideFileExtensions,
+  );
   const toggleDir = useWorkspaceStore((state) => state.toggleDir);
+  const rowRef = useRef<HTMLButtonElement>(null);
+
+  // 打开文件（含链接跳转、启动恢复）后让它在树里进入可见范围。
+  useEffect(() => {
+    if (active) rowRef.current?.scrollIntoView({ block: "nearest" });
+  }, [active]);
 
   const indent = 4 + depth * 14;
 
@@ -162,9 +253,47 @@ function TreeNode({ entry, depth, onMenu }: TreeNodeProps) {
     <div className="tree-node">
       <button
         type="button"
-        className={`tree-row${active ? " active" : ""}`}
+        ref={rowRef}
+        className={`tree-row${active ? " active" : ""}${
+          entry.isDir && dropTarget === entry.relPath ? " drop-target" : ""
+        }`}
         style={{ paddingLeft: indent }}
         title={entry.name}
+        draggable
+        onDragStart={(event) => {
+          draggedEntry = entry;
+          event.dataTransfer.effectAllowed = "move";
+          // 自定义类型只是兜底：同一应用内拖动优先用上面的变量。
+          event.dataTransfer.setData("application/x-feiye-entry", entry.relPath);
+        }}
+        onDragEnd={() => {
+          draggedEntry = null;
+          onDropTarget(null);
+        }}
+        onDragOver={(event) => {
+          const dragged = draggedEntry;
+          if (!dragged || !canDropInto(dragged, entry)) return;
+          // 只有 preventDefault 过的地方才允许放下。
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+          if (dropTarget !== entry.relPath) onDropTarget(entry.relPath);
+        }}
+        onDragLeave={() => {
+          if (dropTarget === entry.relPath) onDropTarget(null);
+        }}
+        onDrop={(event) => {
+          const dragged = draggedEntry;
+          onDropTarget(null);
+          if (!dragged || !canDropInto(dragged, entry)) return;
+          event.preventDefault();
+          draggedEntry = null;
+          void moveEntry(dragged, entry.relPath);
+        }}
+        role="treeitem"
+        aria-level={depth + 1}
+        aria-selected={active}
+        data-depth={depth}
+        aria-expanded={entry.isDir ? expanded : undefined}
         onClick={() => {
           if (entry.isDir) {
             void toggleDir(entry.relPath);
@@ -172,7 +301,60 @@ function TreeNode({ entry, depth, onMenu }: TreeNodeProps) {
             void openFile(entry);
           }
         }}
-        onContextMenu={(event) => onMenu(event, entry)}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          onMenuAt(event.clientX, event.clientY, entry);
+        }}
+        // 和文件管理器一致：F2 / Delete 针对的是获得焦点这一行，
+        // 而不是编辑器里打开的那篇；删除仍走确认框。
+        onKeyDown={(event) => {
+          if (event.key === "F2") {
+            event.preventDefault();
+            event.stopPropagation();
+            // 改名后这一行会被重建，按位置把焦点找回来，方便接着改下一篇。
+            const row = event.currentTarget;
+            const tree = row.closest(".tree");
+            const before = tree
+              ? Array.from(tree.querySelectorAll<HTMLElement>(".tree-row"))
+              : [];
+            const index = before.indexOf(row);
+            void renameEntry(entry).then(() => {
+              if (!tree?.isConnected) return;
+              const rows = Array.from(
+                tree.querySelectorAll<HTMLElement>(".tree-row"),
+              );
+              if (rows.length === 0) return;
+              rows[Math.min(Math.max(index, 0), rows.length - 1)]?.focus();
+            });
+          } else if (event.key === "Delete") {
+            event.preventDefault();
+            event.stopPropagation();
+            // 删完把焦点留在树里同一位置，接着整理下一篇，不用再点一下。
+            const row = event.currentTarget;
+            const tree = row.closest(".tree");
+            const before = tree
+              ? Array.from(tree.querySelectorAll<HTMLElement>(".tree-row"))
+              : [];
+            const index = before.indexOf(row);
+            void deleteEntry(entry).then(() => {
+              if (!tree?.isConnected) return;
+              const rows = Array.from(
+                tree.querySelectorAll<HTMLElement>(".tree-row"),
+              );
+              if (rows.length === 0) return;
+              rows[Math.min(Math.max(index, 0), rows.length - 1)]?.focus();
+            });
+          } else if (
+            event.key === "ContextMenu" ||
+            (event.shiftKey && event.key === "F10")
+          ) {
+            // 键盘也能叫出右键菜单，打开后可以直接用方向键选。
+            event.preventDefault();
+            event.stopPropagation();
+            const rect = event.currentTarget.getBoundingClientRect();
+            onMenuAt(rect.left + 16, rect.bottom - 4, entry);
+          }
+        }}
       >
         <span className="tree-caret">
           {entry.isDir ? <ChevronIcon open={expanded} /> : null}
@@ -180,12 +362,17 @@ function TreeNode({ entry, depth, onMenu }: TreeNodeProps) {
         <span className={`tree-icon ${entry.isDir ? "folder" : "markdown"}`}>
           {entry.isDir ? <FolderIcon /> : <MarkdownIcon />}
         </span>
-        <span className="tree-label">{entry.name}</span>
+        <span className="tree-label">
+          {entry.isDir || !hideExt
+            ? entry.name
+            : entry.name.replace(/\.(md|markdown|mdx)$/i, "")}
+        </span>
       </button>
 
       {entry.isDir && expanded ? (
         <div
           className="tree-children"
+          role="group"
           style={{ "--guide-left": `${indent + 8}px` } as CSSProperties}
         >
           {!children && loading ? (
@@ -198,12 +385,27 @@ function TreeNode({ entry, depth, onMenu }: TreeNodeProps) {
               key={child.relPath}
               entry={child}
               depth={depth + 1}
-              onMenu={onMenu}
+              dropTarget={dropTarget}
+              onDropTarget={onDropTarget}
+              onMenuAt={onMenuAt}
             />
           ))}
           {children && children.length === 0 ? (
             <div className="tree-hint" style={{ paddingLeft: indent + 36 }}>
               空
+            </div>
+          ) : null}
+          {failed && !children && !loading ? (
+            // 读取失败时别留空白，给一个就地重试的入口。
+            <div className="tree-hint" style={{ paddingLeft: indent + 36 }}>
+              读取失败，
+              <button
+                type="button"
+                className="tree-hint-action"
+                onClick={() => void loadDir(entry.relPath)}
+              >
+                重试
+              </button>
             </div>
           ) : null}
         </div>
@@ -215,6 +417,7 @@ function TreeNode({ entry, depth, onMenu }: TreeNodeProps) {
 type SidebarTab = "files" | "outline";
 
 const SIDEBAR_WIDTH_KEY = "sidebarWidth";
+const SIDEBAR_TAB_KEY = "sidebarTab";
 const SIDEBAR_WIDTH = { min: 180, max: 420, default: 240 } as const;
 
 function clampSidebarWidth(value: number): number {
@@ -227,15 +430,25 @@ function clampSidebarWidth(value: number): number {
 export function WorkspaceSidebar() {
   const children = useWorkspaceStore((state) => state.children[""]);
   const rootLoading = useWorkspaceStore((state) => Boolean(state.loading[""]));
+  const rootFailed = useWorkspaceStore((state) => Boolean(state.failed[""]));
   const refreshTree = useWorkspaceStore((state) => state.refreshTree);
-  const collapseAll = useWorkspaceStore((state) => state.collapseAll);
   const headingCount = useOutlineStore((state) => state.headings.length);
   const [tab, setTab] = useState<SidebarTab>("files");
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  // 拖动时高亮当前可放下的目录，松手前就知道会落到哪。
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [moveTarget, setMoveTarget] = useState<Entry | null>(null);
   const [width, setWidth] = useState<number>(SIDEBAR_WIDTH.default);
   const widthRef = useRef<number>(SIDEBAR_WIDTH.default);
   const resizeStart = useRef<{ x: number; width: number } | null>(null);
+
+  // 记住上次看的标签：常看大纲的人重启后不用每次再点一下。
+  useEffect(() => {
+    void getSetting<unknown>(SIDEBAR_TAB_KEY).then((value) => {
+      if (value === "files" || value === "outline") setTab(value);
+    });
+  }, []);
 
   useEffect(() => {
     void getSetting<number>(SIDEBAR_WIDTH_KEY).then((value) => {
@@ -245,6 +458,12 @@ export function WorkspaceSidebar() {
       setWidth(next);
     });
   }, []);
+
+  const selectTab = (next: SidebarTab) => {
+    setMenu(null);
+    setTab(next);
+    void setSetting(SIDEBAR_TAB_KEY, next);
+  };
 
   const commitWidth = (value: number) => {
     const next = clampSidebarWidth(value);
@@ -276,9 +495,88 @@ export function WorkspaceSidebar() {
     void setSetting(SIDEBAR_WIDTH_KEY, widthRef.current);
   };
 
-  const openMenu = (event: MouseEvent, entry: Entry | null) => {
+  // 方向键按 8px 调宽，按住 Shift 一次 32px；Home 回到默认宽度。
+  const keyResize = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const step = event.shiftKey ? 32 : 8;
+    let next: number | null = null;
+    if (event.key === "ArrowLeft") next = widthRef.current - step;
+    else if (event.key === "ArrowRight") next = widthRef.current + step;
+    else if (event.key === "Home") next = SIDEBAR_WIDTH.default;
+    if (next === null) return;
     event.preventDefault();
-    setMenu({ x: event.clientX, y: event.clientY, entry });
+    commitWidth(next);
+  };
+
+  const openMenuAt = (x: number, y: number, entry: Entry | null) => {
+    setMenu({ x, y, entry });
+  };
+
+  // 文件树按文件管理器的习惯支持方向键：上下移动、左右折叠展开、
+  // Home / End 跳到首尾。行本身是按钮，Enter 由浏览器转成点击。
+  const handleTreeKeys = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    const row = (event.target as Element | null)?.closest<HTMLElement>(
+      ".tree-row",
+    );
+    if (!row) return;
+
+    const rows = Array.from(
+      event.currentTarget.querySelectorAll<HTMLElement>(".tree-row"),
+    );
+    const index = rows.indexOf(row);
+    if (index < 0) return;
+
+    const focusRow = (next: HTMLElement | undefined) => next?.focus();
+    const expanded = row.getAttribute("aria-expanded");
+
+    switch (event.key) {
+      case "ArrowDown":
+        event.preventDefault();
+        focusRow(rows[index + 1]);
+        break;
+      case "ArrowUp":
+        event.preventDefault();
+        focusRow(rows[index - 1]);
+        break;
+      case "Home":
+        event.preventDefault();
+        focusRow(rows[0]);
+        break;
+      case "End":
+        event.preventDefault();
+        focusRow(rows[rows.length - 1]);
+        break;
+      case "ArrowRight":
+        // 已展开就进到第一个子项，折叠的则就地展开。
+        if (expanded === "false") {
+          event.preventDefault();
+          row.click();
+        } else if (expanded === "true") {
+          event.preventDefault();
+          focusRow(rows[index + 1]);
+        }
+        break;
+      case "ArrowLeft": {
+        if (expanded === "true") {
+          event.preventDefault();
+          row.click();
+          break;
+        }
+        // 折叠状态或普通文件：回到同层的父文件夹。
+        const depth = Number(row.dataset.depth ?? "0");
+        if (depth <= 0) break;
+        for (let i = index - 1; i >= 0; i -= 1) {
+          if (Number(rows[i].dataset.depth) === depth - 1) {
+            event.preventDefault();
+            rows[i].focus();
+            break;
+          }
+        }
+        break;
+      }
+      default:
+        break;
+    }
   };
 
   const handleRefresh = async () => {
@@ -302,7 +600,13 @@ export function WorkspaceSidebar() {
         role="separator"
         aria-orientation="vertical"
         aria-label="调整侧栏宽度"
-        title="拖动调整侧栏宽度，双击恢复默认"
+        aria-valuemin={SIDEBAR_WIDTH.min}
+        aria-valuemax={SIDEBAR_WIDTH.max}
+        aria-valuenow={width}
+        // 分隔条可以 Tab 聚焦、用方向键调宽，和分栏分隔条一致。
+        tabIndex={0}
+        title="拖动或左右方向键调整侧栏宽度，双击 / Home 恢复默认"
+        onKeyDown={keyResize}
         onPointerDown={startResize}
         onPointerMove={moveResize}
         onPointerUp={endResize}
@@ -310,16 +614,37 @@ export function WorkspaceSidebar() {
         onDoubleClick={() => commitWidth(SIDEBAR_WIDTH.default)}
       />
       <div className="sidebar-header">
-        <div className="sidebar-tabs" role="tablist" aria-label="侧栏内容">
+        <div
+          className="sidebar-tabs"
+          role="tablist"
+          aria-label="侧栏内容"
+          onKeyDown={(event) => {
+            // 标签之间用左右方向键切换，Home / End 到首尾，和设置面板一致。
+            const keys = ["ArrowLeft", "ArrowRight", "Home", "End"];
+            if (!keys.includes(event.key)) return;
+            const tabs = Array.from(
+              event.currentTarget.querySelectorAll<HTMLElement>("[role='tab']"),
+            );
+            const index = tabs.indexOf(document.activeElement as HTMLElement);
+            if (index < 0) return;
+            event.preventDefault();
+            const delta = event.key === "ArrowRight" ? 1 : -1;
+            const target =
+              event.key === "Home"
+                ? tabs[0]
+                : event.key === "End"
+                  ? tabs[tabs.length - 1]
+                  : tabs[(index + delta + tabs.length) % tabs.length];
+            target?.focus();
+            target?.click();
+          }}
+        >
           <button
             type="button"
             role="tab"
             aria-selected={tab === "files"}
             className={`sidebar-tab${tab === "files" ? " active" : ""}`}
-            onClick={() => {
-              setMenu(null);
-              setTab("files");
-            }}
+            onClick={() => selectTab("files")}
           >
             文件
           </button>
@@ -328,10 +653,7 @@ export function WorkspaceSidebar() {
             role="tab"
             aria-selected={tab === "outline"}
             className={`sidebar-tab${tab === "outline" ? " active" : ""}`}
-            onClick={() => {
-              setMenu(null);
-              setTab("outline");
-            }}
+            onClick={() => selectTab("outline")}
           >
             大纲
             {headingCount > 0 ? (
@@ -379,9 +701,18 @@ export function WorkspaceSidebar() {
             <button
               type="button"
               className="sidebar-action"
-              title="全部折叠"
+              title="全部折叠（保留当前笔记所在目录）"
               aria-label="全部折叠"
-              onClick={() => collapseAll()}
+              onClick={() => {
+                void collapseAllKeepingActive().then(() => {
+                  // 展开目录后把当前笔记滚回可见范围，省得自己找。
+                  requestAnimationFrame(() => {
+                    document
+                      .querySelector(".tree-row.active")
+                      ?.scrollIntoView({ block: "nearest" });
+                  });
+                });
+              }}
             >
               <CollapseIcon />
             </button>
@@ -392,27 +723,82 @@ export function WorkspaceSidebar() {
       {tab === "files" ? (
         <div
           className="tree"
+          role="tree"
+          aria-label="工作区文件"
+          onKeyDown={handleTreeKeys}
           onContextMenu={(event) => {
             // 只在空白区域弹出根目录菜单，行上的右键由 TreeNode 处理。
             const target = event.target as HTMLElement;
-            if (!target.closest(".tree-row")) openMenu(event, null);
+            if (!target.closest(".tree-row")) {
+              event.preventDefault();
+              openMenuAt(event.clientX, event.clientY, null);
+            }
           }}
           onMouseDown={(event) => {
             // 点击空白区域关闭右键菜单。
             if (event.target === event.currentTarget && menu) setMenu(null);
           }}
+          onDragOver={(event) => {
+            // 树里的空白区域当作根目录：把文件拖出子目录时不用再找落点。
+            if (!draggedEntry) return;
+            const target = event.target as HTMLElement;
+            if (target.closest(".tree-row")) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "move";
+          }}
+          onDragLeave={(event) => {
+            if (event.target === event.currentTarget) setDropTarget(null);
+          }}
+          onDrop={(event) => {
+            if (!draggedEntry) return;
+            const target = event.target as HTMLElement;
+            if (target.closest(".tree-row")) return;
+            event.preventDefault();
+            const dragged = draggedEntry;
+            draggedEntry = null;
+            setDropTarget(null);
+            if (parentRel(dragged.relPath) === "") return;
+            void moveEntry(dragged, "");
+          }}
         >
           {children?.map((entry) => (
-            <TreeNode key={entry.relPath} entry={entry} depth={0} onMenu={openMenu} />
+            <TreeNode
+              key={entry.relPath}
+              entry={entry}
+              depth={0}
+              dropTarget={dropTarget}
+              onDropTarget={setDropTarget}
+              onMenuAt={openMenuAt}
+            />
           ))}
 
           {!children && rootLoading ? (
             <div className="tree-hint">加载中…</div>
           ) : null}
 
+          {!children && !rootLoading && rootFailed ? (
+            <div className="tree-hint tree-hint-empty">
+              <p>读取工作区目录失败</p>
+              <button
+                type="button"
+                className="tree-hint-action"
+                onClick={() => void handleRefresh()}
+              >
+                重试
+              </button>
+            </div>
+          ) : null}
+
           {children && children.length === 0 ? (
-            <div className="tree-hint">
-              这个文件夹里还没有 Markdown 文件
+            <div className="tree-hint tree-hint-empty">
+              <p>这个文件夹里还没有 Markdown 文件</p>
+              <button
+                type="button"
+                className="tree-hint-action"
+                onClick={() => void createMarkdownFile("")}
+              >
+                新建第一篇
+              </button>
             </div>
           ) : null}
         </div>
@@ -424,8 +810,14 @@ export function WorkspaceSidebar() {
         <ContextMenu
           x={menu.x}
           y={menu.y}
-          actions={buildMenuActions(menu.entry)}
+          actions={buildMenuActions(menu.entry, (entry) => setMoveTarget(entry))}
           onClose={() => setMenu(null)}
+        />
+      ) : null}
+      {moveTarget ? (
+        <MoveDialog
+          entry={moveTarget}
+          onClose={() => setMoveTarget(null)}
         />
       ) : null}
     </aside>

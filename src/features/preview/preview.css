@@ -7,6 +7,10 @@
 }
 
 .preview-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   margin: 16px 24px 0;
   padding: 10px 14px;
   border: 1px solid var(--danger-line);
@@ -14,6 +18,21 @@
   background: var(--danger-soft);
   color: var(--danger);
   font-size: 12px;
+}
+
+.preview-retry {
+  flex: none;
+  padding: 2px 10px;
+  border: 1px solid var(--danger-line);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.preview-retry:hover {
+  background: var(--bg);
 }
 
 .markdown-body {
@@ -207,6 +226,20 @@
     opacity 0.12s ease;
 }
 
+/* 代码块左上角的语言标签，与右上角的复制按钮同处一条留白带。 */
+.preview-code-lang {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 20px;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  opacity: 0.8;
+  pointer-events: none;
+}
+
 .preview-code-block:hover .preview-code-copy,
 .preview-code-block:focus-within .preview-code-copy,
 .preview-code-copy.is-copied {
@@ -289,4 +322,102 @@
 
 :root[data-theme="dark"] .markdown-body pre.shiki {
   background-color: var(--code-bg) !important;
+}
+
+/* 点击图片放大查看；单击任意位置或按 Esc 关闭。 */
+.image-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  background: rgba(24, 21, 18, 0.72);
+  cursor: zoom-out;
+  animation: lightbox-in 0.12s ease;
+}
+
+.image-lightbox img {
+  max-width: 100%;
+  max-height: 100%;
+  transition: transform 0.12s ease;
+  border-radius: var(--radius-sm);
+  background: #fff;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+}
+
+/* 同篇文档有多张图时，左右两边的翻页按钮和底部的张数提示；滚轮可缩放。 */
+.image-lightbox-nav {
+  position: absolute;
+  top: 50%;
+  width: 42px;
+  height: 64px;
+  margin-top: -32px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.image-lightbox-nav:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+
+.image-lightbox-nav.prev {
+  left: 16px;
+}
+
+.image-lightbox-nav.next {
+  right: 16px;
+}
+
+/* 底部的图片说明与张数 / 缩放比例，纵向叠放在同一处。 */
+.image-lightbox-info {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  max-width: 76vw;
+  pointer-events: none;
+}
+
+.image-lightbox-caption {
+  overflow: hidden;
+  max-width: 100%;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.image-lightbox-hint {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+}
+
+.image-lightbox-count {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+@keyframes lightbox-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }

@@ -120,8 +120,19 @@ export function renameEntry(
   return invoke<Entry>("rename_entry", { relPath, newName });
 }
 
+export function moveEntry(
+  relPath: string,
+  newParent: string,
+): Promise<Entry> {
+  return invoke<Entry>("move_entry", { relPath, newParent });
+}
+
 export function deleteEntry(relPath: string): Promise<void> {
   return invoke<void>("delete_entry", { relPath });
+}
+
+export function revealEntry(relPath: string): Promise<void> {
+  return invoke<void>("reveal_entry", { relPath });
 }
 
 export function saveRecovery(
@@ -162,11 +173,15 @@ export function saveImageAsset(
   });
 }
 
-export async function pickWorkspaceFolder(): Promise<string | null> {
+export async function pickWorkspaceFolder(
+  defaultPath?: string,
+): Promise<string | null> {
   const selected = await open({
     directory: true,
     multiple: false,
     title: "选择工作区文件夹",
+    // 从当前库的位置开始找，换库时不用再从头翻目录。
+    defaultPath,
   });
   return typeof selected === "string" ? selected : null;
 }

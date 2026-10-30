@@ -25,6 +25,7 @@ export interface Preferences {
   autoSaveDelay: number;
   recoveryInterval: number;
   lineNumbers: boolean;
+  hideFileExtensions: boolean;
   defaultView: DefaultView;
 }
 
@@ -37,6 +38,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   autoSaveDelay: 1800,
   recoveryInterval: 4000,
   lineNumbers: true,
+  hideFileExtensions: false,
   defaultView: "last",
 };
 
@@ -119,6 +121,10 @@ export function normalizePreferences(value: unknown): Preferences {
       typeof source.lineNumbers === "boolean"
         ? source.lineNumbers
         : DEFAULT_PREFERENCES.lineNumbers,
+    hideFileExtensions:
+      typeof source.hideFileExtensions === "boolean"
+        ? source.hideFileExtensions
+        : DEFAULT_PREFERENCES.hideFileExtensions,
     defaultView: isDefaultView(source.defaultView)
       ? source.defaultView
       : DEFAULT_PREFERENCES.defaultView,

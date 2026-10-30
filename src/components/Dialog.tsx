@@ -1,4 +1,10 @@
-import { useEffect, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 
 import {
   useUiStore,
@@ -6,21 +12,69 @@ import {
   type PromptRequest,
 } from "../stores/ui";
 
+/**
+ * 让 Tab / Shift+Tab 只在对话框内部循环。
+ * 否则焦点会跑到后面的编辑器里，接着打字就改到了正文。
+ */
+export function trapTab(event: ReactKeyboardEvent<HTMLElement>): void {
+  if (event.key !== "Tab") return;
+  const focusables = Array.from(
+    event.currentTarget.querySelectorAll<HTMLElement>(
+      "button, input, textarea, select, a[href], [tabindex]:not([tabindex='-1'])",
+    ),
+  ).filter((element) => !element.hasAttribute("disabled"));
+  if (focusables.length === 0) return;
+
+  const first = focusables[0];
+  const last = focusables[focusables.length - 1];
+  const active = document.activeElement;
+  const inside = active instanceof HTMLElement && event.currentTarget.contains(active);
+
+  if (event.shiftKey) {
+    if (!inside || active === first) {
+      event.preventDefault();
+      last.focus();
+    }
+    return;
+  }
+  if (!inside || active === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
 function ConfirmDialog({ request }: { request: ConfirmRequest }) {
   const cancelValue =
     request.buttons.find((button) => button.value === "cancel")?.value ??
     request.buttons[request.buttons.length - 1]?.value ??
     "cancel";
+  // 回车只认主按钮；「移动到回收站」这类危险按钮必须真的点一下。
+  const primaryValue =
+    request.buttons.find((button) => button.tone === "primary")?.value ?? null;
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         useUiStore.getState().resolveConfirm(cancelValue);
+        return;
+      }
+      if (event.key === "Enter" && primaryValue) {
+        // 焦点已经落在某个按钮上（例如 Tab 到「取消」）时交给按钮自己处理，
+        // 回车就按当前选中的那个按钮走，而不是一律触发主按钮。
+        const active = document.activeElement;
+        if (
+          active instanceof HTMLElement &&
+          active.closest(".modal-actions")
+        ) {
+          return;
+        }
+        event.preventDefault();
+        useUiStore.getState().resolveConfirm(primaryValue);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [cancelValue]);
+  }, [cancelValue, primaryValue]);
 
   return (
     <div
@@ -31,7 +85,13 @@ function ConfirmDialog({ request }: { request: ConfirmRequest }) {
         }
       }}
     >
-      <div className="modal" role="dialog" aria-modal="true" aria-label={request.title}>
+      <div
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={request.title}
+        onKeyDown={trapTab}
+      >
         <h2 className="modal-title">{request.title}</h2>
         {request.message ? <p className="modal-message">{request.message}</p> : null}
         <div className="modal-actions">
@@ -92,6 +152,7 @@ function PromptDialog({ request }: { request: PromptRequest }) {
         role="dialog"
         aria-modal="true"
         aria-label={request.title}
+        onKeyDown={trapTab}
         onSubmit={submit}
       >
         <h2 className="modal-title">{request.title}</h2>
@@ -101,7 +162,16 @@ function PromptDialog({ request }: { request: PromptRequest }) {
             className="text-input"
             value={value}
             autoFocus
-            onFocus={(event) => event.currentTarget.select()}
+            onFocus={(event) => {
+              const input = event.currentTarget;
+              if (!request.selectBaseName) {
+                input.select();
+                return;
+              }
+              // 只选中「主名」部分，扩展名留着，避免改完还得重新补 `.md`。
+              const dot = input.value.lastIndexOf(".");
+              input.setSelectionRange(0, dot > 0 ? dot : input.value.length);
+            }}
             onChange={(event) => {
               setValue(event.currentTarget.value);
               setError(null);
@@ -129,6 +199,31 @@ function PromptDialog({ request }: { request: PromptRequest }) {
 export function DialogHost() {
   const confirm = useUiStore((state) => state.confirm);
   const prompt = useUiStore((state) => state.prompt);
+  const request = confirm ?? prompt;
+  const wasOpen = useRef(false);
+  const restoreRef = useRef<HTMLElement | null>(null);
+
+  // 关掉对话框后把焦点还回打开前的位置：从文件树按 F2 取消，焦点就留在那一行，
+  // 键盘操作不会跳到正文里；原来的元素已经没了（比如刚删掉那行）才回到正文。
+  useEffect(() => {
+    if (request) {
+      restoreRef.current = request.restoreFocus ?? null;
+      wasOpen.current = true;
+      return;
+    }
+    if (!wasOpen.current) return;
+    wasOpen.current = false;
+    const previous = restoreRef.current;
+    restoreRef.current = null;
+    if (previous?.isConnected) {
+      previous.focus();
+      return;
+    }
+    // 设置面板还开着时不抢焦点，否则焦点会跑到遮罩后面的正文里。
+    if (!useUiStore.getState().settingsOpen) {
+      document.querySelector<HTMLElement>(".cm-content")?.focus();
+    }
+  }, [request]);
 
   if (confirm) return <ConfirmDialog request={confirm} />;
   if (prompt) return <PromptDialog key={prompt.title} request={prompt} />;

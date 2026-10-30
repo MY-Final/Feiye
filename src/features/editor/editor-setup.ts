@@ -3,7 +3,7 @@ import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { languages } from "@codemirror/language-data";
 import { Compartment, EditorState, Prec, type Extension } from "@codemirror/state";
-import { EditorView, keymap } from "@codemirror/view";
+import { EditorView, keymap, placeholder } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
 
 import type { ResolvedImage } from "../../lib/images";
@@ -113,6 +113,27 @@ const editorHighlightStyle = HighlightStyle.define([
   { tag: t.invalid, color: "var(--syn-invalid)" },
 ]);
 
+// 查找 / 替换面板默认是英文，这里统一成中文；未覆盖的短语回退英文。
+const searchPhrases = EditorState.phrases.of({
+  Find: "查找",
+  Replace: "替换",
+  next: "下一个",
+  previous: "上一个",
+  all: "全部",
+  "match case": "区分大小写",
+  regexp: "正则表达式",
+  close: "关闭",
+  replace: "替换",
+  "replace all": "全部替换",
+  "current match": "当前匹配",
+  "Go to line": "跳到行",
+  go: "跳转",
+  line: "行号",
+  "on line": "行",
+  "replaced $ matches": "已替换 $ 处",
+  "replaced match on line $": "已替换第 $ 行的匹配",
+});
+
 const editorTheme = EditorView.theme({
   "&": {
     height: "100%",
@@ -138,6 +159,10 @@ const editorTheme = EditorView.theme({
   },
   ".cm-line": {
     padding: "0 2px",
+  },
+  // 空白笔记里给一句起手提示，比一整片空白更让人知道可以开始写。
+  ".cm-placeholder": {
+    color: "var(--text-faint)",
   },
   ".cm-gutters": {
     backgroundColor: "transparent",
@@ -214,6 +239,7 @@ export function createEditorState(
     doc,
     extensions: [
       basicSetup,
+      searchPhrases,
       syntaxHighlighting(editorHighlightStyle),
       markdown({
         base: markdownLanguage,
@@ -221,6 +247,7 @@ export function createEditorState(
         extensions: [mathMarkdownExtension],
       }),
       EditorView.lineWrapping,
+      placeholder("开始写点什么，# 加空格就是标题"),
       editorTheme,
       // 粘贴 / 拖入图片时保存到文档旁的 assets/ 并插入相对路径。
       EditorView.domEventHandlers({

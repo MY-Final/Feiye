@@ -1,4 +1,4 @@
-import { useUiStore } from "../stores/ui";
+import { pauseToast, resumeToast, useUiStore } from "../stores/ui";
 
 export function ToastHost() {
   const toasts = useUiStore((state) => state.toasts);
@@ -14,6 +14,9 @@ export function ToastHost() {
           type="button"
           className={`toast ${toast.kind}`}
           onClick={() => dismiss(toast.id)}
+          // 鼠标停上来时别急着消失，挪开后再留一点时间。
+          onMouseEnter={() => pauseToast(toast.id)}
+          onMouseLeave={() => resumeToast(toast.id, toast.kind)}
           title="点击关闭"
         >
           {toast.message}

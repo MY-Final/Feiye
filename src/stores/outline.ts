@@ -4,7 +4,10 @@ import type { OutlineHeading } from "../features/editor/outline";
 
 interface OutlineStore {
   headings: OutlineHeading[];
+  /** 预览区滚动时位于顶部附近的标题下标；非预览模式为 null。 */
+  scrollIndex: number | null;
   setHeadings(headings: OutlineHeading[]): void;
+  setScrollIndex(index: number | null): void;
   clear(): void;
 }
 
@@ -24,14 +27,20 @@ function sameHeadings(
 
 export const useOutlineStore = create<OutlineStore>((set, get) => ({
   headings: [],
+  scrollIndex: null,
 
   setHeadings(headings) {
     if (sameHeadings(get().headings, headings)) return;
     set({ headings });
   },
 
+  setScrollIndex(index) {
+    if (get().scrollIndex === index) return;
+    set({ scrollIndex: index });
+  },
+
   clear() {
-    if (get().headings.length === 0) return;
-    set({ headings: [] });
+    if (get().headings.length === 0 && get().scrollIndex === null) return;
+    set({ headings: [], scrollIndex: null });
   },
 }));

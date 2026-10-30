@@ -1,4 +1,5 @@
 import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
+import { openSearchPanel } from "@codemirror/search";
 import { EditorView } from "@codemirror/view";
 
 import {
@@ -156,8 +157,32 @@ export function focusEditor(): void {
   view?.focus();
 }
 
+/** 打开编辑器内置的查找 / 替换面板；编辑器隐藏时调用方负责先切回可见模式。 */
+export function openEditorSearch(): void {
+  if (!view) return;
+  openSearchPanel(view);
+  view.focus();
+}
+
 export function refreshEditorLayout(): void {
   view?.requestMeasure();
+}
+
+/** 位置所在的链接地址；不在链接内返回 null。 */
+export function linkAtPosition(position: number): string | null {
+  if (!view) return null;
+  const state = view.state;
+  let node = syntaxTree(state).resolveInner(position, 1);
+  while (node.name !== "Link" && node.name !== "Autolink") {
+    if (!node.parent) return null;
+    node = node.parent;
+  }
+
+  const url = node.getChild("URL");
+  if (url) return state.doc.sliceString(url.from, url.to);
+
+  const raw = state.doc.sliceString(node.from, node.to);
+  return raw.startsWith("<") && raw.endsWith(">") ? raw.slice(1, -1) : raw;
 }
 
 /**

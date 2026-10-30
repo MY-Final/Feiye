@@ -1,35 +1,47 @@
+import { copyText } from "../lib/clipboard";
+import { saveActiveDocument } from "../features/editor/save";
+import { chooseWorkspace } from "../features/workspace/workspace-actions";
 import { useDocumentStore } from "../stores/document";
 import { useEditorStore } from "../stores/editor";
+import { useSettingsStore } from "../stores/settings";
+import { useUiStore } from "../stores/ui";
 import { useWorkspaceStore } from "../stores/workspace";
 
 function formatSavedAt(ms: number): string {
   const date = new Date(ms);
   if (Number.isNaN(date.getTime())) return "";
   const now = new Date();
+  const time = date.toLocaleTimeString("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
   const sameDay =
     date.getFullYear() === now.getFullYear() &&
     date.getMonth() === now.getMonth() &&
     date.getDate() === now.getDate();
   if (!sameDay) {
-    return `${date.getMonth() + 1}/${date.getDate()}`;
+    // 隔天打开时只有日期会让人分不清是早上还是晚上存的，时间一起带上。
+    return `${date.getMonth() + 1}/${date.getDate()} ${time}`;
   }
-  return date.toLocaleTimeString("zh-CN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
+  return time;
 }
 
 export function StatusBar() {
   const hasWorkspace = useWorkspaceStore((state) => Boolean(state.root));
+  const root = useWorkspaceStore((state) => state.root);
   const docPath = useDocumentStore((state) => state.path);
   const dirty = useDocumentStore((state) => state.dirty);
   const saving = useDocumentStore((state) => state.saving);
   const saveBlocked = useDocumentStore((state) => state.saveBlocked);
+  const zenMode = useUiStore((state) => state.zenMode);
   const savedModifiedMs = useDocumentStore((state) => state.savedModifiedMs);
   const cursor = useDocumentStore((state) => state.cursor);
   const stats = useDocumentStore((state) => state.stats);
   const selectedWords = useEditorStore((state) => state.selectedWords);
+  const autoSaveOff = useSettingsStore(
+    (state) => state.preferences.autoSaveDelay <= 0,
+  );
 
   const savedAt =
     savedModifiedMs !== null ? formatSavedAt(savedModifiedMs) : "";
@@ -38,7 +50,9 @@ export function StatusBar() {
     : dirty
       ? saveBlocked
         ? "保存暂停"
-        : "待保存"
+        : autoSaveOff
+          ? "未保存 · Ctrl+S"
+          : "待保存"
       : savedAt
         ? `已保存 ${savedAt}`
         : "已保存";
@@ -52,15 +66,51 @@ export function StatusBar() {
       ? new Date(savedModifiedMs).toLocaleString("zh-CN")
       : null,
     saveBlocked,
+    dirty && autoSaveOff && !saveBlocked
+      ? "自动保存已关闭，按 Ctrl+S 保存"
+      : null,
   ]
     .filter(Boolean)
     .join(" · ");
 
   return (
     <footer className="statusbar">
-      <span className="status-path">
-        {docPath ?? (hasWorkspace ? "未选择文件" : "未打开工作区")}
-      </span>
+      {docPath && root ? (
+        // 状态栏一直显示着相对路径，点一下就能拿到完整路径贴到别处。
+        <button
+          type="button"
+          className="status-path status-path-button"
+          title={`${root}${root.includes("\\") ? "\\" : "/"}${docPath.split("/").join(root.includes("\\") ? "\\" : "/")}（点击复制完整路径）`}
+          onClick={() => {
+            const sep = root.includes("\\") ? "\\" : "/";
+            const full = `${root}${sep}${docPath.split("/").join(sep)}`;
+            void copyText(full).then((copied) => {
+              useUiStore
+                .getState()
+                .toast(
+                  copied ? "已复制完整路径" : "复制到剪贴板失败",
+                  copied ? "info" : "error",
+                );
+            });
+          }}
+        >
+          {docPath}
+        </button>
+      ) : (
+        hasWorkspace ? (
+          <span className="status-path">未选择文件</span>
+        ) : (
+          // 空白状态里最该做的就是选个文件夹，直接把它变成入口。
+          <button
+            type="button"
+            className="status-path status-path-button"
+            title="打开文件夹作为工作区（Ctrl+O）"
+            onClick={() => void chooseWorkspace()}
+          >
+            未打开工作区 · 打开文件夹
+          </button>
+        )
+      )}
       <span className="status-meta">
         {docPath ? (
           <>
@@ -79,16 +129,42 @@ export function StatusBar() {
               {stats.words.toLocaleString("zh-CN")} 字
             </span>
             <span>UTF-8</span>
-            <span
-              className={`status-save${dirty ? " status-dirty" : ""}${
-                saveBlocked ? " status-blocked" : ""
-              }`}
-              title={saveTitle || undefined}
-            >
-              <span key={saveKey} className="status-save-text">
-                {saveLabel}
+            {saveBlocked ? (
+              // 自动保存被冲突或错误挡下后，状态栏直接作为重试入口，
+              // 不用让用户自己猜「按 Ctrl+S」。
+              <button
+                type="button"
+                className="status-save status-blocked status-action"
+                title={saveTitle || "点击重试保存"}
+                onClick={() => void saveActiveDocument()}
+              >
+                <span key={saveKey} className="status-save-text">
+                  {saveLabel}
+                </span>
+              </button>
+            ) : (
+              <span
+                className={`status-save${dirty ? " status-dirty" : ""}`}
+                title={saveTitle || undefined}
+              >
+                <span key={saveKey} className="status-save-text">
+                  {saveLabel}
+                </span>
               </span>
-            </span>
+            )}
+            {zenMode ? (
+              // 专注模式收起工具栏后，状态栏留一个可见的出口，
+              // 忘了快捷键也能点着退出。
+              <button
+                type="button"
+                className="status-zen"
+                title="退出专注模式（Ctrl + Shift + F）"
+                aria-label="退出专注模式"
+                onClick={() => useUiStore.getState().toggleZenMode()}
+              >
+                专注
+              </button>
+            ) : null}
           </>
         ) : null}
       </span>

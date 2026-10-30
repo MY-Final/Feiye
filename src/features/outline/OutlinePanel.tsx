@@ -1,4 +1,9 @@
-import { useEffect, useMemo, useRef } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 
 import { jumpToEditorPosition } from "../editor/editor-bridge";
 import { scrollPreviewToHeading } from "../preview/preview-scroll";
@@ -7,12 +12,13 @@ import { useOutlineStore } from "../../stores/outline";
 
 export function OutlinePanel() {
   const headings = useOutlineStore((state) => state.headings);
+  const scrollIndex = useOutlineStore((state) => state.scrollIndex);
   const cursorLine = useDocumentStore((state) => state.cursor.line);
   const docPath = useDocumentStore((state) => state.path);
   const viewMode = useDocumentStore((state) => state.viewMode);
   const listRef = useRef<HTMLDivElement>(null);
 
-  const activeIndex = useMemo(() => {
+  const cursorIndex = useMemo(() => {
     let active = -1;
     for (let index = 0; index < headings.length; index += 1) {
       if (headings[index].line <= cursorLine) active = index;
@@ -20,6 +26,10 @@ export function OutlinePanel() {
     }
     return active;
   }, [headings, cursorLine]);
+
+  // 纯预览模式下以滚动位置为准；编辑 / 分栏模式仍跟随光标。
+  const activeIndex =
+    viewMode === "preview" && scrollIndex !== null ? scrollIndex : cursorIndex;
 
   // 长文档里让当前标题始终留在可见范围，但不抢夺滚动焦点。
   useEffect(() => {
@@ -52,6 +62,8 @@ export function OutlinePanel() {
     const heading = headings[index];
     if (!heading) return;
     if (viewMode === "preview") {
+      // 预览里也同步编辑器光标，切回编辑时能接着改；不抢焦点。
+      jumpToEditorPosition(heading.from, false);
       scrollPreviewToHeading(index);
       return;
     }
@@ -61,18 +73,45 @@ export function OutlinePanel() {
     }
   };
 
+  // 和文件树一致的键盘习惯：↑↓ 换行、Home / End 到首尾；
+  // 跳转沿用按钮原生的 Enter / 空格点击。
+  const handleKeys = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    const item = (event.target as Element | null)?.closest<HTMLElement>(
+      "[data-outline-index]",
+    );
+    if (!item) return;
+
+    const index = Number(item.dataset.outlineIndex);
+    let next: number | null = null;
+    if (event.key === "ArrowDown") next = index + 1;
+    else if (event.key === "ArrowUp") next = index - 1;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = headings.length - 1;
+    if (next === null) return;
+
+    // 越界时也不让页面自己滚动，焦点留在最后一项。
+    event.preventDefault();
+    listRef.current
+      ?.querySelector<HTMLElement>(`[data-outline-index="${next}"]`)
+      ?.focus();
+  };
+
   return (
     <div
       className="outline-list"
       ref={listRef}
       role="tree"
       aria-label="文档大纲"
+      onKeyDown={handleKeys}
     >
       {headings.map((heading, index) => (
         <button
           key={heading.id}
           type="button"
           role="treeitem"
+          aria-level={heading.level}
+          aria-selected={index === activeIndex}
           className={`outline-item${index === activeIndex ? " active" : ""}`}
           data-outline-index={index}
           style={{ paddingLeft: 10 + (heading.level - 1) * 13 }}

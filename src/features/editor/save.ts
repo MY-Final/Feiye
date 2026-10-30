@@ -79,14 +79,21 @@ async function performSave(options: SaveOptions): Promise<boolean> {
         const choice = await useUiStore.getState().ask({
           title: "文件已被其他程序修改",
           message:
-            "磁盘上的内容与编辑器不一致，本次保存没有写入。重新加载会丢弃当前未保存的修改。",
+            "磁盘上的内容与编辑器不一致，本次保存没有写入。可以直接另存一份副本，两边的修改都保留；重新加载会丢弃当前未保存的修改。",
           buttons: [
+            { label: "另存副本…", value: "copy", tone: "primary" },
             { label: "重新加载", value: "reload", tone: "danger" },
             { label: "取消", value: "cancel" },
           ],
         });
         if (choice === "reload") {
           await reloadActiveDocument();
+        } else if (choice === "copy") {
+          // save 与 workspace-actions 互相引用，用动态导入避免静态循环依赖。
+          const { saveDocumentAs } = await import(
+            "../workspace/workspace-actions"
+          );
+          await saveDocumentAs();
         }
       }
     } else {

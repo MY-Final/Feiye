@@ -56,10 +56,52 @@ async function restoreExpanded(root: string): Promise<void> {
 
   const expanded: Record<string, boolean> = {};
   for (const path of paths) expanded[path] = true;
-  useWorkspaceStore.setState({ expanded });
+  // 与当前状态合并：目录改名后会先把展开状态改成新路径，不能被旧列表覆盖。
+  useWorkspaceStore.setState((state) => ({
+    expanded: { ...expanded, ...state.expanded },
+  }));
   await Promise.all(
     paths.map((path) => useWorkspaceStore.getState().loadDir(path, true)),
   );
+}
+
+const RECENT_KEY = "recentDocuments";
+const RECENT_LIMIT = 5;
+
+/** 各工作区最近打开的文档；同样只在第一次读取后常驻。 */
+let recentByRoot: Record<string, string[]> | null = null;
+
+async function readRecentMap(): Promise<Record<string, string[]>> {
+  if (recentByRoot) return recentByRoot;
+
+  const raw = await getSetting<unknown>(RECENT_KEY);
+  const map: Record<string, string[]> = {};
+  if (raw && typeof raw === "object") {
+    for (const [root, paths] of Object.entries(raw as Record<string, unknown>)) {
+      if (Array.isArray(paths)) {
+        map[root] = paths.filter(
+          (path): path is string => typeof path === "string",
+        );
+      }
+    }
+  }
+  recentByRoot = map;
+  return map;
+}
+
+function persistRecent(root: string | null, paths: string[]): void {
+  if (!root) return;
+  void (async () => {
+    const map = await readRecentMap();
+    recentByRoot = { ...map, [root]: paths };
+    await setSetting(RECENT_KEY, recentByRoot);
+  })();
+}
+
+async function restoreRecent(root: string): Promise<void> {
+  const map = await readRecentMap();
+  if (useWorkspaceStore.getState().root !== root) return;
+  useWorkspaceStore.setState({ recent: map[root] ?? [] });
 }
 
 interface WorkspaceStore {
@@ -68,14 +110,25 @@ interface WorkspaceStore {
   children: Record<string, Entry[]>;
   expanded: Record<string, boolean>;
   loading: Record<string, boolean>;
+  /** 读取失败的目录：树里给出重试入口，而不是留一块空白。 */
+  failed: Record<string, boolean>;
+  /** 当前工作区最近打开的文档，最新的在前。 */
+  recent: string[];
 
   setWorkspace(info: WorkspaceInfo | null): void;
+  noteRecent(relPath: string): void;
+  /** 重命名或删除后同步「最近打开」，避免留下打不开的旧路径。 */
+  updateRecent(oldPath: string, nextPath: string | null): void;
+  /** 一键清空最近打开；只影响历史列表，不动磁盘文件。 */
+  clearRecent(): void;
   loadDir(relPath: string, silent?: boolean): Promise<void>;
   refreshDir(relPath: string): Promise<void>;
   refreshTree(): Promise<void>;
   toggleDir(relPath: string): Promise<void>;
   invalidateDir(relPath: string): void;
   expandDir(relPath: string): Promise<void>;
+  /** 批量展开目录并只持久化一次；用于目录改名后恢复展开状态。 */
+  expandDirs(relPaths: string[]): Promise<void>;
   collapseAll(): void;
 }
 
@@ -83,20 +136,63 @@ const EMPTY_MAPS = {
   children: {} as Record<string, Entry[]>,
   expanded: {} as Record<string, boolean>,
   loading: {} as Record<string, boolean>,
+  failed: {} as Record<string, boolean>,
 };
 
 export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   root: null,
   name: null,
+  recent: [],
   ...EMPTY_MAPS,
 
   setWorkspace(info) {
     set({
       root: info?.root ?? null,
       name: info?.name ?? null,
+      recent: [],
       ...EMPTY_MAPS,
     });
-    if (info) void restoreExpanded(info.root);
+    if (info) {
+      void restoreExpanded(info.root);
+      void restoreRecent(info.root);
+    }
+  },
+
+  noteRecent(relPath) {
+    const root = get().root;
+    if (!root) return;
+    const next = [
+      relPath,
+      ...get().recent.filter((path) => path !== relPath),
+    ].slice(0, RECENT_LIMIT);
+    set({ recent: next });
+    persistRecent(root, next);
+  },
+
+  updateRecent(oldPath, nextPath) {
+    const root = get().root;
+    if (!root) return;
+    const current = get().recent;
+    // 目录改名 / 删除时，它下面的最近文档也要一起换前缀或移除。
+    const next = current
+      .map((path) => {
+        if (path === oldPath) return nextPath;
+        if (!path.startsWith(`${oldPath}/`)) return path;
+        return nextPath === null ? null : `${nextPath}${path.slice(oldPath.length)}`;
+      })
+      .filter((path): path is string => path !== null);
+    if (next.length === current.length && next.every((path, index) => path === current[index])) {
+      return;
+    }
+    set({ recent: next });
+    persistRecent(root, next);
+  },
+
+  clearRecent() {
+    const root = get().root;
+    if (!root || get().recent.length === 0) return;
+    set({ recent: [] });
+    persistRecent(root, []);
   },
 
   async loadDir(relPath, silent = false) {
@@ -108,9 +204,13 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       set((state) => ({
         children: { ...state.children, [relPath]: entries },
         loading: { ...state.loading, [relPath]: false },
+        failed: { ...state.failed, [relPath]: false },
       }));
     } catch (error) {
-      set((state) => ({ loading: { ...state.loading, [relPath]: false } }));
+      set((state) => ({
+        loading: { ...state.loading, [relPath]: false },
+        failed: { ...state.failed, [relPath]: true },
+      }));
       if (silent) return;
       useUiStore.getState().toast(`读取目录失败：${describeError(error)}`, "error");
     }
@@ -127,10 +227,14 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
   /** 重新读取根目录与所有已展开的目录。 */
   async refreshTree() {
-    const { expanded, children } = get();
-    const dirs = [""];
+    const { expanded, children, loading } = get();
+    const dirs: string[] = loading[""] ? [] : [""];
     for (const [relPath, open] of Object.entries(expanded)) {
-      if (open && children[relPath]) dirs.push(relPath);
+      // 正在加载的目录跳过：refreshDir 会先清空子项，
+      // 与进行中的 loadDir 撞车会留下空目录。
+      if (open && children[relPath] && !loading[relPath]) {
+        dirs.push(relPath);
+      }
     }
     await Promise.all(dirs.map((relPath) => get().refreshDir(relPath)));
   },
@@ -158,6 +262,17 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     if (!get().children[relPath]) {
       await get().loadDir(relPath);
     }
+  },
+
+  async expandDirs(relPaths) {
+    if (relPaths.length === 0) return;
+    const expanded = { ...get().expanded };
+    for (const relPath of relPaths) expanded[relPath] = true;
+    set({ expanded });
+    persistExpanded(get().root, expanded);
+    await Promise.all(
+      relPaths.map((relPath) => get().loadDir(relPath, true)),
+    );
   },
 
   invalidateDir(relPath) {

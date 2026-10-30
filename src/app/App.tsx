@@ -5,23 +5,40 @@ import { DialogHost } from "../components/Dialog";
 import { ToastHost } from "../components/Toast";
 import { EditorPane } from "../features/editor/EditorPane";
 import { flushAutoSave } from "../features/editor/autosave";
-import { refreshEditorLayout } from "../features/editor/editor-bridge";
-import { guardUnsaved, saveActiveDocument } from "../features/editor/save";
+import {
+  getEditorView,
+  openEditorSearch,
+  refreshEditorLayout,
+} from "../features/editor/editor-bridge";
+import {
+  guardUnsaved,
+  reloadActiveDocument,
+  saveActiveDocument,
+} from "../features/editor/save";
 import { PreviewPane } from "../features/preview/PreviewPane";
 import { SettingsDialog } from "../features/settings/SettingsDialog";
 import { WorkspaceSidebar } from "../features/workspace/WorkspaceSidebar";
 import {
+  changeViewMode,
   chooseWorkspace,
   createMarkdownFile,
   newDocumentNearActive,
+  openFile,
   renameActiveDocument,
   restoreLastWorkspace,
+  saveDocumentAs,
 } from "../features/workspace/workspace-actions";
 import { APP_NAME, APP_TAGLINE } from "../lib/app-info";
-import { getSetting, setSetting } from "../lib/tauri";
+import { baseName, parentRel } from "../lib/paths";
+import { getSetting, isAppError, readFile, setSetting } from "../lib/tauri";
 import { isViewMode } from "../lib/view-modes";
-import { useDocumentStore } from "../stores/document";
-import { flushPreferences, FONT_FAMILY_STACKS, useSettingsStore } from "../stores/settings";
+import { useDocumentStore, type ViewMode } from "../stores/document";
+import {
+  flushPreferences,
+  FONT_FAMILY_STACKS,
+  PREFERENCE_LIMITS,
+  useSettingsStore,
+} from "../stores/settings";
 import { useUiStore } from "../stores/ui";
 import { useWorkspaceStore } from "../stores/workspace";
 import {
@@ -36,23 +53,33 @@ import "./App.css";
 
 let bootstrapped = false;
 
+/** Ctrl+E 切到阅读时记下当前的编辑态，再按一次还原回去。 */
+let lastEditingMode: ViewMode = "source";
+
+/** 回到窗口时刷新文件树的最小间隔，避免反复 Alt-Tab 时频繁读盘。 */
+const TREE_REFRESH_INTERVAL = 2000;
+let lastTreeRefresh = 0;
+
+/** 「最近打开」和文件树用同一套显示规则：按偏好隐去 Markdown 扩展名。 */
+function noteLabel(name: string, hideExt: boolean): string {
+  return hideExt ? name.replace(/\.(md|markdown|mdx)$/i, "") : name;
+}
+
 function dialogOpen(): boolean {
   const ui = useUiStore.getState();
   return Boolean(ui.confirm || ui.prompt || ui.settingsOpen);
 }
 
-function isTextEntry(target: EventTarget | null): boolean {
-  return (
-    target instanceof HTMLElement &&
-    Boolean(target.closest("input, textarea, select, [contenteditable='true']"))
-  );
-}
-
 export default function App() {
   const root = useWorkspaceStore((state) => state.root);
+  const workspaceName = useWorkspaceStore((state) => state.name);
+  const recent = useWorkspaceStore((state) => state.recent);
   const docPath = useDocumentStore((state) => state.path);
+  const docName = useDocumentStore((state) => state.name);
+  const dirty = useDocumentStore((state) => state.dirty);
   const viewMode = useDocumentStore((state) => state.viewMode);
   const sidebarVisible = useUiStore((state) => state.sidebarVisible);
+  const zenMode = useUiStore((state) => state.zenMode);
   const preferences = useSettingsStore((state) => state.preferences);
   const [splitRatio, setSplitRatio] = useState(DEFAULT_SPLIT_RATIO);
 
@@ -62,10 +89,15 @@ export default function App() {
     bootstrapped = true;
 
     void (async () => {
-      const [savedMode, savedRatio] = await Promise.all([
+      const [savedMode, savedRatio, savedSidebar] = await Promise.all([
         getSetting<unknown>("viewMode"),
         getSetting<unknown>("splitRatio"),
+        getSetting<unknown>("sidebarVisible"),
       ]);
+      // 上次收起了侧栏，这次启动也保持收起（直接写 state，避免回写设置）。
+      if (typeof savedSidebar === "boolean") {
+        useUiStore.setState({ sidebarVisible: savedSidebar });
+      }
       const preferences = useSettingsStore.getState().preferences;
       const preferredView =
         preferences.defaultView === "last"
@@ -79,6 +111,28 @@ export default function App() {
       }
       await restoreLastWorkspace();
     })();
+  }, []);
+
+  // Windows 下关掉 Tauri 的原生拖放拦截后，文件由 WebView 自己分发：
+  // 编辑区和预览区会拦下来插入图片，其它位置也统一挡住，别让 WebView
+  // 把拖进来的文件当成页面导航打开。
+  useEffect(() => {
+    const hasFiles = (event: DragEvent) =>
+      Boolean(event.dataTransfer?.types.includes("Files"));
+    const onDragOver = (event: DragEvent) => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+    };
+    const onDrop = (event: DragEvent) => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+    };
+    window.addEventListener("dragover", onDragOver);
+    window.addEventListener("drop", onDrop);
+    return () => {
+      window.removeEventListener("dragover", onDragOver);
+      window.removeEventListener("drop", onDrop);
+    };
   }, []);
 
   // 关闭窗口前拦截未保存的修改。
@@ -141,8 +195,20 @@ export default function App() {
 
       if (dialogOpen()) return;
 
+      // 查找面板等输入框里，组合键交给输入框自己处理（全选、粘贴、再次查找）；
+      // 只保留"保存"这个希望随时生效的动作。
+      const target = event.target;
+      if (
+        (target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement) &&
+        !(mod && event.key.toLowerCase() === "s")
+      ) {
+        return;
+      }
+
       if (event.key === "F2") {
-        if (isTextEntry(event.target)) return;
+        // 正文是可编辑区域，光标在里面时也要响应，才和工具栏的 F2 提示一致。
+        // 重命名输入框等对话框场景已由上面的 dialogOpen 拦截。
         event.preventDefault();
         void renameActiveDocument();
         return;
@@ -151,27 +217,106 @@ export default function App() {
       if (!(event.ctrlKey || event.metaKey)) return;
 
       switch (event.key.toLowerCase()) {
+        case "f":
+          // 带 Shift 是专注模式：写作时眼前只剩正文，不再先去找查找框。
+          if (event.shiftKey) {
+            // 专注是"专心写这一篇"，没有打开笔记时说明一句，别让人以为按键失灵。
+            if (!useDocumentStore.getState().path) {
+              useUiStore.getState().toast("先打开一篇笔记再进入专注模式");
+              break;
+            }
+            event.preventDefault();
+            useUiStore.getState().toggleZenMode();
+            break;
+          }
+          // 预览模式下编辑器被 CSS 隐藏，CodeMirror 的查找面板收不到焦点，
+          // Ctrl+F 会毫无反应；先切到分栏，再打开查找面板。
+          if (!useDocumentStore.getState().path) {
+            useUiStore.getState().toast("先打开一篇笔记再查找");
+            break;
+          }
+          event.preventDefault();
+          if (useDocumentStore.getState().viewMode === "preview") {
+            useUiStore.getState().toast("已切到分栏，方便查看搜索结果", "info");
+            void changeViewMode("split").then(openEditorSearch);
+          } else {
+            openEditorSearch();
+          }
+          break;
         case "n":
           event.preventDefault();
           if (useWorkspaceStore.getState().root) {
             void newDocumentNearActive();
+          } else {
+            useUiStore.getState().toast("先打开一个工作区再新建笔记");
           }
           break;
         case "s":
           event.preventDefault();
-          void saveActiveDocument();
+          // 一篇都没打开时保存不会发生任何事，说清楚，别让人以为键位坏了。
+          if (!useDocumentStore.getState().path) {
+            useUiStore.getState().toast("先打开一篇笔记再保存");
+            break;
+          }
+          if (event.shiftKey) {
+            void saveDocumentAs();
+          } else {
+            void saveActiveDocument();
+          }
           break;
         case "o":
           event.preventDefault();
           void chooseWorkspace();
           break;
-        case "b":
-          // 编辑器内 Ctrl+B 是加粗，已由 keymap preventDefault。
+        case "e": {
+          // 阅读 / 编辑快速切换；分栏状态会被记住，切回来还原。
+          if (!useDocumentStore.getState().path) {
+            useUiStore.getState().toast("先打开一篇笔记再切换视图");
+            break;
+          }
           event.preventDefault();
-          if (useWorkspaceStore.getState().root) {
-            useUiStore.getState().toggleSidebar();
+          const current = useDocumentStore.getState().viewMode;
+          if (current === "preview") {
+            void changeViewMode(lastEditingMode);
+          } else {
+            lastEditingMode = current;
+            void changeViewMode("preview");
           }
           break;
+        }
+        case "b": {
+          // 编辑器内 Ctrl+B 是加粗，已由 keymap preventDefault。
+          event.preventDefault();
+          if (!useWorkspaceStore.getState().root) break;
+          const {
+            zenMode,
+            toggleZenMode,
+            toggleSidebar,
+            sidebarVisible,
+            setSidebarVisible,
+          } = useUiStore.getState();
+          if (zenMode) {
+            // 专注模式里侧栏本来就收起，再按开关侧栏显得没反应：
+            // 这里直接退出专注，并把侧栏打开，符合按键的字面意思。
+            toggleZenMode();
+            if (!sidebarVisible) setSidebarVisible(true);
+            break;
+          }
+          toggleSidebar();
+          break;
+        }
+        // 正文太小 / 太大时不用开设置，直接按键调字号。
+        case "=":
+        case "+":
+        case "-": {
+          event.preventDefault();
+          const { preferences, update } = useSettingsStore.getState();
+          const { min, max, step } = PREFERENCE_LIMITS.fontSize;
+          const delta = event.key === "-" ? -step : step;
+          const next = Math.min(max, Math.max(min, preferences.fontSize + delta));
+          if (next !== preferences.fontSize) update({ fontSize: next });
+          break;
+        }
         default:
           break;
       }
@@ -180,6 +325,117 @@ export default function App() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  // 窗口重新获得焦点时，若磁盘文件被其他程序改过，提示重新加载。
+  useEffect(() => {
+    let checking = false;
+    let lastSeen: number | null = null;
+    // 同一个路径只提醒一次，避免每次切回窗口都弹框。
+    let missingPrompted: string | null = null;
+
+    const checkExternalChange = async () => {
+      if (checking) return;
+      const doc = useDocumentStore.getState();
+      if (!doc.path || doc.dirty || doc.saving || doc.saveBlocked) return;
+
+      checking = true;
+      try {
+        const file = await readFile(doc.path);
+        const current = useDocumentStore.getState();
+        if (current.path !== doc.path || current.dirty) return;
+        if (file.modifiedMs === current.savedModifiedMs) return;
+        if (lastSeen === file.modifiedMs) return;
+        lastSeen = file.modifiedMs;
+
+        const choice = await useUiStore.getState().ask({
+          title: "文件已被其他程序修改",
+          message: "磁盘上的内容与编辑器不一致。重新加载会显示最新内容。",
+          buttons: [
+            { label: "重新加载", value: "reload", tone: "primary" },
+            { label: "稍后", value: "later" },
+          ],
+        });
+        if (choice === "reload") await reloadActiveDocument();
+      } catch (error) {
+        // 文件在应用外被移动或删除：编辑器里的内容还在，但状态栏还写着「已保存」，
+        // 不提醒的话容易以为磁盘上仍有这篇笔记，关掉应用就真丢了。
+        if (
+          isAppError(error) &&
+          error.code === "not-found" &&
+          missingPrompted !== doc.path
+        ) {
+          missingPrompted = doc.path;
+          const latest = useDocumentStore.getState();
+          if (latest.path !== doc.path) return;
+          const choice = await useUiStore.getState().ask({
+            title: "文件已不在磁盘上",
+            message: `「${latest.name ?? doc.path}」可能已被移动或删除。编辑器里的内容仍然保留，可以另存一份。`,
+            buttons: [
+              { label: "另存为…", value: "save-as", tone: "primary" },
+              { label: "保留", value: "keep" },
+            ],
+          });
+          if (choice === "save-as") await saveDocumentAs();
+        }
+        // 其余读取失败（权限、占用）保持现状，下次聚焦再试。
+      } finally {
+        checking = false;
+      }
+    };
+
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      void checkExternalChange();
+
+      // 从外部回到窗口时顺带刷新文件树，外面新建 / 改名的笔记能直接出现。
+      const now = Date.now();
+      const workspace = useWorkspaceStore.getState();
+      if (workspace.root && now - lastTreeRefresh >= TREE_REFRESH_INTERVAL) {
+        lastTreeRefresh = now;
+        void workspace.refreshTree();
+      }
+    };
+    window.addEventListener("focus", onVisible);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("focus", onVisible);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
+
+  // 专注模式里把当前笔记删掉 / 关掉后没有正文可看，自动退出并提示。
+  useEffect(() => {
+    if (zenMode && !docPath) {
+      useUiStore.getState().toggleZenMode();
+    }
+  }, [zenMode, docPath]);
+
+  // 从工具栏按钮进入专注模式时焦点还在那个按钮上，按钮随后被收起，
+  // 焦点掉到页面本身，敲键盘没反应；这里把焦点交回正文。
+  useEffect(() => {
+    if (!zenMode) return;
+    const frame = requestAnimationFrame(() => {
+      if (useDocumentStore.getState().viewMode !== "preview") {
+        getEditorView()?.focus();
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [zenMode]);
+
+  // 系统任务栏 / Alt-Tab 里也显示当前笔记名，未保存时带圆点；
+  // 还没选笔记时显示库名，开着几个库也能分清是哪一个。
+  useEffect(() => {
+    const title = docName
+      ? `${dirty ? "• " : ""}${noteLabel(docName, preferences.hideFileExtensions)} — ${APP_NAME}`
+      : workspaceName
+        ? `${workspaceName} — ${APP_NAME}`
+        : APP_NAME;
+    void getCurrentWindow()
+      .setTitle(title)
+      .catch(() => {
+        // 非 Tauri 环境或权限缺失时保留默认标题。
+      });
+  }, [docName, dirty, workspaceName, preferences.hideFileExtensions]);
 
   // 字号、行高、行宽或行号变化后，让 CodeMirror 重新测量排版指标。
   useEffect(() => {
@@ -198,10 +454,11 @@ export default function App() {
   return (
     <div className="app">
       <TitleBar />
-      <Toolbar />
+      {/* 专注模式把工具栏和侧栏都收起来，退出后按原来的偏好还原。 */}
+      {zenMode ? null : <Toolbar />}
 
       <div className="app-body">
-        {hasWorkspace && sidebarVisible ? <WorkspaceSidebar /> : null}
+        {hasWorkspace && sidebarVisible && !zenMode ? <WorkspaceSidebar /> : null}
 
         <main
           className={`workspace-main mode-${viewMode}${preferences.lineNumbers ? "" : " hide-line-numbers"}`}
@@ -243,6 +500,63 @@ export default function App() {
                     >
                       新建文件
                     </button>
+                    {recent.length > 0 ? (
+                      <>
+                        <div className="recent-heading">
+                          <p>最近打开</p>
+                          <button
+                            type="button"
+                            className="recent-clear"
+                            onClick={() =>
+                              useWorkspaceStore.getState().clearRecent()
+                            }
+                          >
+                            清空
+                          </button>
+                        </div>
+                        {recent.map((relPath) => (
+                          <div key={relPath} className="recent-row">
+                            <button
+                              type="button"
+                              className="btn ghost recent-file"
+                              title={relPath}
+                              onClick={() =>
+                                void openFile({
+                                  relPath,
+                                  name: baseName(relPath),
+                                  isDir: false,
+                                })
+                              }
+                            >
+                              <span className="recent-name">
+                                {noteLabel(
+                                  baseName(relPath),
+                                  preferences.hideFileExtensions,
+                                )}
+                              </span>
+                              {parentRel(relPath) ? (
+                                <span className="recent-dir">
+                                  {parentRel(relPath)}
+                                </span>
+                              ) : null}
+                            </button>
+                            <button
+                              type="button"
+                              className="recent-remove"
+                              title="从「最近打开」移除"
+                              aria-label={`从「最近打开」移除 ${baseName(relPath)}`}
+                              onClick={() =>
+                                useWorkspaceStore
+                                  .getState()
+                                  .updateRecent(relPath, null)
+                              }
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                      </>
+                    ) : null}
                   </div>
                 </div>
               ) : null}

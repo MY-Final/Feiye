@@ -1,14 +1,19 @@
 import {
   clearRecovery,
+  createFile as apiCreateFile,
   deleteRecovery,
   describeError,
   listRecoveries,
   readFile,
   saveRecovery,
+  writeFile as apiWriteFile,
   type RecoverySnapshot,
 } from "../../lib/tauri";
+import { baseName, parentRel } from "../../lib/paths";
 import { useDocumentStore } from "../../stores/document";
 import { useUiStore } from "../../stores/ui";
+import { useWorkspaceStore } from "../../stores/workspace";
+import { rememberLastDocument } from "../workspace/last-document";
 import { getEditorText, setEditorDocument } from "./editor-bridge";
 import { requestPreview } from "../preview/preview-controller";
 
@@ -76,6 +81,44 @@ export async function discardRecoveryForPath(relPath: string): Promise<void> {
   await clearRecoverySnapshot(relPath);
 }
 
+/**
+ * 文档路径变化后（重命名文件或所在目录），把恢复副本迁到新路径。
+ * 与自动保存共用写入锁，避免旧副本覆盖刚写入的新副本；
+ * 新路径已有副本时只删旧的，保留更新的那份。
+ */
+export async function migrateRecoverySnapshot(
+  oldPath: string,
+  nextPath: string,
+): Promise<void> {
+  const run = (async () => {
+    try {
+      if (writeInFlight) await writeInFlight;
+      const snapshots = await listRecoveries();
+      const previous = snapshots.find((item) => item.relPath === oldPath);
+      if (!previous) return;
+      if (snapshots.some((item) => item.relPath === nextPath)) {
+        await deleteRecovery(previous.id);
+        return;
+      }
+      await saveRecovery(
+        nextPath,
+        previous.name,
+        previous.content,
+        previous.baseModifiedMs,
+      );
+      await deleteRecovery(previous.id);
+    } catch {
+      // 迁移失败时保留旧副本，下次启动仍会提示，不会丢内容。
+    }
+  })();
+
+  writeInFlight = run;
+  void run.finally(() => {
+    if (writeInFlight === run) writeInFlight = null;
+  });
+  await run;
+}
+
 async function deleteSnapshot(id: string): Promise<void> {
   try {
     await deleteRecovery(id);
@@ -106,12 +149,43 @@ async function restoreSnapshot(snapshot: RecoverySnapshot): Promise<boolean> {
 }
 
 /**
+ * 原文件已经不在磁盘上时，把副本写回原来的路径救回内容。
+ * 父目录也可能被一起删掉了，创建失败就保留副本，下次启动还能再试。
+ */
+async function recreateFromSnapshot(snapshot: RecoverySnapshot): Promise<void> {
+  try {
+    const parent = parentRel(snapshot.relPath);
+    const created = await apiCreateFile(parent, baseName(snapshot.relPath));
+    const meta = await apiWriteFile(created.relPath, snapshot.content, null);
+    await deleteSnapshot(snapshot.id);
+
+    const doc = useDocumentStore.getState();
+    doc.setDocument(created.relPath, created.name, meta.modifiedMs);
+    setEditorDocument(snapshot.content);
+    requestPreview(snapshot.content, true);
+    void rememberLastDocument(created.relPath);
+
+    const workspace = useWorkspaceStore.getState();
+    workspace.noteRecent(created.relPath);
+    await workspace.refreshDir(parent);
+    if (parent) await workspace.expandDir(parent);
+
+    useUiStore
+      .getState()
+      .toast(`已把「${created.name}」恢复到原来的位置`, "success");
+  } catch (error) {
+    useUiStore
+      .getState()
+      .toast(`恢复失败：${describeError(error)}`, "error");
+  }
+}
+
+/**
  * 启动或切换工作区后检查恢复副本。一次只恢复一篇，其余留到下次启动，
  * 避免在已打开文档时悄悄替换内容。
  */
 export async function promptPendingRecoveries(): Promise<void> {
   if (prompting) return;
-  if (useDocumentStore.getState().path) return;
 
   prompting = true;
   try {
@@ -119,6 +193,11 @@ export async function promptPendingRecoveries(): Promise<void> {
     if (snapshots.length === 0) return;
 
     for (const snapshot of snapshots) {
+      // 有其他文档开着时先不动编辑器；但当前文档自己的副本仍要提示，
+      // 否则启动时自动打开上次文档会把崩溃恢复整个挡掉。
+      const openPath = useDocumentStore.getState().path;
+      if (openPath && openPath !== snapshot.relPath) continue;
+
       let fileContent: string | null = null;
       let fileModifiedMs = 0;
       let missing = false;
@@ -143,12 +222,13 @@ export async function promptPendingRecoveries(): Promise<void> {
       const choice = await useUiStore.getState().ask({
         title: "发现未保存的恢复副本",
         message: missing
-          ? `「${snapshot.name}」有一份 ${formatTime(snapshot.savedAt)} 的恢复副本，但原文件已经不在。副本仍保存在本地，可以先丢弃或稍后处理。`
+          ? `「${snapshot.name}」有一份 ${formatTime(snapshot.savedAt)} 的恢复副本，但原文件已经不在。可以把它写回原来的位置，或丢弃。`
           : `「${snapshot.name}」有一份 ${formatTime(snapshot.savedAt)} 的恢复副本。恢复只会放回编辑器，不会立即写入磁盘。${
               changedOnDisk ? "（磁盘上的文件在副本之后被修改过。）" : ""
             }`,
         buttons: missing
           ? [
+              { label: "恢复为文件", value: "recreate", tone: "primary" },
               { label: "丢弃副本", value: "discard", tone: "danger" },
               { label: "稍后", value: "later" },
             ]
@@ -166,6 +246,10 @@ export async function promptPendingRecoveries(): Promise<void> {
       }
       if (choice === "restore") {
         await restoreSnapshot(snapshot);
+        return;
+      }
+      if (choice === "recreate") {
+        await recreateFromSnapshot(snapshot);
         return;
       }
     }

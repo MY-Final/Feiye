@@ -64,19 +64,44 @@ export function TitleBar() {
   const docName = useDocumentStore((state) => state.name);
   const dirty = useDocumentStore((state) => state.dirty);
   const sidebarVisible = useUiStore((state) => state.sidebarVisible);
+  const zenMode = useUiStore((state) => state.zenMode);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
   const toggleSettings = useUiStore((state) => state.toggleSettings);
   const controls = useWindowControls();
 
   return (
-    <header className="titlebar" data-tauri-drag-region="deep">
+    <header
+      className="titlebar"
+      data-tauri-drag-region="deep"
+      // 自绘标题栏没有系统默认行为，双击空白处最大化 / 还原是大家的肌肉记忆。
+      onDoubleClick={(event) => {
+        if ((event.target as HTMLElement).closest("button")) return;
+        void controls.toggleMaximize();
+      }}
+    >
       <div className="titlebar-left">
         <button
           type="button"
           className="icon-btn"
-          title={sidebarVisible ? "收起侧栏 (Ctrl+B)" : "展开侧栏 (Ctrl+B)"}
+          title={
+            zenMode
+              ? "退出专注模式并显示侧栏"
+              : sidebarVisible
+                ? "收起侧栏 (Ctrl+B)"
+                : "展开侧栏 (Ctrl+B)"
+          }
           disabled={!root}
-          onClick={toggleSidebar}
+          onClick={() => {
+            // 专注模式里侧栏是被整体收起的，单纯切换可见性看不出变化；
+            // 和 Ctrl+B 一样，先退出专注再把侧栏打开。
+            const ui = useUiStore.getState();
+            if (ui.zenMode) {
+              ui.toggleZenMode();
+              if (!ui.sidebarVisible) ui.setSidebarVisible(true);
+              return;
+            }
+            toggleSidebar();
+          }}
         >
           <SidebarIcon />
         </button>

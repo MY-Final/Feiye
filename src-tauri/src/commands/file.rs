@@ -168,6 +168,19 @@ fn create_folder_in(root: &Path, parent_rel: &str, name: &str) -> Result<Entry, 
     })
 }
 
+/// 校验并返回「在资源管理器中显示」的目标；只接受工作区内已存在的路径。
+fn reveal_target(root: &Path, rel: &str) -> Result<std::path::PathBuf, AppError> {
+    let path = fs_path::resolve_in_workspace(root, rel)?;
+    if !path.exists() {
+        return Err(AppError::NotFound(if rel.is_empty() {
+            root.display().to_string()
+        } else {
+            rel.to_string()
+        }));
+    }
+    Ok(path)
+}
+
 fn rename_in(root: &Path, rel: &str, new_name: &str) -> Result<Entry, AppError> {
     let clean = fs_path::normalize_rel(rel)?;
     if clean.is_empty() {
@@ -194,9 +207,18 @@ fn rename_in(root: &Path, rel: &str, new_name: &str) -> Result<Entry, AppError> 
     let target = parent.join(new_name);
 
     if target.exists() {
-        return Err(AppError::AlreadyExists(fs_path::join_rel(
-            parent_rel, new_name,
-        )));
+        // Windows / macOS 的文件系统不区分大小写：只改大小写时
+        // target 指向的正是源文件本身，不该报「已存在」。
+        let same_file = target
+            .canonicalize()
+            .ok()
+            .zip(source.canonicalize().ok())
+            .is_some_and(|(a, b)| a == b);
+        if !same_file {
+            return Err(AppError::AlreadyExists(fs_path::join_rel(
+                parent_rel, new_name,
+            )));
+        }
     }
 
     fs::rename(&source, &target)?;
@@ -204,6 +226,71 @@ fn rename_in(root: &Path, rel: &str, new_name: &str) -> Result<Entry, AppError> 
     Ok(Entry {
         name: new_name.to_string(),
         rel_path: fs_path::join_rel(parent_rel, new_name),
+        is_dir,
+    })
+}
+
+/// 把文件 / 文件夹移到另一个目录下；文件名保持不变。
+/// 目标目录必须在工作区内且确实存在，目录不能移进自己里面。
+fn move_in(root: &Path, rel: &str, new_parent: &str) -> Result<Entry, AppError> {
+    let clean = fs_path::normalize_rel(rel)?;
+    if clean.is_empty() {
+        return Err(AppError::InvalidPath("不能移动工作区根目录".into()));
+    }
+
+    let parent_rel = fs_path::normalize_rel(new_parent)?;
+    let source = fs_path::resolve_in_workspace(root, &clean)?;
+    let meta = fs::symlink_metadata(&source).map_err(|_| AppError::NotFound(clean.clone()))?;
+    if meta.file_type().is_symlink() {
+        return Err(AppError::InvalidPath("不支持操作符号链接".into()));
+    }
+
+    // 把文件夹拖进它自己或它的子目录，会让整棵子树从工作区里消失。
+    if !parent_rel.is_empty()
+        && (parent_rel == clean || parent_rel.starts_with(&format!("{clean}/")))
+    {
+        return Err(AppError::InvalidPath("不能把文件夹移动到它自己里面".into()));
+    }
+
+    let parent_dir = if parent_rel.is_empty() {
+        root.to_path_buf()
+    } else {
+        fs_path::resolve_in_workspace(root, &parent_rel)?
+    };
+    let parent_meta = fs::metadata(&parent_dir)
+        .map_err(|_| AppError::NotFound(parent_rel.clone()))?;
+    if !parent_meta.is_dir() {
+        return Err(AppError::InvalidPath("目标不是文件夹".into()));
+    }
+
+    let is_dir = meta.is_dir();
+    let rel_parent = fs_path::parent_rel(&clean);
+    let name = clean[rel_parent.len()..].trim_start_matches('/').to_string();
+    let target = parent_dir.join(&name);
+    let target_rel = fs_path::join_rel(&parent_rel, &name);
+
+    if target.exists() {
+        let same_file = target
+            .canonicalize()
+            .ok()
+            .zip(source.canonicalize().ok())
+            .is_some_and(|(a, b)| a == b);
+        if !same_file {
+            return Err(AppError::AlreadyExists(target_rel));
+        }
+        // 拖回原来的目录：什么都不用做。
+        return Ok(Entry {
+            name,
+            rel_path: target_rel,
+            is_dir,
+        });
+    }
+
+    fs::rename(&source, &target)?;
+
+    Ok(Entry {
+        name,
+        rel_path: target_rel,
         is_dir,
     })
 }
@@ -270,6 +357,14 @@ pub fn create_folder(
 }
 
 #[tauri::command]
+pub fn reveal_entry(rel_path: String, state: State<'_, WorkspaceState>) -> Result<(), AppError> {
+    let root = state.root()?;
+    let path = reveal_target(&root, &rel_path)?;
+    tauri_plugin_opener::reveal_item_in_dir(&path)
+        .map_err(|err| AppError::Io(format!("无法打开资源管理器：{err}")))
+}
+
+#[tauri::command]
 pub fn rename_entry(
     rel_path: String,
     new_name: String,
@@ -277,6 +372,16 @@ pub fn rename_entry(
 ) -> Result<Entry, AppError> {
     let root = state.root()?;
     rename_in(&root, &rel_path, &new_name)
+}
+
+#[tauri::command]
+pub fn move_entry(
+    rel_path: String,
+    new_parent: String,
+    state: State<'_, WorkspaceState>,
+) -> Result<Entry, AppError> {
+    let root = state.root()?;
+    move_in(&root, &rel_path, &new_parent)
 }
 
 #[tauri::command]
@@ -376,6 +481,22 @@ mod tests {
     }
 
     #[test]
+    fn resolves_reveal_targets_inside_workspace() {
+        let (_temp, root) = workspace();
+        fs::write(root.join("a.md"), "x").unwrap();
+        fs::create_dir(root.join("sub")).unwrap();
+
+        assert_eq!(reveal_target(&root, "").unwrap(), root);
+        assert_eq!(reveal_target(&root, "a.md").unwrap(), root.join("a.md"));
+        assert_eq!(reveal_target(&root, "sub").unwrap(), root.join("sub"));
+        assert!(matches!(
+            reveal_target(&root, "missing.md"),
+            Err(AppError::NotFound(_))
+        ));
+        assert!(reveal_target(&root, "../escape").is_err());
+    }
+
+    #[test]
     fn renames_within_directory() {
         let (_temp, root) = workspace();
         fs::create_dir(root.join("notes")).unwrap();
@@ -388,6 +509,42 @@ mod tests {
 
         assert!(rename_in(&root, "notes/b.md", "c.txt").is_err());
         assert!(rename_in(&root, "notes/b.md", "../c.md").is_err());
+    }
+
+    #[test]
+    fn moves_entries_between_directories() {
+        let (_temp, root) = workspace();
+        fs::create_dir(root.join("inbox")).unwrap();
+        fs::create_dir(root.join("archive")).unwrap();
+        fs::write(root.join("inbox/a.md"), "a").unwrap();
+        fs::create_dir(root.join("inbox/sub")).unwrap();
+
+        let entry = move_in(&root, "inbox/a.md", "archive").unwrap();
+        assert_eq!(entry.rel_path, "archive/a.md");
+        assert!(root.join("archive/a.md").is_file());
+        assert!(!root.join("inbox/a.md").exists());
+
+        let folder = move_in(&root, "inbox/sub", "").unwrap();
+        assert_eq!(folder.rel_path, "sub");
+        assert!(folder.is_dir);
+        assert!(root.join("sub").is_dir());
+
+        // 拖回原目录是空操作；同名目标要被拦下。
+        assert_eq!(
+            move_in(&root, "archive/a.md", "archive").unwrap().rel_path,
+            "archive/a.md"
+        );
+        fs::write(root.join("inbox/a.md"), "again").unwrap();
+        assert!(matches!(
+            move_in(&root, "inbox/a.md", "archive"),
+            Err(AppError::AlreadyExists(_))
+        ));
+        // 目录不能移进它自己或子目录，也不能移出工作区。
+        fs::create_dir(root.join("sub/child")).unwrap();
+        assert!(move_in(&root, "sub", "sub").is_err());
+        assert!(move_in(&root, "sub", "sub/child").is_err());
+        assert!(move_in(&root, "sub", "../outside").is_err());
+        assert!(move_in(&root, "missing.md", "archive").is_err());
     }
 
     #[test]
