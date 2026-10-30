@@ -716,6 +716,11 @@ export class MathWidget extends WidgetType {
   get estimatedHeight(): number {
     return this.display ? 56 : 20;
   }
+
+  // 点击公式块时把光标放进源码，不用先切到源码 / 分栏。
+  ignoreEvent(): boolean {
+    return false;
+  }
 }
 
 export class TableWidget extends WidgetType {
@@ -736,5 +741,10 @@ export class TableWidget extends WidgetType {
 
   get estimatedHeight(): number {
     return 18 + (this.model.rows.length + 1) * 31;
+  }
+
+  // 点击表格时把光标放进源码，不用先切到源码 / 分栏。
+  ignoreEvent(): boolean {
+    return false;
   }
 }
