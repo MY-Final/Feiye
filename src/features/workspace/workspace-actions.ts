@@ -348,9 +348,20 @@ export async function renameEntry(entry: Entry): Promise<void> {
 }
 
 export async function deleteEntry(entry: Entry): Promise<void> {
+  // 删除正在编辑且未保存的文件（或它所在的文件夹）时，编辑器里的内容
+  // 会随文档一起清空，必须在确认框里说清楚，不能只提回收站可撤销。
+  const doc = useDocumentStore.getState();
+  const deletingActive = Boolean(
+    doc.path && isWithin(doc.path, entry.relPath),
+  );
+  const message =
+    deletingActive && doc.dirty
+      ? `「${entry.name}」里有正在编辑的笔记，还有未保存的修改。移到回收站后，这些修改不会写入文件，会直接丢失。确定继续吗？`
+      : `确定将「${entry.name}」移到回收站吗？此操作可以在系统回收站中撤销。`;
+
   const choice = await useUiStore.getState().ask({
     title: "删除",
-    message: `确定将「${entry.name}」移到回收站吗？此操作可以在系统回收站中撤销。`,
+    message,
     buttons: [
       { label: "移到回收站", value: "delete", tone: "danger" },
       { label: "取消", value: "cancel" },
