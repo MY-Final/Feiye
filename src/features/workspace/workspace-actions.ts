@@ -239,18 +239,11 @@ export async function openWorkspaceAt(
     // 和启动时一样；文件已不在时静默跳过。
     const lastDocument = await recallLastDocument(info.root);
     if (requestId !== workspaceOpenSeq) return;
-    const active = lastDocument ?? savedTabs[0] ?? null;
-    restoreSavedTabs(savedTabs, active);
-    if (active) {
-      await openFile(
-        {
-          relPath: active,
-          name: baseName(active),
-          isDir: false,
-        },
-        true,
-      );
-    }
+    await restoreSavedTabs(
+      savedTabs,
+      lastDocument,
+      () => requestId === workspaceOpenSeq,
+    );
 
     void promptPendingRecoveries();
   } catch (error) {
@@ -307,18 +300,11 @@ export async function restoreLastWorkspace(): Promise<void> {
     // 恢复这个工作区上次打开的文档；文件已不存在时静默清除记录，不打扰启动。
     const lastDocument = await recallLastDocument(last);
     if (requestId !== workspaceOpenSeq) return;
-    const active = lastDocument ?? savedTabs[0] ?? null;
-    restoreSavedTabs(savedTabs, active);
-    if (active) {
-      await openFile(
-        {
-          relPath: active,
-          name: baseName(active),
-          isDir: false,
-        },
-        true,
-      );
-    }
+    await restoreSavedTabs(
+      savedTabs,
+      lastDocument,
+      () => requestId === workspaceOpenSeq,
+    );
 
     await promptPendingRecoveries();
   } catch {
@@ -332,11 +318,89 @@ export async function restoreLastWorkspace(): Promise<void> {
   }
 }
 
-/** 把上次打开的标签摆回标签栏；当前文档仍由 openFile 打开，避免重复。 */
-function restoreSavedTabs(saved: string[], active: string | null): void {
-  for (const relPath of saved) {
-    if (relPath === active) continue;
-    useTabsStore.getState().addTab(relPath, baseName(relPath));
+/**
+ * 上次保存的标签里只留下磁盘上仍在的笔记。
+ * 目录整体不见了视为其中的文件都失效；其它读盘错误保守保留，不误伤。
+ */
+async function filterExistingPaths(paths: string[]): Promise<string[]> {
+  if (paths.length === 0) return [];
+  const listings = new Map<string, Set<string> | null>();
+  const parents = [...new Set(paths.map((path) => parentRel(path)))];
+  await Promise.all(
+    parents.map(async (parent) => {
+      try {
+        const entries = await listDir(parent);
+        listings.set(parent, new Set(entries.map((entry) => entry.name)));
+      } catch (error) {
+        listings.set(
+          parent,
+          isAppError(error) && error.code === "not-found" ? new Set() : null,
+        );
+      }
+    }),
+  );
+  return paths.filter((path) => {
+    const names = listings.get(parentRel(path));
+    return names == null || names.has(baseName(path));
+  });
+}
+
+/**
+ * 把上次打开的标签摆回标签栏，并打开上次那篇。
+ * 那篇被删 / 移走后由近到远补位；全部失效就回到空状态，不留幽灵标签。
+ */
+async function restoreSavedTabs(
+  saved: string[],
+  lastDocument: string | null,
+  isCurrent: () => boolean,
+): Promise<void> {
+  const valid = [...new Set(await filterExistingPaths(saved))];
+  if (!isCurrent()) return;
+
+  // 失效的笔记从「最近打开」里摘掉，重启后列表与文件树一致。
+  for (const relPath of new Set([...saved, lastDocument ?? ""])) {
+    if (relPath && !valid.includes(relPath)) {
+      useWorkspaceStore.getState().updateRecent(relPath, null);
+    }
+  }
+
+  // 上次那篇还在就回到它；不在了从保存顺序里由近到远补位（同距先右）。
+  const rank = new Map(saved.map((path, index) => [path, index]));
+  const anchor = lastDocument ? (rank.get(lastDocument) ?? -1) : -1;
+  const candidates = [...valid].sort((a, b) => {
+    if (a === lastDocument) return -1;
+    if (b === lastDocument) return 1;
+    const da = Math.abs((rank.get(a) ?? 0) - anchor);
+    const db = Math.abs((rank.get(b) ?? 0) - anchor);
+    if (da !== db) return da - db;
+    return Number((rank.get(b) ?? 0) > anchor) - Number((rank.get(a) ?? 0) > anchor);
+  });
+
+  const active = candidates[0] ?? null;
+  for (const relPath of valid) {
+    if (relPath !== active) {
+      useTabsStore.getState().addTab(relPath, baseName(relPath));
+    }
+  }
+  for (const relPath of candidates) {
+    if (!isCurrent()) return;
+    await openFile({ relPath, name: baseName(relPath), isDir: false }, true);
+    if (useDocumentStore.getState().path === relPath) break;
+    // 读盘失败（比如刚好又被删）：摘掉它的标签，继续试下一篇。
+    useTabsStore.getState().removeTab(relPath);
+    forgetPreview(relPath);
+  }
+
+  // 没有一个能打开：回到空状态，别再记着这次打不开的那篇。
+  if (useDocumentStore.getState().path === null) {
+    await rememberLastDocument(null);
+  }
+  const recent = useWorkspaceStore.getState().recent;
+  const alive = recent.length > 0 ? await filterExistingPaths(recent) : [];
+  for (const relPath of recent) {
+    if (!alive.includes(relPath)) {
+      useWorkspaceStore.getState().updateRecent(relPath, null);
+    }
   }
 }
 
