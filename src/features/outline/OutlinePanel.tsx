@@ -52,6 +52,8 @@ export function OutlinePanel() {
     const heading = headings[index];
     if (!heading) return;
     if (viewMode === "preview") {
+      // 预览里也同步编辑器光标，切回编辑时能接着改；不抢焦点。
+      jumpToEditorPosition(heading.from, false);
       scrollPreviewToHeading(index);
       return;
     }
