@@ -207,9 +207,18 @@ fn rename_in(root: &Path, rel: &str, new_name: &str) -> Result<Entry, AppError> 
     let target = parent.join(new_name);
 
     if target.exists() {
-        return Err(AppError::AlreadyExists(fs_path::join_rel(
-            parent_rel, new_name,
-        )));
+        // Windows / macOS 的文件系统不区分大小写：只改大小写时
+        // target 指向的正是源文件本身，不该报「已存在」。
+        let same_file = target
+            .canonicalize()
+            .ok()
+            .zip(source.canonicalize().ok())
+            .is_some_and(|(a, b)| a == b);
+        if !same_file {
+            return Err(AppError::AlreadyExists(fs_path::join_rel(
+                parent_rel, new_name,
+            )));
+        }
     }
 
     fs::rename(&source, &target)?;
