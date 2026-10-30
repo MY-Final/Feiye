@@ -85,7 +85,37 @@ async function performSave(options: SaveOptions): Promise<boolean> {
     const current = useDocumentStore.getState();
     const sameDocument = current.path === path;
 
-    if (isAppError(error) && error.code === "conflict") {
+    if (isAppError(error) && error.code === "not-found") {
+      // 文件在应用外被删除 / 移动：别假装是「被其他程序修改」。
+      if (sameDocument && options.auto) {
+        current.markSaveBlocked("文件已不在磁盘上");
+        useUiStore
+          .getState()
+          .toast(
+            "自动保存已暂停：文件已不在磁盘上。按 Ctrl+S 另存或重新创建。",
+            "error",
+          );
+      } else if (sameDocument) {
+        const choice = await useUiStore.getState().ask({
+          title: "文件已不在磁盘上",
+          message:
+            "磁盘上的文件可能已被移动或删除，编辑器里的内容仍然保留。另存为会新建一篇副本；重新创建会把当前内容写回原来的路径。",
+          buttons: [
+            { label: "另存为…", value: "copy", tone: "primary" },
+            { label: "重新创建", value: "recreate" },
+            { label: "取消", value: "cancel" },
+          ],
+        });
+        if (choice === "copy") {
+          const { saveDocumentAs } = await import(
+            "../workspace/workspace-actions"
+          );
+          await saveDocumentAs();
+        } else if (choice === "recreate") {
+          return await overwriteActiveDocument(path, true);
+        }
+      }
+    } else if (isAppError(error) && error.code === "conflict") {
       if (sameDocument && options.auto) {
         current.markSaveBlocked("文件已被其他程序修改");
         useUiStore
@@ -139,8 +169,12 @@ async function performSave(options: SaveOptions): Promise<boolean> {
 /**
  * 冲突对话框里用户明确选择「覆盖保存」后才走这里：跳过 mtime 校验，
  * 用编辑器当前内容替换磁盘版本。只在显式点击后发生，不是静默覆盖。
+ * `recreate` 用于文件已被外部删除后，用户明确选择写回原路径。
  */
-async function overwriteActiveDocument(path: string): Promise<boolean> {
+async function overwriteActiveDocument(
+  path: string,
+  recreate = false,
+): Promise<boolean> {
   // 对话框期间可能已切走：编辑器正文不再属于 path，不能拿来覆盖。
   if (useDocumentStore.getState().path !== path) return false;
   const text = getEditorText();
@@ -160,7 +194,12 @@ async function overwriteActiveDocument(path: string): Promise<boolean> {
 
     useUiStore
       .getState()
-      .toast("已覆盖保存，磁盘上的外部修改已被替换", "info");
+      .toast(
+        recreate
+          ? "已在原位置重新创建文件"
+          : "已覆盖保存，磁盘上的外部修改已被替换",
+        "info",
+      );
     return true;
   } catch (error) {
     useDocumentStore
@@ -168,7 +207,12 @@ async function overwriteActiveDocument(path: string): Promise<boolean> {
       .markSaveBlocked(`保存失败：${describeError(error)}`);
     useUiStore
       .getState()
-      .toast(`覆盖保存失败：${describeError(error)}`, "error");
+      .toast(
+        recreate
+          ? `重新创建失败：${describeError(error)}`
+          : `覆盖保存失败：${describeError(error)}`,
+        "error",
+      );
     return false;
   }
 }

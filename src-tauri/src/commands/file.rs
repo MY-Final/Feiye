@@ -72,7 +72,15 @@ fn read_path(path: &Path) -> Result<FileContent, AppError> {
 
 fn write_path(path: &Path, content: &str, expected_ms: Option<u64>) -> Result<FileMeta, AppError> {
     if let Some(expected) = expected_ms {
-        let meta = fs::metadata(path).map_err(|_| AppError::Conflict)?;
+        // 文件被外部删除时不该报「已被修改」：前端要据此提示另存 / 重建，
+        // 而不是弹一个「外部修改」的冲突对话框。
+        let meta = fs::metadata(path).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                AppError::NotFound(path.display().to_string())
+            } else {
+                AppError::Conflict
+            }
+        })?;
         if mtime_ms(&meta) != expected {
             return Err(AppError::Conflict);
         }
@@ -792,6 +800,25 @@ mod tests {
         assert!(next_export_in(&root, "", "b.md").is_err());
         assert!(next_export_in(&root, "missing", "b.html").is_err());
         assert!(next_export_in(&root, "", "../逃逸.html").is_err());
+    }
+
+    #[test]
+    fn missing_target_with_expected_mtime_reports_not_found() {
+        let (_temp, root) = workspace();
+        let path = root.join("gone.md");
+        // 外部删除后再保存：报 not-found，让前端提示另存 / 重建，而不是冲突。
+        assert!(matches!(
+            write_path(&path, "x", Some(1)),
+            Err(AppError::NotFound(_))
+        ));
+        assert!(!path.exists());
+        // 文件仍在但 mtime 不同，仍是冲突。
+        fs::write(&path, "a").unwrap();
+        assert!(matches!(
+            write_path(&path, "x", Some(1)),
+            Err(AppError::Conflict)
+        ));
+        assert_eq!(fs::read_to_string(&path).unwrap(), "a");
     }
 
     fn read_file_path(root: &Path, rel: &str) -> Result<FileContent, AppError> {
