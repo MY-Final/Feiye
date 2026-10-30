@@ -397,7 +397,7 @@ export default function App() {
   // 还没选笔记时显示库名，开着几个库也能分清是哪一个。
   useEffect(() => {
     const title = docName
-      ? `${dirty ? "• " : ""}${docName} — ${APP_NAME}`
+      ? `${dirty ? "• " : ""}${noteLabel(docName, preferences.hideFileExtensions)} — ${APP_NAME}`
       : workspaceName
         ? `${workspaceName} — ${APP_NAME}`
         : APP_NAME;
@@ -406,7 +406,7 @@ export default function App() {
       .catch(() => {
         // 非 Tauri 环境或权限缺失时保留默认标题。
       });
-  }, [docName, dirty, workspaceName]);
+  }, [docName, dirty, workspaceName, preferences.hideFileExtensions]);
 
   // 字号、行高、行宽或行号变化后，让 CodeMirror 重新测量排版指标。
   useEffect(() => {
