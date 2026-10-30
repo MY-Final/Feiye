@@ -315,8 +315,9 @@ export async function saveDocumentAs(): Promise<void> {
   const parent = parentRel(doc.path);
   const copyBase = `${doc.name.replace(MARKDOWN_NAME, "")}-副本`;
   const name = await useUiStore.getState().askInput({
-    title: "另存为",
-    label: "新文件名",
+    // 副本会落在当前笔记所在目录，和右键新建一样把位置写进标题里。
+    title: parent ? `另存为 · ${parent}` : "另存为",
+    label: parent ? `新文件名（保存在 ${parent}）` : "新文件名",
     // 连续另存时默认名自动加序号，不再撞上上一篇副本报「目标已存在」。
     initialValue: nextAvailableName(parent, copyBase, ".md"),
     confirmLabel: "保存副本",
