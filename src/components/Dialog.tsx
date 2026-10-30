@@ -59,6 +59,15 @@ function ConfirmDialog({ request }: { request: ConfirmRequest }) {
         return;
       }
       if (event.key === "Enter" && primaryValue) {
+        // 焦点已经落在某个按钮上（例如 Tab 到「取消」）时交给按钮自己处理，
+        // 回车就按当前选中的那个按钮走，而不是一律触发主按钮。
+        const active = document.activeElement;
+        if (
+          active instanceof HTMLElement &&
+          active.closest(".modal-actions")
+        ) {
+          return;
+        }
         event.preventDefault();
         useUiStore.getState().resolveConfirm(primaryValue);
       }
