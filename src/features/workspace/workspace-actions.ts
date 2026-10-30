@@ -30,6 +30,7 @@ import {
 } from "../editor/autosave";
 import {
   captureActiveCursor,
+  forgetCursor,
   migrateCursor,
   restoreCursorFor,
 } from "../editor/cursor-memory";
@@ -466,6 +467,9 @@ export async function deleteEntry(entry: Entry): Promise<void> {
       void setSetting("lastDocument", null);
       resetDocument();
     }
+    // resetDocument 会先把当前光标记下来，所以清理放在它之后，
+    // 否则同名新文件打开时会跳到被删文档的旧位置。
+    forgetCursor(entry.relPath);
   } catch (error) {
     toastError("删除失败", error);
   }

@@ -91,6 +91,21 @@ export function migrateCursor(oldPath: string, nextPath: string): void {
   });
 }
 
+/** 删除文件或目录后丢掉对应的光标记录，避免同名新文件打开时跳到旧位置。 */
+export function forgetCursor(relPath: string): void {
+  void ensureLoaded().then(() => {
+    if (!positions) return;
+    let changed = false;
+    for (const path of Object.keys(positions)) {
+      if (path === relPath || path.startsWith(`${relPath}/`)) {
+        delete positions[path];
+        changed = true;
+      }
+    }
+    if (changed) scheduleSave();
+  });
+}
+
 /** 打开文档后调用，把光标移到上次的位置；记录失效时留在开头。 */
 export async function restoreCursorFor(path: string): Promise<void> {
   await ensureLoaded();
