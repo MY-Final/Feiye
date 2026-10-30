@@ -198,8 +198,11 @@ export default function App() {
         case "f":
           // 带 Shift 是专注模式：写作时眼前只剩正文，不再先去找查找框。
           if (event.shiftKey) {
-            // 专注是"专心写这一篇"，没有打开笔记时没有意义。
-            if (!useDocumentStore.getState().path) break;
+            // 专注是"专心写这一篇"，没有打开笔记时说明一句，别让人以为按键失灵。
+            if (!useDocumentStore.getState().path) {
+              useUiStore.getState().toast("先打开一篇笔记再进入专注模式");
+              break;
+            }
             event.preventDefault();
             useUiStore.getState().toggleZenMode();
             break;
