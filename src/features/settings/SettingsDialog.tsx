@@ -109,7 +109,8 @@ const SHORTCUT_GROUPS: { title: string; items: [string, string][] }[] = [
     // 工具栏上能点的格式命令大多也有快捷键，列出来才找得到。
     title: "格式",
     items: [
-      ["Ctrl + 1 … 6 / Ctrl + 0", "标题级别 / 正文"],
+      ["Ctrl + 1 … 6", "标题 1–6 级"],
+      ["Ctrl + 0", "转回正文段落"],
       ["Ctrl + Shift + Q", "引用"],
       ["Ctrl + Shift + [ / ]", "无序 / 有序列表"],
       ["Ctrl + Shift + X", "任务列表"],
