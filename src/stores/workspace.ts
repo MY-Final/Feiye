@@ -136,6 +136,8 @@ interface WorkspaceStore {
   forgetHistory(relPath: string): void;
   pushForward(relPath: string): void;
   popForward(): string | null;
+  /** 前进目标已读不到时摘掉它，避免每次 Alt+→ 都重试同一条失效路径。 */
+  forgetForward(relPath: string): void;
   clearForward(): void;
   /** 重命名或删除后同步「最近打开」，避免留下打不开的旧路径。 */
   updateRecent(oldPath: string, nextPath: string | null): void;
@@ -223,6 +225,12 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     if (current.length === 0) return null;
     set({ forward: current.slice(0, -1) });
     return current[current.length - 1];
+  },
+
+  forgetForward(relPath) {
+    const current = get().forward;
+    if (!current.includes(relPath)) return;
+    set({ forward: current.filter((path) => path !== relPath) });
   },
 
   clearForward() {

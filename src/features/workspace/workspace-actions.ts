@@ -293,9 +293,11 @@ export async function openFile(
       void rememberLastDocument(null);
       return;
     }
-    // 可能是文件已在应用外被删除：从最近打开与浏览历史里摘掉，避免反复点开报错。
+    // 可能是文件已在应用外被删除：从最近打开、浏览历史与前进栈里摘掉，
+    // 避免反复点开 / 反复按 Alt+→ 都报同一个错。
     useWorkspaceStore.getState().updateRecent(entry.relPath, null);
     useWorkspaceStore.getState().forgetHistory(entry.relPath);
+    useWorkspaceStore.getState().forgetForward(entry.relPath);
     toastError("打开文件失败", error);
   }
 }
