@@ -52,6 +52,8 @@ function isTextEntry(target: EventTarget | null): boolean {
 export default function App() {
   const root = useWorkspaceStore((state) => state.root);
   const docPath = useDocumentStore((state) => state.path);
+  const docName = useDocumentStore((state) => state.name);
+  const dirty = useDocumentStore((state) => state.dirty);
   const viewMode = useDocumentStore((state) => state.viewMode);
   const sidebarVisible = useUiStore((state) => state.sidebarVisible);
   const preferences = useSettingsStore((state) => state.preferences);
@@ -185,6 +187,18 @@ export default function App() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  // 系统任务栏 / Alt-Tab 里也显示当前笔记名，未保存时带圆点。
+  useEffect(() => {
+    const title = docName
+      ? `${dirty ? "• " : ""}${docName} — ${APP_NAME}`
+      : APP_NAME;
+    void getCurrentWindow()
+      .setTitle(title)
+      .catch(() => {
+        // 非 Tauri 环境或权限缺失时保留默认标题。
+      });
+  }, [docName, dirty]);
 
   // 字号、行高、行宽或行号变化后，让 CodeMirror 重新测量排版指标。
   useEffect(() => {
