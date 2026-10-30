@@ -10,18 +10,20 @@ function formatSavedAt(ms: number): string {
   const date = new Date(ms);
   if (Number.isNaN(date.getTime())) return "";
   const now = new Date();
+  const time = date.toLocaleTimeString("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
   const sameDay =
     date.getFullYear() === now.getFullYear() &&
     date.getMonth() === now.getMonth() &&
     date.getDate() === now.getDate();
   if (!sameDay) {
-    return `${date.getMonth() + 1}/${date.getDate()}`;
+    // 隔天打开时只有日期会让人分不清是早上还是晚上存的，时间一起带上。
+    return `${date.getMonth() + 1}/${date.getDate()} ${time}`;
   }
-  return date.toLocaleTimeString("zh-CN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
+  return time;
 }
 
 export function StatusBar() {
