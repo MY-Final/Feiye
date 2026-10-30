@@ -1,5 +1,7 @@
+import { syntaxTree } from "@codemirror/language";
 import type { EditorView } from "@codemirror/view";
 import { WidgetType } from "@codemirror/view";
+import type { SyntaxNode } from "@lezer/common";
 import katex from "katex";
 
 import { copyText } from "../../../lib/clipboard";
@@ -108,6 +110,62 @@ export class CodeBlockTopWidget extends WidgetType {
   get estimatedHeight(): number {
     return 10;
   }
+}
+
+interface CurrentFence {
+  fenceFrom: number;
+  languageFrom: number;
+  languageTo: number;
+  language: string;
+  codeFrom: number;
+  codeTo: number;
+}
+
+/**
+ * 按 DOM 位置找回当前围栏的真实范围。块装饰在普通输入后只做位置映射，
+ * widget 上缓存的坐标可能已经过期，交互时以语法树为准。
+ */
+function currentFence(view: EditorView, dom: Node): CurrentFence | null {
+  let pos: number;
+  try {
+    pos = view.posAtDOM(dom, 0);
+  } catch {
+    return null;
+  }
+  const doc = view.state.doc;
+  const tree = syntaxTree(view.state);
+  let fence: SyntaxNode | null = null;
+  for (const bias of [-1, 1] as const) {
+    for (
+      let node: SyntaxNode | null = tree.resolveInner(pos, bias);
+      node;
+      node = node.parent
+    ) {
+      if (node.name === "FencedCode") {
+        fence = node;
+        break;
+      }
+    }
+    if (fence) break;
+  }
+  if (!fence) return null;
+
+  const marks = fence.getChildren("CodeMark");
+  const opening = marks[0];
+  if (!opening) return null;
+  const info = fence.getChildren("CodeInfo")[0];
+  const closing = marks.length > 1 ? marks[1] : null;
+  const codeFrom = Math.min(doc.length, doc.lineAt(opening.from).to + 1);
+  return {
+    fenceFrom: fence.from,
+    languageFrom: info ? info.from : opening.to,
+    languageTo: info ? info.to : opening.to,
+    language: info ? doc.sliceString(info.from, info.to).trim() : "",
+    codeFrom,
+    codeTo: closing
+      ? Math.max(codeFrom, doc.lineAt(closing.from).from - 1)
+      : doc.length,
+  };
 }
 
 /**
@@ -334,17 +392,24 @@ export class CodeBlockFooterWidget extends WidgetType {
       if (applying) return;
       hideMenu();
       const next = input.value.trim();
-      if (next === language) {
+      if (!view.dom.isConnected) return;
+      // 装饰经过映射后缓存的坐标可能过期，按当前 DOM 位置取真实范围。
+      const current = currentFence(view, shell);
+      const languageFrom = current?.languageFrom ?? from;
+      const languageTo = current?.languageTo ?? to;
+      if (next === (current?.language ?? language)) {
         if (refocus) view.focus();
         return;
       }
-      if (!view.dom.isConnected) return;
-      if (from > view.state.doc.length || to > view.state.doc.length) {
+      if (
+        languageFrom > view.state.doc.length ||
+        languageTo > view.state.doc.length
+      ) {
         return;
       }
       applying = true;
       view.dispatch({
-        changes: { from, to, insert: next },
+        changes: { from: languageFrom, to: languageTo, insert: next },
         userEvent: "input.format",
       });
       if (refocus) view.focus();
@@ -353,6 +418,12 @@ export class CodeBlockFooterWidget extends WidgetType {
     input.addEventListener("focus", () => {
       applying = false;
       suppressBlurApply = false;
+      // 位置映射后 dataset 可能过期，聚焦时按 DOM 位置刷新一次。
+      const current = currentFence(view, shell);
+      if (current) {
+        input.dataset.fenceFrom = String(current.fenceFrom);
+        footer.dataset.fenceFrom = String(current.fenceFrom);
+      }
       showMenu();
     });
 
@@ -423,10 +494,13 @@ export class CodeBlockFooterWidget extends WidgetType {
         window.clearTimeout(copyTimer);
         copyTimer = null;
       }
-      if (codeFrom > view.state.doc.length || codeTo > view.state.doc.length) {
+      const current = currentFence(view, shell);
+      const start = current?.codeFrom ?? codeFrom;
+      const end = current?.codeTo ?? codeTo;
+      if (start > view.state.doc.length || end > view.state.doc.length) {
         return;
       }
-      const raw = view.state.doc.sliceString(codeFrom, codeTo);
+      const raw = view.state.doc.sliceString(start, end);
       const text = raw.endsWith("\n") ? raw.slice(0, -1) : raw;
       void copyText(text).then((copied) => {
         if (!copyButton.isConnected) return;
