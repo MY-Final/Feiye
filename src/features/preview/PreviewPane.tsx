@@ -34,9 +34,11 @@ import { attachSplitScrollSync } from "./scroll-sync";
 
 export function PreviewPane() {
   const [result, setResult] = useState<PreviewResult>({ html: "" });
-  const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(
-    null,
-  );
+  // 放大查看时带上同篇文档的全部图片，方向键可以一张张翻。
+  const [lightbox, setLightbox] = useState<{
+    images: { src: string; alt: string }[];
+    index: number;
+  } | null>(null);
   const paneRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const root = useWorkspaceStore((state) => state.root);
@@ -54,6 +56,34 @@ export function PreviewPane() {
     setPreviewListener(setResult);
     return () => setPreviewListener(null);
   }, []);
+
+  /** 打开浮层时收集当前文档里的图片，翻页就在这份列表里走。 */
+  const openLightbox = (src: string, alt: string) => {
+    const body = bodyRef.current;
+    const images = body
+      ? Array.from(body.querySelectorAll<HTMLImageElement>("img")).map(
+          (image) => ({ src: image.currentSrc || image.src, alt: image.alt }),
+        )
+      : [];
+    const found = images.findIndex((image) => image.src === src);
+    // 链接指向的图片可能没在正文里出现，单独补一张即可。
+    setLightbox(
+      found >= 0
+        ? { images, index: found }
+        : { images: [...images, { src, alt }], index: images.length },
+    );
+  };
+
+  const stepLightbox = (delta: number) => {
+    setLightbox((current) => {
+      if (!current || current.images.length < 2) return current;
+      const total = current.images.length;
+      return {
+        ...current,
+        index: (current.index + delta + total) % total,
+      };
+    });
+  };
 
   // 外部链接交给系统浏览器；笔记间的相对链接在应用内打开。
   useEffect(() => {
@@ -82,7 +112,7 @@ export function PreviewPane() {
         const src = target.currentSrc || target.src;
         if (src) {
           event.preventDefault();
-          setLightbox({ src, alt: target.alt });
+          openLightbox(src, target.alt);
         }
         return;
       }
@@ -119,7 +149,7 @@ export function PreviewPane() {
       if (relPath && /\.(png|jpe?g|gif|webp|avif|bmp|svg)$/i.test(relPath)) {
         const root = useWorkspaceStore.getState().root;
         const image = resolveMarkdownImageSrc(root, "", relPath);
-        if (image) setLightbox({ src: image.url, alt: baseName(relPath) });
+        if (image) openLightbox(image.url, baseName(relPath));
         return;
       }
 
@@ -158,15 +188,23 @@ export function PreviewPane() {
     };
   }, []);
 
-  // 放大查看时按 Esc 关闭；切换文档时也一并关掉，避免停留在上一张图上。
+  // 放大查看时按 Esc 关闭、左右方向键翻页；切换文档时也一并关掉，
+  // 避免停留在上一张图上。
   useEffect(() => {
     if (!lightbox) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setLightbox(null);
+      if (event.key === "Escape") {
+        setLightbox(null);
+        return;
+      }
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      if (lightbox.images.length < 2) return;
+      event.preventDefault();
+      stepLightbox(event.key === "ArrowLeft" ? -1 : 1);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [lightbox]);
+  }, [lightbox?.images.length]);
 
   useEffect(() => {
     setLightbox(null);
@@ -318,6 +356,8 @@ export function PreviewPane() {
     }
   }, [html]);
 
+  const lightboxImage = lightbox ? lightbox.images[lightbox.index] : null;
+
   return (
     <div className="preview-pane" ref={paneRef}>
       {result.error ? (
@@ -330,15 +370,44 @@ export function PreviewPane() {
         ref={bodyRef}
         dangerouslySetInnerHTML={{ __html: html }}
       />
-      {lightbox ? (
+      {lightbox && lightboxImage ? (
         <div
           className="image-lightbox"
           role="dialog"
           aria-modal="true"
-          aria-label={lightbox.alt || "图片预览"}
+          aria-label={lightboxImage.alt || "图片预览"}
           onClick={() => setLightbox(null)}
         >
-          <img src={lightbox.src} alt={lightbox.alt} />
+          <img src={lightboxImage.src} alt={lightboxImage.alt} />
+          {lightbox.images.length > 1 ? (
+            <>
+              <button
+                type="button"
+                className="image-lightbox-nav prev"
+                aria-label="上一张图片"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  stepLightbox(-1);
+                }}
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                className="image-lightbox-nav next"
+                aria-label="下一张图片"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  stepLightbox(1);
+                }}
+              >
+                ›
+              </button>
+              <span className="image-lightbox-count">
+                {lightbox.index + 1} / {lightbox.images.length}
+              </span>
+            </>
+          ) : null}
         </div>
       ) : null}
     </div>

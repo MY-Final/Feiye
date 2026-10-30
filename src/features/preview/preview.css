@@ -327,6 +327,49 @@
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
 }
 
+/* 同篇文档有多张图时，左右两边的翻页按钮和底部的张数提示。 */
+.image-lightbox-nav {
+  position: absolute;
+  top: 50%;
+  width: 42px;
+  height: 64px;
+  margin-top: -32px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.image-lightbox-nav:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+
+.image-lightbox-nav.prev {
+  left: 16px;
+}
+
+.image-lightbox-nav.next {
+  right: 16px;
+}
+
+.image-lightbox-count {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+}
+
 @keyframes lightbox-in {
   from {
     opacity: 0;
