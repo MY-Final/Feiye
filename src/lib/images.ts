@@ -73,6 +73,18 @@ export function resolveMarkdownImageSrc(
   return { kind: "local", url: localUrl(root, relative) };
 }
 
+/** 统计 HTML 里指向本地文件的图片：这类地址离开应用后通常无法显示。 */
+export function countLocalImages(html: string): number {
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  let count = 0;
+  template.content.querySelectorAll("img[src]").forEach((img) => {
+    const src = img.getAttribute("src")?.trim() ?? "";
+    if (src && !/^(?:https?:|data:|blob:|\/\/)/i.test(src)) count += 1;
+  });
+  return count;
+}
+
 /** 把预览 HTML 中的相对图片改成受工作区限制的协议地址。 */
 export function rewritePreviewImages(
   html: string,

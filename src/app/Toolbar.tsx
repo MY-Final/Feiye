@@ -33,6 +33,7 @@ import { useEditorStore } from "../stores/editor";
 import { useUiStore } from "../stores/ui";
 import { useWorkspaceStore } from "../stores/workspace";
 import { copyHtml } from "../lib/clipboard";
+import { countLocalImages } from "../lib/images";
 import { VIEW_MODES } from "../lib/view-modes";
 
 export async function copyActiveAsHtml(): Promise<void> {
@@ -52,9 +53,13 @@ export async function copyActiveAsHtml(): Promise<void> {
   try {
     const html = await renderMarkdownToHtml(text);
     const copied = await copyHtml(html);
-    const okMessage = useSelection
-      ? "所选内容已复制为 HTML，可直接粘贴到邮件或公众号草稿"
-      : "HTML 已复制，可直接粘贴到邮件或公众号草稿";
+    const localImages = countLocalImages(html);
+    const warning =
+      localImages > 0 ? `（${localImages} 张本地图片在应用外可能无法显示）` : "";
+    const okMessage =
+      (useSelection
+        ? "所选内容已复制为 HTML，可直接粘贴到邮件或公众号草稿"
+        : "HTML 已复制，可直接粘贴到邮件或公众号草稿") + warning;
     useUiStore
       .getState()
       .toast(
