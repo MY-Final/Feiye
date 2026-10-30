@@ -113,6 +113,28 @@ export default function App() {
     })();
   }, []);
 
+  // Windows 下关掉 Tauri 的原生拖放拦截后，文件由 WebView 自己分发：
+  // 编辑区和预览区会拦下来插入图片，其它位置也统一挡住，别让 WebView
+  // 把拖进来的文件当成页面导航打开。
+  useEffect(() => {
+    const hasFiles = (event: DragEvent) =>
+      Boolean(event.dataTransfer?.types.includes("Files"));
+    const onDragOver = (event: DragEvent) => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+    };
+    const onDrop = (event: DragEvent) => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+    };
+    window.addEventListener("dragover", onDragOver);
+    window.addEventListener("drop", onDrop);
+    return () => {
+      window.removeEventListener("dragover", onDragOver);
+      window.removeEventListener("drop", onDrop);
+    };
+  }, []);
+
   // 关闭窗口前拦截未保存的修改。
   useEffect(() => {
     const window_ = getCurrentWindow();
