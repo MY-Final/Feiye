@@ -1,5 +1,7 @@
 import { create } from "zustand";
 
+import { setSetting } from "../lib/tauri";
+
 export type ToastKind = "info" | "error" | "success";
 
 export interface ToastItem {
@@ -87,11 +89,15 @@ export const useUiStore = create<UiStore>((set, get) => ({
   prompt: null,
 
   toggleSidebar() {
-    set((state) => ({ sidebarVisible: !state.sidebarVisible }));
+    const visible = !get().sidebarVisible;
+    set({ sidebarVisible: visible });
+    // 侧栏开合是长期偏好，下次启动沿用。
+    void setSetting("sidebarVisible", visible);
   },
 
   setSidebarVisible(visible) {
     set({ sidebarVisible: visible });
+    void setSetting("sidebarVisible", visible);
   },
 
   openSettings() {

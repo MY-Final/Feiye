@@ -81,10 +81,15 @@ export default function App() {
     bootstrapped = true;
 
     void (async () => {
-      const [savedMode, savedRatio] = await Promise.all([
+      const [savedMode, savedRatio, savedSidebar] = await Promise.all([
         getSetting<unknown>("viewMode"),
         getSetting<unknown>("splitRatio"),
+        getSetting<unknown>("sidebarVisible"),
       ]);
+      // 上次收起了侧栏，这次启动也保持收起（直接写 state，避免回写设置）。
+      if (typeof savedSidebar === "boolean") {
+        useUiStore.setState({ sidebarVisible: savedSidebar });
+      }
       const preferences = useSettingsStore.getState().preferences;
       const preferredView =
         preferences.defaultView === "last"
