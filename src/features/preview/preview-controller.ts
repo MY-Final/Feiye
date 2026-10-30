@@ -144,6 +144,10 @@ function flush(): void {
   // 同一份文本之前渲染过：直接复用，不再让 Worker 解析整篇。
   const cached = resultCache.get(markdown);
   if (cached) {
+    // Map 按插入顺序迭代；命中后移到末尾，淘汰时才真正按「最久未用」踢人，
+    // 否则在两篇大笔记来回切、中间点开别的几篇时，刚看过的反而先被淘汰。
+    resultCache.delete(markdown);
+    resultCache.set(markdown, cached);
     // 作废仍在路上的旧请求，避免较晚返回的结果盖掉缓存。
     latestId += 1;
     posted = null;
