@@ -85,6 +85,65 @@ function Row({
   );
 }
 
+/** 数字显示可直接改：失焦 / 回车时夹到范围内，非法输入回到上一次有效值。 */
+function NumberInput({
+  label,
+  value,
+  min,
+  max,
+  step,
+  unit,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  unit?: string;
+  onChange: (value: number) => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const places = step < 1 ? 2 : 0;
+
+  const commit = (raw: string) => {
+    const text = raw.trim();
+    const parsed = Number(text);
+    setDraft(null);
+    if (text === "" || !Number.isFinite(parsed)) {
+      useUiStore
+        .getState()
+        .toast(`「${label}」需要数字，已保留 ${value.toFixed(places)}`);
+      return;
+    }
+    const stepped = Math.round(parsed / step) * step;
+    const next = Number(Math.min(max, Math.max(min, stepped)).toFixed(places));
+    if (next !== value) onChange(next);
+  };
+
+  return (
+    <span className="settings-number-wrap">
+      <input
+        className="settings-number"
+        type="text"
+        inputMode="decimal"
+        aria-label={`${label}数值`}
+        value={draft ?? value.toFixed(places)}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={(event) => commit(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            // 交给 blur 统一提交，避免同一份输入结算两次。
+            event.currentTarget.blur();
+          }
+        }}
+      />
+      {unit ? <span className="settings-unit">{unit}</span> : null}
+    </span>
+  );
+}
+
 const SHORTCUT_GROUPS: { title: string; items: [string, string][] }[] = [
   {
     title: "文件",
@@ -404,9 +463,13 @@ export function SettingsDialog() {
                         update({ fontSize: Number(event.target.value) })
                       }
                     />
-                    <output className="settings-value">
-                      {preferences.fontSize} px
-                    </output>
+                    <NumberInput
+                      label="正文字号"
+                      value={preferences.fontSize}
+                      {...PREFERENCE_LIMITS.fontSize}
+                      unit="px"
+                      onChange={(fontSize) => update({ fontSize })}
+                    />
                   </div>
                 </Row>
 
@@ -424,9 +487,12 @@ export function SettingsDialog() {
                         update({ lineHeight: Number(event.target.value) })
                       }
                     />
-                    <output className="settings-value">
-                      {preferences.lineHeight.toFixed(2)}
-                    </output>
+                    <NumberInput
+                      label="行高"
+                      value={preferences.lineHeight}
+                      {...PREFERENCE_LIMITS.lineHeight}
+                      onChange={(lineHeight) => update({ lineHeight })}
+                    />
                   </div>
                 </Row>
 
@@ -444,9 +510,13 @@ export function SettingsDialog() {
                         update({ editorWidth: Number(event.target.value) })
                       }
                     />
-                    <output className="settings-value">
-                      {preferences.editorWidth} px
-                    </output>
+                    <NumberInput
+                      label="行宽"
+                      value={preferences.editorWidth}
+                      {...PREFERENCE_LIMITS.editorWidth}
+                      unit="px"
+                      onChange={(editorWidth) => update({ editorWidth })}
+                    />
                   </div>
                 </Row>
 
@@ -492,6 +562,13 @@ export function SettingsDialog() {
                       update({ autoSaveDelay: Number(event.target.value) })
                     }
                   >
+                    {AUTO_SAVE_OPTIONS.some(
+                      (option) => option.value === preferences.autoSaveDelay,
+                    ) ? null : (
+                      <option value={preferences.autoSaveDelay}>
+                        {preferences.autoSaveDelay / 1000} 秒（当前）
+                      </option>
+                    )}
                     {AUTO_SAVE_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>
                         {option.label}
@@ -512,6 +589,13 @@ export function SettingsDialog() {
                       update({ recoveryInterval: Number(event.target.value) })
                     }
                   >
+                    {RECOVERY_OPTIONS.some(
+                      (option) => option.value === preferences.recoveryInterval,
+                    ) ? null : (
+                      <option value={preferences.recoveryInterval}>
+                        {preferences.recoveryInterval / 1000} 秒（当前）
+                      </option>
+                    )}
                     {RECOVERY_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>
                         {option.label}
