@@ -172,6 +172,17 @@ export default function App() {
 
       if (dialogOpen()) return;
 
+      // 查找面板等输入框里，组合键交给输入框自己处理（全选、粘贴、再次查找）；
+      // 只保留"保存"这个希望随时生效的动作。
+      const target = event.target;
+      if (
+        (target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement) &&
+        !(mod && event.key.toLowerCase() === "s")
+      ) {
+        return;
+      }
+
       if (event.key === "F2") {
         // 正文是可编辑区域，光标在里面时也要响应，才和工具栏的 F2 提示一致。
         // 重命名输入框等对话框场景已由上面的 dialogOpen 拦截。
