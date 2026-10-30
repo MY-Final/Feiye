@@ -100,6 +100,24 @@ const SHORTCUT_GROUPS: { title: string; items: [string, string][] }[] = [
     ],
   },
   {
+    // 工具栏上能点的格式命令大多也有快捷键，列出来才找得到。
+    title: "格式",
+    items: [
+      ["Ctrl + 1 … 6 / Ctrl + 0", "标题级别 / 正文"],
+      ["Ctrl + Shift + Q", "引用"],
+      ["Ctrl + Shift + [ / ]", "无序 / 有序列表"],
+      ["Ctrl + Shift + X", "任务列表"],
+      ["Ctrl + Shift + 5", "删除线"],
+      ["Ctrl + Shift + `", "行内代码"],
+      ["Ctrl + Shift + K", "代码块"],
+      ["Ctrl + Shift + L", "跳到代码块的语言标记"],
+      ["Ctrl + Enter", "退出代码块"],
+      ["Ctrl + Shift + M / Ctrl + Shift + 4", "行间 / 行内数学公式"],
+      ["Ctrl + T", "插入表格"],
+      ["Ctrl + Shift + H", "分隔线"],
+    ],
+  },
+  {
     title: "视图与查找",
     items: [
       ["Ctrl + F", "查找与替换（预览模式下自动切到分栏）"],
