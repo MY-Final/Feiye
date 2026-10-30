@@ -267,6 +267,8 @@ export async function openFile(
     if (recordHistory) {
       const current = useDocumentStore.getState().path;
       if (current) useWorkspaceStore.getState().pushHistory(current);
+      // 从文件树、链接等地方打开新文档，等于走了新分支，旧的前进记录作废。
+      useWorkspaceStore.getState().clearForward();
     }
     // 离开当前文档前记下光标，打开新文档后再恢复到它上次的位置。
     captureActiveCursor();
@@ -304,10 +306,17 @@ export function previousDocumentPath(): string | null {
   return history[history.length - 1] ?? null;
 }
 
+/** 「下一篇」的目标：后退之后留在前进栈里的那一篇。 */
+export function forwardDocumentPath(): string | null {
+  const forward = useWorkspaceStore.getState().forward;
+  return forward[forward.length - 1] ?? null;
+}
+
 /** 回到上一篇打开的笔记：沿着链接读下去之后，不用再去文件树里找回来的路。 */
 export async function openPreviousDocument(): Promise<void> {
   const relPath = previousDocumentPath();
   if (!relPath) return;
+  const from = useDocumentStore.getState().path;
   // 这次打开不再记历史，否则退一步之后「上一篇」又会指回刚离开的那篇。
   await openFile(
     { relPath, name: baseName(relPath), isDir: false },
@@ -318,6 +327,26 @@ export async function openPreviousDocument(): Promise<void> {
   // 真的打开了才退一步；被未保存提示取消或读盘失败时，历史保持原样。
   if (useDocumentStore.getState().path === relPath) {
     useWorkspaceStore.getState().popHistory();
+    // 刚离开的那篇放进前进栈，Alt+→ 可以原路走回来。
+    if (from) useWorkspaceStore.getState().pushForward(from);
+  }
+}
+
+/** 「前进」：退回之后又想回到刚才那篇，和浏览器里的 Alt+→ 一致。 */
+export async function openNextDocument(): Promise<void> {
+  const relPath = forwardDocumentPath();
+  if (!relPath) return;
+  const from = useDocumentStore.getState().path;
+  await openFile(
+    { relPath, name: baseName(relPath), isDir: false },
+    false,
+    undefined,
+    false,
+  );
+  if (useDocumentStore.getState().path === relPath) {
+    useWorkspaceStore.getState().popForward();
+    // 前进也是一次真实的浏览，退回时仍应经过这一篇。
+    if (from) useWorkspaceStore.getState().pushHistory(from);
   }
 }
 

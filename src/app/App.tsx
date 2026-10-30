@@ -22,8 +22,10 @@ import {
   changeViewMode,
   chooseWorkspace,
   createMarkdownFile,
+  forwardDocumentPath,
   newDocumentNearActive,
   openFile,
+  openNextDocument,
   openPreviousDocument,
   previousDocumentPath,
   renameActiveDocument,
@@ -221,6 +223,13 @@ export default function App() {
         // 拦掉 WebView 自带的「后退」，否则会整页退出应用界面。
         event.preventDefault();
         if (previousDocumentPath()) void openPreviousDocument();
+        return;
+      }
+
+      // Alt + → 前进：退回之后想再回到刚离开的那篇，与 Alt+← 对称。
+      if (event.altKey && !mod && event.key === "ArrowRight") {
+        event.preventDefault();
+        if (forwardDocumentPath()) void openNextDocument();
         return;
       }
 

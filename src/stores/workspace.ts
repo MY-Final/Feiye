@@ -121,6 +121,11 @@ interface WorkspaceStore {
    * 而不是在最近两篇之间来回切换。换库时清空。
    */
   history: string[];
+  /**
+   * 「前进」栈：后退之后还能沿原路走回去。只有「返回」会往里放，
+   * 任何一次新的打开都会清空它，避免把旧分支混进来。
+   */
+  forward: string[];
 
   setWorkspace(info: WorkspaceInfo | null): void;
   noteRecent(relPath: string): void;
@@ -129,6 +134,9 @@ interface WorkspaceStore {
   popHistory(): string | null;
   /** 文件已读不到时，把它从浏览历史里摘掉，避免反复退回同一处报错。 */
   forgetHistory(relPath: string): void;
+  pushForward(relPath: string): void;
+  popForward(): string | null;
+  clearForward(): void;
   /** 重命名或删除后同步「最近打开」，避免留下打不开的旧路径。 */
   updateRecent(oldPath: string, nextPath: string | null): void;
   /** 一键清空最近打开；只影响历史列表，不动磁盘文件。 */
@@ -156,6 +164,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   name: null,
   recent: [],
   history: [],
+  forward: [],
   ...EMPTY_MAPS,
 
   setWorkspace(info) {
@@ -164,6 +173,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       name: info?.name ?? null,
       recent: [],
       history: [],
+      forward: [],
       ...EMPTY_MAPS,
     });
     if (info) {
@@ -200,6 +210,24 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     const current = get().history;
     if (!current.includes(relPath)) return;
     set({ history: current.filter((path) => path !== relPath) });
+  },
+
+  pushForward(relPath) {
+    const current = get().forward;
+    if (current[current.length - 1] === relPath) return;
+    set({ forward: [...current, relPath].slice(-HISTORY_LIMIT) });
+  },
+
+  popForward() {
+    const current = get().forward;
+    if (current.length === 0) return null;
+    set({ forward: current.slice(0, -1) });
+    return current[current.length - 1];
+  },
+
+  clearForward() {
+    if (get().forward.length === 0) return;
+    set({ forward: [] });
   },
 
   updateRecent(oldPath, nextPath) {

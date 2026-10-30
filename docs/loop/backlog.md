@@ -19,6 +19,25 @@
 
 <!-- 从这里开始追加 -->
 
+## 第 140 轮 · 2026-10-30 15:06
+**用户需求**：按 Alt+← 退回后想再回到刚才那篇，只能去文件树里重新找；浏览器里退一步之后 Alt+→ 就能原路走回来，编辑器里按 Alt+→ 却毫无反应。
+
+**产品经理**：做。第 139 轮已经有了会话级后退，缺的只是对称的前进；前进栈只在「返回 / 前进」之间移动，任何一次新的打开都会清空它，不会把旧分支混进来，不新增界面、不落盘，符合「安静、快」的原则。
+
+**前端**：影响 `src/stores/workspace.ts`（新增 `forward` 栈与 `pushForward` / `popForward` / `clearForward`，换库时清空，沿用 50 步上限）、`src/features/workspace/workspace-actions.ts`（新增 `forwardDocumentPath` / `openNextDocument`；`openPreviousDocument` 成功退一步后把刚离开的文档压入前进栈；`openFile` 走正常打开时清空前进栈）、`src/app/App.tsx`（Alt+→ 与 Alt+← 对称处理并 `preventDefault`）。风险：连续快速按键时异步读盘可能重复入栈，与第 139 轮同一类边界；本轮为守住 3 个文件的预算，没有新增工具栏「前进」按钮，快捷键表也待下一轮补。工作量 S。
+
+**后端**：无改动。工作量 0。
+
+**裁决**：做
+
+**改动**：`src/stores/workspace.ts`、`src/features/workspace/workspace-actions.ts`、`src/app/App.tsx`
+
+**构建**：通过（bun run build，527ms）
+
+**验证**：CDP（9222，工作区 `D:\clawWorkSpeace\新建文件夹`），每步间隔 800ms。依次打开 `README.md` → `长文档.md`，Alt+← 退到 `README.md`、再退到起点的 `子目录/笔记.md`，第三次无动作；Alt+→ 依次回到 `README.md`、`长文档.md`，第三次无动作（前进栈用尽）。随后点开 `子目录/笔记.md`（新的打开会清空前进栈），再按 Alt+→ 仍停在 `子目录/笔记.md`；再 Alt+← 回到 `长文档.md`、Alt+→ 回到 `子目录/笔记.md`，后退 / 前进成对可用。每次按键 `defaultPrevented` 均为 true。人工复现：打开 A → B → C，Alt+← 两次到 A，Alt+→ 两次应回到 C；退到 A 后从文件树打开 D，再按 Alt+→ 应无反应。
+
+---
+
 ## 第 139 轮 · 2026-10-30 15:03
 **用户需求**：顺着链接 A → B → C 读下去，按一次 Alt+← 退回 B，再按一次却跳回了 C，像在两页之间来回弹；想一路退回 A 只能去文件树里找。
 
