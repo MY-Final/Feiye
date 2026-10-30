@@ -143,21 +143,25 @@ export function resyncAutoSave(previousRecoveryInterval?: number): void {
     scheduleAutoSave();
   }
 
-  const hadRecovery = recoveryTimer !== null;
-  clearRecoveryTimer();
   const interval = useSettingsStore.getState().preferences.recoveryInterval;
-  const recoveryChanged =
-    previousRecoveryInterval !== undefined &&
-    previousRecoveryInterval !== interval;
+  if (
+    previousRecoveryInterval === undefined ||
+    previousRecoveryInterval === interval
+  ) {
+    // 只改了自动保存间隔：不要打断已在等待的恢复副本计时器，否则会把
+    // 「按原间隔再过几秒写副本」提前到 900ms 首次延迟。
+    return;
+  }
+
+  clearRecoveryTimer();
   if (interval > 0 && doc.path && doc.dirty) {
-    if (recoveryChanged) {
-      // 原来没有待触发计时器的脏文档（如刚载入历史版本 / 恢复副本）也要重新
-      // 排期，不必再敲字；调长时按新间隔计时，避免刚调长就立刻又写一份。
-      const lengthened = interval > (previousRecoveryInterval ?? interval);
-      scheduleRecovery(lengthened ? interval : recoveryFirstDelay(interval));
-    } else if (hadRecovery) {
-      scheduleRecovery();
-    }
+    // 原来没有待触发计时器的脏文档（如刚载入历史版本 / 恢复副本）也要重新
+    // 排期，不必再敲字；调长时按新间隔计时，避免刚调长就立刻又写一份。
+    scheduleRecovery(
+      interval > previousRecoveryInterval
+        ? interval
+        : recoveryFirstDelay(interval),
+    );
   }
 }
 
