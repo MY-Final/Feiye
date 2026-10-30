@@ -6,6 +6,8 @@ import {
 
 export interface MenuAction {
   label: string;
+  /** 悬停提示，用来补充 label 放不下的完整信息（例如完整路径）。 */
+  title?: string;
   danger?: boolean;
   onSelect(): void;
   /** 行尾的次要动作（例如从最近列表移除）；不传则与普通菜单项一致。 */
@@ -90,6 +92,7 @@ export function ContextMenu({ x, y, actions, onClose }: ContextMenuProps) {
           <button
             type="button"
             role="menuitem"
+            title={action.title}
             className={`context-menu-item ${action.danger ? "danger" : ""}`}
             onClick={() => {
               onClose();

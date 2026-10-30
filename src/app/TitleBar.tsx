@@ -19,6 +19,12 @@ function folderName(path: string): string {
   return parts[parts.length - 1] ?? path;
 }
 
+/** 同名文件夹分布在不同位置时，用上一级目录帮用户分辨。 */
+function parentName(path: string): string {
+  const parts = path.split(/[\\/]/).filter(Boolean);
+  return parts.length > 1 ? (parts[parts.length - 2] ?? "") : "";
+}
+
 function SidebarIcon() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
@@ -263,12 +269,21 @@ export function TitleBar() {
           x={recentMenu.x}
           y={recentMenu.y}
           onClose={() => setRecentMenu(null)}
-          actions={recentMenu.paths.map((path) => ({
-            label: `切换到 ${folderName(path)}`,
-            onSelect: () => void openWorkspaceAt(path, true),
-            onRemove: () => void removeRecent(path),
-            removeTitle: "从最近工作区移除",
-          }))}
+          actions={recentMenu.paths.map((path) => {
+            // 两个都叫「笔记」的库只显示文件夹名分不清，重名时补上上一级目录。
+            const name = folderName(path);
+            const duplicated =
+              recentMenu.paths.filter((item) => folderName(item) === name)
+                .length > 1;
+            const parent = parentName(path);
+            return {
+              label: `切换到 ${name}${duplicated && parent ? `（${parent}）` : ""}`,
+              title: path,
+              onSelect: () => void openWorkspaceAt(path, true),
+              onRemove: () => void removeRecent(path),
+              removeTitle: "从最近工作区移除",
+            };
+          })}
         />
       ) : null}
     </header>
