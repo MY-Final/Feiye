@@ -267,6 +267,18 @@ export function PreviewPane() {
       pre.replaceWith(wrapper);
       wrapper.append(pre);
 
+      // 代码围栏写了语言时在左上角标出来，和 GitHub 的习惯一致；
+      // Shiki 把语言写成 `language-*` 类，未知语言会回退成 `text`，这种不标。
+      const language = /(?:^|\s)language-([\w+#.-]+)/.exec(
+        pre.querySelector("code")?.className ?? "",
+      )?.[1];
+      if (language && language !== "text") {
+        const tag = document.createElement("span");
+        tag.className = "preview-code-lang";
+        tag.textContent = language;
+        wrapper.append(tag);
+      }
+
       const button = document.createElement("button");
       button.type = "button";
       button.className = "preview-code-copy";

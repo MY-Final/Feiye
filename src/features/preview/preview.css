@@ -207,6 +207,20 @@
     opacity 0.12s ease;
 }
 
+/* 代码块左上角的语言标签，与右上角的复制按钮同处一条留白带。 */
+.preview-code-lang {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 20px;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  opacity: 0.8;
+  pointer-events: none;
+}
+
 .preview-code-block:hover .preview-code-copy,
 .preview-code-block:focus-within .preview-code-copy,
 .preview-code-copy.is-copied {
