@@ -41,9 +41,9 @@ import { VIEW_MODES } from "../lib/view-modes";
 /** 把预览 HTML 中的工作区图片换成 data URL，超过上限或读取失败时保留原地址。 */
 async function inlineLocalImages(
   html: string,
+  root: string | null,
+  docPath: string | null,
 ): Promise<{ html: string; inlined: number }> {
-  const root = useWorkspaceStore.getState().root;
-  const docPath = useDocumentStore.getState().path;
   if (!root || !docPath) return { html, inlined: 0 };
 
   const template = document.createElement("template");
@@ -87,10 +87,13 @@ export async function copyActiveAsHtml(): Promise<void> {
   const useSelection = selected.trim().length > 0;
   const text = useSelection ? selected : getEditorText();
   if (text === null) return;
+  // 渲染等待期间可能已经切到别的笔记；图片路径要以按下快捷键时的文档为准。
+  const root = useWorkspaceStore.getState().root;
+  const docPath = useDocumentStore.getState().path;
 
   try {
     const rendered = await renderMarkdownToHtml(text);
-    const { html, inlined } = await inlineLocalImages(rendered);
+    const { html, inlined } = await inlineLocalImages(rendered, root, docPath);
     const copied = await copyHtml(html);
     const localImages = countLocalImages(html);
     const notes: string[] = [];
