@@ -12,6 +12,7 @@ import { useDocumentStore } from "../../stores/document";
 import { useOutlineStore } from "../../stores/outline";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { getEditorText, toggleTaskMarkerAt } from "../editor/editor-bridge";
+import { insertImageFiles } from "../editor/image-insert";
 import { openFile } from "../workspace/workspace-actions";
 import "./preview.css";
 import type { PreviewResult } from "./preview-protocol";
@@ -383,7 +384,22 @@ export function PreviewPane() {
   const lightboxImage = lightbox ? lightbox.images[lightbox.index] : null;
 
   return (
-    <div className="preview-pane" ref={paneRef}>
+    <div
+      className="preview-pane"
+      ref={paneRef}
+      // 拖到这里和拖进编辑区效果一致：图片存进 assets 并写进当前笔记；
+      // 其它文件也拦下来，免得 WebView 把它当导航打开。
+      onDragOver={(event) => {
+        if (!event.dataTransfer.types.includes("Files")) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+      }}
+      onDrop={(event) => {
+        if (event.dataTransfer.files.length === 0) return;
+        event.preventDefault();
+        insertImageFiles(Array.from(event.dataTransfer.files));
+      }}
+    >
       {result.error ? (
         <div className="preview-error" role="alert">
           <span>预览失败：{result.error}</span>
