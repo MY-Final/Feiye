@@ -172,8 +172,10 @@ interface WorkspaceStore {
   updateRecent(oldPath: string, nextPath: string | null): void;
   /** 同上，同步浏览历史与前进栈：改名后「返回」仍能找到那篇笔记。 */
   remapHistory(oldPath: string, nextPath: string | null): void;
-  /** 一键清空最近打开；只影响历史列表，不动磁盘文件。 */
-  clearRecent(): void;
+  /** 一键清空最近打开；只影响历史列表，不动磁盘文件。返回清空前的列表以便撤销。 */
+  clearRecent(): string[];
+  /** 撤销清空：把之前的列表放回去并落盘。 */
+  restoreRecent(paths: string[]): void;
   loadDir(relPath: string, silent?: boolean): Promise<void>;
   refreshDir(relPath: string): Promise<void>;
   refreshTree(): Promise<void>;
@@ -290,9 +292,19 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
   clearRecent() {
     const root = get().root;
-    if (!root || get().recent.length === 0) return;
+    const previous = get().recent;
+    if (!root || previous.length === 0) return previous;
     set({ recent: [] });
     persistRecent(root, []);
+    return previous;
+  },
+
+  restoreRecent(paths) {
+    const root = get().root;
+    if (!root) return;
+    const next = paths.slice(0, RECENT_LIMIT);
+    set({ recent: next });
+    persistRecent(root, next);
   },
 
   async loadDir(relPath, silent = false) {

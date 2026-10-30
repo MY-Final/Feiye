@@ -537,9 +537,24 @@ export default function App() {
                           <button
                             type="button"
                             className="recent-clear"
-                            onClick={() =>
-                              useWorkspaceStore.getState().clearRecent()
-                            }
+                            onClick={() => {
+                              const store = useWorkspaceStore.getState();
+                              const root = store.root;
+                              const previous = store.clearRecent();
+                              if (previous.length === 0) return;
+                              useUiStore.getState().toast(
+                                `已清空最近打开（${previous.length} 篇） · 点击撤销`,
+                                "info",
+                                () => {
+                                  // 撤销窗口内换了库就不往回塞，免得把旧路径写进新库。
+                                  const current = useWorkspaceStore.getState();
+                                  if (current.root !== root) return;
+                                  current.restoreRecent(previous);
+                                  useUiStore.getState().toast("已恢复最近打开");
+                                },
+                                "点击撤销清空",
+                              );
+                            }}
                           >
                             清空
                           </button>
