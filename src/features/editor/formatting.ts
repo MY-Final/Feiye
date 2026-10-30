@@ -479,8 +479,17 @@ export function focusCodeLanguage(view: EditorView): boolean {
       ".cm-wysiwyg-code-lang-input",
     );
   for (const input of inputs) {
-    const from = Number(input.dataset.fenceFrom);
-    if (Number.isFinite(from) && from >= fence.from && from <= fence.to) {
+    // 块装饰只做位置映射时 dataset 可能过期，优先按 DOM 位置判断。
+    let at: number | null = null;
+    try {
+      at = view.posAtDOM(input, 0);
+    } catch {
+      at = null;
+    }
+    if (at === null) {
+      at = Number(input.dataset.fenceFrom);
+    }
+    if (Number.isFinite(at) && at >= fence.from && at <= fence.to) {
       input.focus();
       input.select();
       return true;

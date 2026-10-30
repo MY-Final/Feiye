@@ -1,4 +1,6 @@
 import {
+  memo,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -9,6 +11,40 @@ import { jumpToEditorPosition } from "../editor/editor-bridge";
 import { scrollPreviewToHeading } from "../preview/preview-scroll";
 import { useDocumentStore } from "../../stores/document";
 import { useOutlineStore } from "../../stores/outline";
+
+/**
+ * 大纲条目单独 memo：光标换行时只重渲染新旧两个高亮项，
+ * 长文档（数千标题）不再每次按 Enter 都重建整张列表。
+ */
+const OutlineRow = memo(function OutlineRow({
+  text,
+  level,
+  index,
+  active,
+  onJump,
+}: {
+  text: string;
+  level: number;
+  index: number;
+  active: boolean;
+  onJump: (index: number) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="treeitem"
+      aria-level={level}
+      aria-selected={active}
+      className={`outline-item${active ? " active" : ""}`}
+      data-outline-index={index}
+      style={{ paddingLeft: 10 + (level - 1) * 13 }}
+      title={text}
+      onClick={() => onJump(index)}
+    >
+      {text}
+    </button>
+  );
+});
 
 export function OutlinePanel() {
   const headings = useOutlineStore((state) => state.headings);
@@ -30,6 +66,26 @@ export function OutlinePanel() {
   // 纯预览模式下以滚动位置为准；编辑 / 分栏模式仍跟随光标。
   const activeIndex =
     viewMode === "preview" && scrollIndex !== null ? scrollIndex : cursorIndex;
+
+  // 跳转读取最新的标题与视图模式，但回调本身保持同一引用：
+  // 改行导致标题位置整体位移时，条目不再被迫全部重渲染。
+  const latest = useRef({ headings, viewMode });
+  latest.current = { headings, viewMode };
+  const jump = useCallback((index: number) => {
+    const heading = latest.current.headings[index];
+    if (!heading) return;
+    const mode = latest.current.viewMode;
+    if (mode === "preview") {
+      // 预览里也同步编辑器光标，切回编辑时能接着改；不抢焦点。
+      jumpToEditorPosition(heading.from, false);
+      scrollPreviewToHeading(index);
+      return;
+    }
+    jumpToEditorPosition(heading.from);
+    if (mode === "split") {
+      scrollPreviewToHeading(index);
+    }
+  }, []);
 
   // 长文档里让当前标题始终留在可见范围，但不抢夺滚动焦点。
   useEffect(() => {
@@ -57,21 +113,6 @@ export function OutlinePanel() {
       </div>
     );
   }
-
-  const jump = (index: number) => {
-    const heading = headings[index];
-    if (!heading) return;
-    if (viewMode === "preview") {
-      // 预览里也同步编辑器光标，切回编辑时能接着改；不抢焦点。
-      jumpToEditorPosition(heading.from, false);
-      scrollPreviewToHeading(index);
-      return;
-    }
-    jumpToEditorPosition(heading.from);
-    if (viewMode === "split") {
-      scrollPreviewToHeading(index);
-    }
-  };
 
   // 和文件树一致的键盘习惯：↑↓ 换行、Home / End 到首尾；
   // 跳转沿用按钮原生的 Enter / 空格点击。
@@ -106,20 +147,16 @@ export function OutlinePanel() {
       onKeyDown={handleKeys}
     >
       {headings.map((heading, index) => (
-        <button
-          key={heading.id}
-          type="button"
-          role="treeitem"
-          aria-level={heading.level}
-          aria-selected={index === activeIndex}
-          className={`outline-item${index === activeIndex ? " active" : ""}`}
-          data-outline-index={index}
-          style={{ paddingLeft: 10 + (heading.level - 1) * 13 }}
-          title={heading.text}
-          onClick={() => jump(index)}
-        >
-          {heading.text}
-        </button>
+        <OutlineRow
+          // 按位置复用 DOM：在标题上方插入文字会让所有 from 位移，
+          // 用 from 生成的 id 做 key 会整体卸载重建几千个按钮。
+          key={index}
+          text={heading.text}
+          level={heading.level}
+          index={index}
+          active={index === activeIndex}
+          onJump={jump}
+        />
       ))}
     </div>
   );

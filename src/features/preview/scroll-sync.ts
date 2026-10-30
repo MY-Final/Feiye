@@ -2,6 +2,7 @@ import {
   getEditorScrollMetrics,
   setEditorScrollTop,
 } from "../editor/editor-bridge";
+import type { OutlineHeading } from "../editor/outline";
 import { useOutlineStore } from "../../stores/outline";
 import {
   previewHeadingElements,
@@ -17,8 +18,11 @@ function maxScroll(element: HTMLElement): number {
   return Math.max(0, element.scrollHeight - element.clientHeight);
 }
 
-function buildAnchors(pane: HTMLElement, body: HTMLElement): Anchor[] | null {
-  const headings = useOutlineStore.getState().headings;
+function buildAnchors(
+  pane: HTMLElement,
+  body: HTMLElement,
+  headings: OutlineHeading[],
+): Anchor[] | null {
   if (headings.length === 0) return null;
 
   const previewHeadings = previewHeadingElements(body);
@@ -95,6 +99,21 @@ export function attachSplitScrollSync(
   let appliedEditor: number | null = null;
   let appliedPreview: number | null = null;
 
+  // 锚点只在标题或布局变化时重建。滚动帧里标题几何不变，逐帧量几千个
+  // 标题的 getBoundingClientRect / lineBlockAt 是长文档掉帧的主因。
+  let cachedAnchors: Anchor[] | null = null;
+  let cachedHeadings: OutlineHeading[] | null = null;
+  const anchorsFor = (): Anchor[] | null => {
+    const headings = useOutlineStore.getState().headings;
+    if (headings === cachedHeadings) return cachedAnchors;
+    cachedHeadings = headings;
+    cachedAnchors = buildAnchors(pane, body, headings);
+    return cachedAnchors;
+  };
+  const invalidateAnchors = () => {
+    cachedHeadings = null;
+  };
+
   const editorMax = () => maxScroll(editor);
   const previewMax = () => maxScroll(pane);
 
@@ -113,7 +132,7 @@ export function attachSplitScrollSync(
   };
 
   const syncEditorToPreview = () => {
-    const anchors = buildAnchors(pane, body);
+    const anchors = anchorsFor();
     if (anchors) {
       pushPreview(
         mapValue(anchors, editor.scrollTop, "editor", "preview"),
@@ -124,7 +143,7 @@ export function attachSplitScrollSync(
   };
 
   const syncPreviewToEditor = () => {
-    const anchors = buildAnchors(pane, body);
+    const anchors = anchorsFor();
     if (anchors) {
       pushEditor(
         mapValue(anchors, pane.scrollTop, "preview", "editor"),
@@ -167,7 +186,10 @@ export function attachSplitScrollSync(
     schedule("preview");
   };
 
-  const onLayoutChange = () => schedule("editor");
+  const onLayoutChange = () => {
+    invalidateAnchors();
+    schedule("editor");
+  };
 
   editor.addEventListener("scroll", onEditorScroll, { passive: true });
   pane.addEventListener("scroll", onPreviewScroll, { passive: true });

@@ -102,7 +102,11 @@ export function buildDecorations(
         const node = nodeRef.node;
         const name = nodeRef.name;
         const key = `${name}:${node.from}:${node.to}`;
-        if (seen.has(key)) return false;
+        // 可见区被块级 widget（表格、块级公式等）切成多段时，各段都会从
+        // Document 等祖先节点开始遍历。重复节点不能返回 false——那会跳过
+        // 祖先的子树、让该段后面的内容整段丢失装饰；继续下探即可，子节点
+        // 的 key 仍会去重。
+        if (seen.has(key)) return true;
         seen.add(key);
 
         const headingMatch = /^ATXHeading([1-6])$/.exec(name);

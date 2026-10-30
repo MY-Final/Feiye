@@ -3,12 +3,14 @@ import {
   StateField,
   type EditorState,
   type Range,
+  type Transaction,
 } from "@codemirror/state";
 import {
   Decoration,
   EditorView,
   type DecorationSet,
 } from "@codemirror/view";
+import type { SyntaxNode } from "@lezer/common";
 
 import { parseTable } from "./table";
 import {
@@ -24,6 +26,96 @@ function isActive(state: EditorState, from: number, to: number): boolean {
   return state.selection.ranges.some(
     (range) => range.from <= to && range.to >= from,
   );
+}
+
+/** 光标是否落在表格 / 公式里：这两类块在光标进入时要退回源码。 */
+const SOURCE_BLOCK = /^(Table|MathBlock)$/;
+const ANY_BLOCK = /^(Table|MathBlock|FencedCode)$/;
+/** 行首的围栏 / 公式起始标记；这些字符会让块的边界移动。 */
+const BLOCK_START = /^[ \t]*(?:`{3,}|~{3,}|\$\$)/;
+
+const BIASES = [-1, 1] as const;
+
+function enclosingBlock(state: EditorState, pos: number): string | null {
+  const tree = syntaxTree(state);
+  const at = Math.max(0, Math.min(pos, state.doc.length));
+  for (const bias of BIASES) {
+    for (
+      let node: SyntaxNode | null = tree.resolveInner(at, bias);
+      node;
+      node = node.parent
+    ) {
+      if (ANY_BLOCK.test(node.name)) return node.name;
+    }
+  }
+  return null;
+}
+
+/** 选区命中哪些块（按类型与起点区分），用于判断「进入 / 离开块」是否真的变了。 */
+function activeBlocks(state: EditorState): string {
+  const keys: string[] = [];
+  const tree = syntaxTree(state);
+  for (const range of state.selection.ranges) {
+    const positions =
+      range.from === range.to ? [range.from] : [range.from, range.to];
+    for (const pos of positions) {
+      for (const bias of BIASES) {
+        let node: SyntaxNode | null = tree.resolveInner(pos, bias);
+        for (; node; node = node.parent) {
+          if (SOURCE_BLOCK.test(node.name)) {
+            keys.push(`${node.name}:${node.from}`);
+            break;
+          }
+        }
+      }
+    }
+  }
+  return keys.join(",");
+}
+
+/**
+ * 普通输入只会移动已有块的位置，不需要整篇重建装饰。
+ * 只有改动落在表格 / 公式里、碰到围栏或公式起始行、或可能生成表格的
+ * `|` 时，才重新遍历语法树。FencedCode 内部改代码不必重建。
+ */
+function needsBlockRebuild(transaction: Transaction): boolean {
+  const start = transaction.startState;
+  const next = transaction.state;
+  if (start.doc.length > MAX_DOC || next.doc.length > MAX_DOC) {
+    return start.doc.length > MAX_DOC && next.doc.length <= MAX_DOC;
+  }
+
+  let rebuild = false;
+  transaction.changes.iterChangedRanges((fromA, toA, fromB, toB) => {
+    if (rebuild) return;
+    const oldLine = start.doc.lineAt(fromA).text;
+    const newLine = next.doc.lineAt(fromB).text;
+    if (BLOCK_START.test(oldLine) || BLOCK_START.test(newLine)) {
+      rebuild = true;
+      return;
+    }
+    const removed = start.doc.sliceString(fromA, toA);
+    const inserted = next.doc.sliceString(fromB, toB);
+    // 增删换行会移动块的边界（围栏开合、表格 / 公式与段落分合）。
+    if (removed.includes("\n") || inserted.includes("\n")) {
+      rebuild = true;
+      return;
+    }
+    const before = enclosingBlock(start, fromA);
+    const after = enclosingBlock(next, fromB);
+    if (
+      (before && before !== "FencedCode") ||
+      (after && after !== "FencedCode")
+    ) {
+      rebuild = true;
+      return;
+    }
+    // 普通段落里出现 `|` 可能正在写表格的表头 / 分隔行。
+    if (!before && !after && (removed.includes("|") || inserted.includes("|"))) {
+      rebuild = true;
+    }
+  });
+  return rebuild;
 }
 
 /** 整行范围；`includeBreak` 控制是否把行尾换行一并替换。 */
@@ -159,10 +251,19 @@ export function buildBlockDecorations(state: EditorState): DecorationSet {
 export const blockWidgets = StateField.define<DecorationSet>({
   create: buildBlockDecorations,
   update(value, transaction) {
-    if (
-      transaction.docChanged ||
-      transaction.selection !== transaction.startState.selection
-    ) {
+    if (transaction.docChanged) {
+      if (needsBlockRebuild(transaction)) {
+        return buildBlockDecorations(transaction.state);
+      }
+      // 块结构没变：按编辑映射位置，省掉整篇语法树遍历与 widget 重建。
+      return value.map(transaction.changes);
+    }
+    if (transaction.selection !== transaction.startState.selection) {
+      if (
+        activeBlocks(transaction.startState) === activeBlocks(transaction.state)
+      ) {
+        return value;
+      }
       return buildBlockDecorations(transaction.state);
     }
     return value;

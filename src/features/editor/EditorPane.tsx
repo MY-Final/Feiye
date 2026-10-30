@@ -1,4 +1,5 @@
 import { useEffect, useRef, type MouseEvent as ReactMouseEvent } from "react";
+import { forceParsing } from "@codemirror/language";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { isExternalHref } from "../../lib/links";
@@ -103,7 +104,9 @@ function handleLinkClick(event: ReactMouseEvent<HTMLDivElement>): void {
 export function EditorPane() {
   const hostRef = useRef<HTMLDivElement>(null);
   const statsTimer = useRef<number | null>(null);
+  const outlineTimer = useRef<number | null>(null);
   const viewMode = useDocumentStore((state) => state.viewMode);
+  const docPath = useDocumentStore((state) => state.path);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -127,6 +130,18 @@ export function EditorPane() {
       }, STATS_DELAY_MS);
     };
 
+    // 后台解析推进时只补大纲，不重算字数（正文没变）。
+    const scheduleOutline = () => {
+      if (outlineTimer.current !== null) return;
+      outlineTimer.current = window.setTimeout(() => {
+        outlineTimer.current = null;
+        const state = getEditorView()?.state;
+        if (state) {
+          useOutlineStore.getState().setHeadings(readOutline(state));
+        }
+      }, STATS_DELAY_MS);
+    };
+
     mountEditor(
       host,
       {
@@ -136,14 +151,20 @@ export function EditorPane() {
         onChange() {
           useDocumentStore.getState().markDirty(true);
           noteDocumentChange();
-          if (useDocumentStore.getState().viewMode === "wysiwyg") return;
+          // 所见模式与纯源码模式下预览都不可见，切回去时 changeViewMode
+          // 会立即补一次预览，输入途中没必要跟着刷新。
+          const mode = useDocumentStore.getState().viewMode;
+          if (mode === "wysiwyg" || mode === "source") return;
 
-          const text = getEditorText();
-          if (text !== null && useDocumentStore.getState().path) {
-            requestPreview(text);
+          const view = getEditorView();
+          if (view && useDocumentStore.getState().path) {
+            // 去抖结束再取全文：长文档输入时不必每一击键都复制整篇文档。
+            const length = view.state.doc.length;
+            requestPreview(() => getEditorText() ?? "", false, length);
           }
         },
         onStats: scheduleStats,
+        onOutline: scheduleOutline,
         onCursor(line, column) {
           useDocumentStore.getState().setCursor(line, column);
           const view = getEditorView();
@@ -177,6 +198,10 @@ export function EditorPane() {
         window.clearTimeout(statsTimer.current);
         statsTimer.current = null;
       }
+      if (outlineTimer.current !== null) {
+        window.clearTimeout(outlineTimer.current);
+        outlineTimer.current = null;
+      }
     };
   }, []);
 
@@ -185,6 +210,31 @@ export function EditorPane() {
     setEditorMode(viewMode === "wysiwyg" ? "wysiwyg" : "source");
     requestAnimationFrame(() => refreshEditorLayout());
   }, [viewMode]);
+
+  // 纯预览里编辑器不可见，CodeMirror 不会继续后台解析，大纲只覆盖打开时
+  // 解析到的那一小段。切到预览后分片把整篇补完，长文的滚动高亮与标题
+  // 跳转才能覆盖全文；每次只占一小段时间片，避免长文档卡住主线程。
+  useEffect(() => {
+    if (viewMode !== "preview" || !docPath) return;
+    let cancelled = false;
+    let timer: number | null = null;
+    const step = () => {
+      timer = null;
+      if (cancelled) return;
+      const view = getEditorView();
+      if (!view) return;
+      const total = view.state.doc.length;
+      if (total === 0) return;
+      if (!forceParsing(view, total, 24)) {
+        timer = window.setTimeout(step, 16);
+      }
+    };
+    timer = window.setTimeout(step, 0);
+    return () => {
+      cancelled = true;
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [viewMode, docPath]);
 
   return (
     <div
