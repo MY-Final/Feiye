@@ -622,6 +622,32 @@ body.is-resizing-split * {
   font-size: 13px;
 }
 
+/* 「最近打开」标题右侧放一个低调的清空入口。 */
+.empty-state .recent-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.empty-state .recent-heading p {
+  margin: 0;
+}
+
+.empty-state .recent-clear {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-faint);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.empty-state .recent-clear:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
 /* 同名笔记靠所在目录区分，长路径整体省略。 */
 .empty-state .recent-row {
   display: flex;

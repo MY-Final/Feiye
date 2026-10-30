@@ -379,7 +379,18 @@ export default function App() {
                     </button>
                     {recent.length > 0 ? (
                       <>
-                        <p>最近打开</p>
+                        <div className="recent-heading">
+                          <p>最近打开</p>
+                          <button
+                            type="button"
+                            className="recent-clear"
+                            onClick={() =>
+                              useWorkspaceStore.getState().clearRecent()
+                            }
+                          >
+                            清空
+                          </button>
+                        </div>
                         {recent.map((relPath) => (
                           <div key={relPath} className="recent-row">
                             <button

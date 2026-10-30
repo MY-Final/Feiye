@@ -117,6 +117,8 @@ interface WorkspaceStore {
   noteRecent(relPath: string): void;
   /** 重命名或删除后同步「最近打开」，避免留下打不开的旧路径。 */
   updateRecent(oldPath: string, nextPath: string | null): void;
+  /** 一键清空最近打开；只影响历史列表，不动磁盘文件。 */
+  clearRecent(): void;
   loadDir(relPath: string, silent?: boolean): Promise<void>;
   refreshDir(relPath: string): Promise<void>;
   refreshTree(): Promise<void>;
@@ -181,6 +183,13 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     }
     set({ recent: next });
     persistRecent(root, next);
+  },
+
+  clearRecent() {
+    const root = get().root;
+    if (!root || get().recent.length === 0) return;
+    set({ recent: [] });
+    persistRecent(root, []);
   },
 
   async loadDir(relPath, silent = false) {
