@@ -46,6 +46,8 @@ interface UiStore {
   /** 专注模式：临时收起侧栏和工具栏，只为写作让路，不写入偏好。 */
   zenMode: boolean;
   settingsOpen: boolean;
+  /** 命令面板（Ctrl+Shift+P）。 */
+  paletteOpen: boolean;
   toasts: ToastItem[];
   confirm: ConfirmRequest | null;
   prompt: PromptRequest | null;
@@ -55,6 +57,8 @@ interface UiStore {
   openSettings(): void;
   closeSettings(): void;
   toggleSettings(): void;
+  openPalette(): void;
+  closePalette(): void;
   toast(
     message: string,
     kind?: ToastKind,
@@ -100,6 +104,7 @@ export const useUiStore = create<UiStore>((set, get) => ({
   sidebarVisible: true,
   zenMode: false,
   settingsOpen: false,
+  paletteOpen: false,
   toasts: [],
   confirm: null,
   prompt: null,
@@ -136,6 +141,14 @@ export const useUiStore = create<UiStore>((set, get) => ({
 
   toggleSettings() {
     set((state) => ({ settingsOpen: !state.settingsOpen }));
+  },
+
+  openPalette() {
+    set({ paletteOpen: true });
+  },
+
+  closePalette() {
+    set({ paletteOpen: false });
   },
 
   toast(message, kind = "info", action, actionTitle) {

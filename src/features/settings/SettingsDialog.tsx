@@ -136,6 +136,7 @@ const SHORTCUT_GROUPS: { title: string; items: [string, string][] }[] = [
       ["Alt + ← / Alt + →", "浏览历史里后退 / 前进"],
       ["Ctrl + Shift + F", "专注模式：收起侧栏与工具栏，再按一次恢复"],
       ["Ctrl + F", "查找与替换（预览模式下自动切到分栏）"],
+      ["Ctrl + Shift + P", "命令面板：搜索并执行应用内动作"],
       ["Ctrl + = / Ctrl + -", "放大 / 缩小正文字号"],
       ["Ctrl + ,", "偏好设置"],
       ["Ctrl + B（光标不在正文）", "收起 / 展开侧栏；专注模式下退出专注"],

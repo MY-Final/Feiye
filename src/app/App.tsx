@@ -17,6 +17,7 @@ import {
   saveActiveDocument,
 } from "../features/editor/save";
 import { PreviewPane } from "../features/preview/PreviewPane";
+import { CommandPalette } from "../features/commands/CommandPalette";
 import { SettingsDialog } from "../features/settings/SettingsDialog";
 import { WorkspaceSidebar } from "../features/workspace/WorkspaceSidebar";
 import {
@@ -72,7 +73,7 @@ function noteLabel(name: string, hideExt: boolean): string {
 
 function dialogOpen(): boolean {
   const ui = useUiStore.getState();
-  return Boolean(ui.confirm || ui.prompt || ui.settingsOpen);
+  return Boolean(ui.confirm || ui.prompt || ui.settingsOpen || ui.paletteOpen);
 }
 
 export default function App() {
@@ -195,6 +196,15 @@ export default function App() {
       ) {
         event.preventDefault();
         ui.closeSettings();
+        return;
+      }
+
+      // 命令面板：Ctrl+Shift+P 打开 / 关闭；面板内自己处理方向键与回车。
+      if (mod && event.shiftKey && event.key.toLowerCase() === "p") {
+        if (ui.confirm || ui.prompt) return;
+        event.preventDefault();
+        if (ui.paletteOpen) ui.closePalette();
+        else ui.openPalette();
         return;
       }
 
@@ -680,6 +690,7 @@ export default function App() {
       <StatusBar />
 
       <SettingsDialog />
+      <CommandPalette />
       <DialogHost />
       <ToastHost />
     </div>
