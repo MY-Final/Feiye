@@ -255,6 +255,7 @@ export async function openFile(
   entry: Entry,
   silent = false,
   anchor?: string,
+  recordHistory = true,
 ): Promise<void> {
   if (entry.isDir) return;
   if (useDocumentStore.getState().path === entry.relPath) return;
@@ -262,6 +263,11 @@ export async function openFile(
 
   try {
     const file = await readFile(entry.relPath);
+    // 成功读到新文档后再记一步浏览历史：取消未保存提示、读盘失败都不留脏记录。
+    if (recordHistory) {
+      const current = useDocumentStore.getState().path;
+      if (current) useWorkspaceStore.getState().pushHistory(current);
+    }
     // 离开当前文档前记下光标，打开新文档后再恢复到它上次的位置。
     captureActiveCursor();
     // 先更新文档路径，图片 widget 需要在构建时解析相对地址。
@@ -285,26 +291,34 @@ export async function openFile(
       void rememberLastDocument(null);
       return;
     }
-    // 可能是文件已在应用外被删除：从最近打开里摘掉，避免反复点开报错。
+    // 可能是文件已在应用外被删除：从最近打开与浏览历史里摘掉，避免反复点开报错。
     useWorkspaceStore.getState().updateRecent(entry.relPath, null);
+    useWorkspaceStore.getState().forgetHistory(entry.relPath);
     toastError("打开文件失败", error);
   }
 }
 
-/** 「上一篇」的目标：最近打开里除当前文档外的第一篇。 */
+/** 「上一篇」的目标：本次会话里真正上一步打开的笔记。 */
 export function previousDocumentPath(): string | null {
-  const current = useDocumentStore.getState().path;
-  if (!current) return null;
-  return (
-    useWorkspaceStore.getState().recent.find((path) => path !== current) ?? null
-  );
+  const history = useWorkspaceStore.getState().history;
+  return history[history.length - 1] ?? null;
 }
 
 /** 回到上一篇打开的笔记：沿着链接读下去之后，不用再去文件树里找回来的路。 */
 export async function openPreviousDocument(): Promise<void> {
   const relPath = previousDocumentPath();
   if (!relPath) return;
-  await openFile({ relPath, name: baseName(relPath), isDir: false });
+  // 这次打开不再记历史，否则退一步之后「上一篇」又会指回刚离开的那篇。
+  await openFile(
+    { relPath, name: baseName(relPath), isDir: false },
+    false,
+    undefined,
+    false,
+  );
+  // 真的打开了才退一步；被未保存提示取消或读盘失败时，历史保持原样。
+  if (useDocumentStore.getState().path === relPath) {
+    useWorkspaceStore.getState().popHistory();
+  }
 }
 
 export async function createMarkdownFile(parent: string): Promise<void> {

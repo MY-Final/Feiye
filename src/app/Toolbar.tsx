@@ -111,7 +111,7 @@ export function Toolbar() {
   const viewMode = useDocumentStore((state) => state.viewMode);
   const format = useEditorStore((state) => state.format);
   const previousPath = useWorkspaceStore((state) =>
-    docPath ? (state.recent.find((path) => path !== docPath) ?? null) : null,
+    docPath ? (state.history[state.history.length - 1] ?? null) : null,
   );
   const imageInput = useRef<HTMLInputElement>(null);
 
@@ -143,7 +143,7 @@ export function Toolbar() {
           title={
             previousPath
               ? `返回上一篇笔记 (Alt+←)：${previousPath}`
-              : "返回上一篇笔记（最近打开里还没有其他笔记）"
+              : "返回上一篇笔记（本次会话里还没有打开过其他笔记）"
           }
           disabled={!previousPath}
           onMouseDown={(event) => event.preventDefault()}

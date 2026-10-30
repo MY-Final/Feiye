@@ -19,6 +19,25 @@
 
 <!-- 从这里开始追加 -->
 
+## 第 139 轮 · 2026-10-30 15:03
+**用户需求**：顺着链接 A → B → C 读下去，按一次 Alt+← 退回 B，再按一次却跳回了 C，像在两页之间来回弹；想一路退回 A 只能去文件树里找。
+
+**产品经理**：做。「返回」应该是浏览器那样的后退，而不是最近两篇的切换；第 137 轮借用「最近打开」只是临时方案。改成会话内真正的浏览历史后，返回语义与按钮文字一致，不新增界面、不落盘、不扩大产品边界，符合「安静、快」的原则。
+
+**前端**：影响 `src/stores/workspace.ts`（新增会话级 `history` 栈与 `pushHistory` / `popHistory` / `forgetHistory`，换库时清空，上限 50 步）、`src/features/workspace/workspace-actions.ts`（`openFile` 成功读盘后压入上一篇并支持 `recordHistory = false`；`previousDocumentPath` 读栈顶；`openPreviousDocument` 成功后才出栈，读盘失败时从历史中摘掉）、`src/app/Toolbar.tsx`（按钮状态改看 `history`，无历史时提示「本次会话里还没有打开过其他笔记」）。风险：重启后历史清空，按钮从灰色开始；被改名 / 移动的旧文档仍在历史里时退回会提示打开失败并自动摘除。工作量 S。
+
+**后端**：无改动。工作量 0。
+
+**裁决**：做
+
+**改动**：`src/stores/workspace.ts`、`src/features/workspace/workspace-actions.ts`、`src/app/Toolbar.tsx`
+
+**构建**：通过（bun run build，534ms）
+
+**验证**：CDP（9222，工作区 `D:\clawWorkSpeace\新建文件夹`）。依次打开 `子目录/README.md` → `写作示例.md` → `长文档.md`，连按三次 Alt+←，状态栏路径依次回到 `写作示例.md` → `子目录/README.md` → `CaseTest.md`（不是来回跳），历史用尽后「返回」按钮置灰；Alt+← 事件 `defaultPrevented` 为 true。人工复现：沿链接打开 A → B → C，按 Alt+← 应依次退回 B、A；点工具栏「返回」行为相同；只有一篇时按钮置灰，悬停提示「本次会话里还没有打开过其他笔记」。
+
+---
+
 ## 第 138 轮 · 2026-10-30 14:33
 **用户需求**：沿链接读完一篇后想回上一页，眼睛还停在正文上，手却得去够工具栏点「返回」；浏览器里 Alt+← 就是后退，编辑器里也该有同一个键。
 
