@@ -16,6 +16,46 @@ import {
   type InlineKind,
 } from "./formatting";
 
+/** Tab / Shift+Tab：按 Markdown 习惯以两个空格缩进或反缩进所选的每一行。 */
+function indentLines(view: EditorView, outdent: boolean): boolean {
+  const { state } = view;
+  const range = state.selection.main;
+  const first = state.doc.lineAt(range.from).number;
+  const last = state.doc.lineAt(range.to).number;
+  const changes: { from: number; to?: number; insert: string }[] = [];
+  let delta = 0;
+
+  for (let number = first; number <= last; number += 1) {
+    const line = state.doc.line(number);
+    if (outdent) {
+      const match = /^(\t| {1,2})/.exec(line.text);
+      if (match) {
+        changes.push({
+          from: line.from,
+          to: line.from + match[0].length,
+          insert: "",
+        });
+        delta -= match[0].length;
+      }
+    } else {
+      changes.push({ from: line.from, insert: "  " });
+      delta += 2;
+    }
+  }
+
+  if (changes.length === 0) return true;
+
+  view.dispatch({
+    changes,
+    userEvent: "input.indent",
+    // 单选区时让光标跟着缩进移动；多行选区交给变更映射。
+    selection: range.empty
+      ? { anchor: Math.max(0, range.head + delta) }
+      : undefined,
+  });
+  return true;
+}
+
 function inline(kind: InlineKind, key: string): KeyBinding {
   return {
     key,
@@ -33,6 +73,9 @@ function block(kind: BlockKind, key: string): KeyBinding {
 }
 
 export const formatKeymap: readonly KeyBinding[] = [
+  // 编辑器内 Tab 用于缩进，不再把焦点移出正文。
+  { key: "Tab", run: (view) => indentLines(view, false) },
+  { key: "Shift-Tab", run: (view) => indentLines(view, true) },
   // 代码块内：块尾空行回车退出；Ctrl/Cmd+Enter 随时退出。
   { key: "Enter", run: handleCodeBlockEnter },
   { key: "Mod-Enter", run: exitCodeBlock },
