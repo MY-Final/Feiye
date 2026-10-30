@@ -6,7 +6,11 @@ import { ToastHost } from "../components/Toast";
 import { EditorPane } from "../features/editor/EditorPane";
 import { flushAutoSave } from "../features/editor/autosave";
 import { refreshEditorLayout } from "../features/editor/editor-bridge";
-import { guardUnsaved, saveActiveDocument } from "../features/editor/save";
+import {
+  guardUnsaved,
+  reloadActiveDocument,
+  saveActiveDocument,
+} from "../features/editor/save";
 import { PreviewPane } from "../features/preview/PreviewPane";
 import { SettingsDialog } from "../features/settings/SettingsDialog";
 import { WorkspaceSidebar } from "../features/workspace/WorkspaceSidebar";
@@ -19,7 +23,7 @@ import {
   saveDocumentAs,
 } from "../features/workspace/workspace-actions";
 import { APP_NAME, APP_TAGLINE } from "../lib/app-info";
-import { getSetting, setSetting } from "../lib/tauri";
+import { getSetting, readFile, setSetting } from "../lib/tauri";
 import { isViewMode } from "../lib/view-modes";
 import { useDocumentStore } from "../stores/document";
 import { flushPreferences, FONT_FAMILY_STACKS, useSettingsStore } from "../stores/settings";
@@ -186,6 +190,54 @@ export default function App() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  // 窗口重新获得焦点时，若磁盘文件被其他程序改过，提示重新加载。
+  useEffect(() => {
+    let checking = false;
+    let lastSeen: number | null = null;
+
+    const checkExternalChange = async () => {
+      if (checking) return;
+      const doc = useDocumentStore.getState();
+      if (!doc.path || doc.dirty || doc.saving || doc.saveBlocked) return;
+
+      checking = true;
+      try {
+        const file = await readFile(doc.path);
+        const current = useDocumentStore.getState();
+        if (current.path !== doc.path || current.dirty) return;
+        if (file.modifiedMs === current.savedModifiedMs) return;
+        if (lastSeen === file.modifiedMs) return;
+        lastSeen = file.modifiedMs;
+
+        const choice = await useUiStore.getState().ask({
+          title: "文件已被其他程序修改",
+          message: "磁盘上的内容与编辑器不一致。重新加载会显示最新内容。",
+          buttons: [
+            { label: "重新加载", value: "reload", tone: "primary" },
+            { label: "稍后", value: "later" },
+          ],
+        });
+        if (choice === "reload") await reloadActiveDocument();
+      } catch {
+        // 文件被删除或暂时无法读取时保持现状。
+      } finally {
+        checking = false;
+      }
+    };
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        void checkExternalChange();
+      }
+    };
+    window.addEventListener("focus", onVisible);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("focus", onVisible);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 
   // 系统任务栏 / Alt-Tab 里也显示当前笔记名，未保存时带圆点。
