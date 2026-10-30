@@ -135,6 +135,33 @@ function toastError(prefix: string, error: unknown): void {
   useUiStore.getState().toast(`${prefix}：${describeError(error)}`, "error");
 }
 
+const RECENT_WORKSPACES_KEY = "recentWorkspaces";
+const RECENT_WORKSPACES_LIMIT = 5;
+
+/** 切换过的笔记库只记路径；切回时重新扫盘，不留任何内容副本。 */
+export async function rememberWorkspace(path: string): Promise<void> {
+  const raw = await getSetting<unknown>(RECENT_WORKSPACES_KEY);
+  const others = Array.isArray(raw)
+    ? raw.filter(
+        (item): item is string => typeof item === "string" && item !== path,
+      )
+    : [];
+  await setSetting(
+    RECENT_WORKSPACES_KEY,
+    [path, ...others].slice(0, RECENT_WORKSPACES_LIMIT),
+  );
+}
+
+/** 「最近工作区」菜单：去掉当前库，只列可以切过去的路径。 */
+export async function listRecentWorkspaces(): Promise<string[]> {
+  const raw = await getSetting<unknown>(RECENT_WORKSPACES_KEY);
+  if (!Array.isArray(raw)) return [];
+  const current = useWorkspaceStore.getState().root;
+  return raw.filter(
+    (item): item is string => typeof item === "string" && item !== current,
+  );
+}
+
 export async function chooseWorkspace(): Promise<void> {
   try {
     const path = await pickWorkspaceFolder(
@@ -159,6 +186,7 @@ export async function openWorkspaceAt(path: string): Promise<void> {
     resetDocument();
     await useWorkspaceStore.getState().loadDir("");
     await setSetting("lastWorkspace", info.root);
+    await rememberWorkspace(info.root);
 
     // 每个工作区各自记着上次打开的文档：切换过来时直接打开它，
     // 和启动时一样；文件已不在时静默跳过。
@@ -198,6 +226,7 @@ export async function restoreLastWorkspace(): Promise<void> {
     const info = await apiOpenWorkspace(last);
     useWorkspaceStore.getState().setWorkspace(info);
     await useWorkspaceStore.getState().loadDir("");
+    await rememberWorkspace(info.root);
 
     // 恢复这个工作区上次打开的文档；文件已不存在时静默清除记录，不打扰启动。
     const lastDocument = await recallLastDocument(last);

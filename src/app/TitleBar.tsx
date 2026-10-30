@@ -1,8 +1,21 @@
-import { chooseWorkspace } from "../features/workspace/workspace-actions";
+import { useState, type MouseEvent } from "react";
+
+import { ContextMenu } from "../components/Menu";
+import {
+  chooseWorkspace,
+  listRecentWorkspaces,
+  openWorkspaceAt,
+} from "../features/workspace/workspace-actions";
 import { useWindowControls } from "../features/window/use-window-controls";
 import { useDocumentStore } from "../stores/document";
 import { useUiStore } from "../stores/ui";
 import { useWorkspaceStore } from "../stores/workspace";
+
+/** 工作区根目录是本机绝对路径，两种分隔符都要认。 */
+function folderName(path: string): string {
+  const parts = path.split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] ?? path;
+}
 
 function SidebarIcon() {
   return (
@@ -16,6 +29,14 @@ function FolderIcon() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
       <path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.2l1.2 1.4h5.6A1.5 1.5 0 0 1 14 5.9v5.6A1.5 1.5 0 0 1 12.5 13h-9A1.5 1.5 0 0 1 2 11.5z" />
+    </svg>
+  );
+}
+
+function ChevronIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M4.5 6.5 8 10l3.5-3.5" />
     </svg>
   );
 }
@@ -68,6 +89,22 @@ export function TitleBar() {
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
   const toggleSettings = useUiStore((state) => state.toggleSettings);
   const controls = useWindowControls();
+  const [recentMenu, setRecentMenu] = useState<{
+    x: number;
+    y: number;
+    paths: string[];
+  } | null>(null);
+
+  // 没有历史时按原来的行为直接弹文件夹对话框，不让人多点一次。
+  const openRecentMenu = async (event: MouseEvent<HTMLButtonElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const paths = await listRecentWorkspaces();
+    if (paths.length === 0) {
+      void chooseWorkspace();
+      return;
+    }
+    setRecentMenu({ x: rect.left, y: rect.bottom + 4, paths });
+  };
 
   return (
     <header
@@ -134,6 +171,16 @@ export function TitleBar() {
         <button
           type="button"
           className="icon-btn"
+          title="最近工作区"
+          aria-label="最近工作区"
+          onClick={(event) => void openRecentMenu(event)}
+        >
+          <ChevronIcon />
+        </button>
+
+        <button
+          type="button"
+          className="icon-btn"
           title="偏好设置 (Ctrl+,)"
           aria-label="偏好设置"
           onClick={toggleSettings}
@@ -184,6 +231,18 @@ export function TitleBar() {
           <CloseIcon />
         </button>
       </div>
+
+      {recentMenu ? (
+        <ContextMenu
+          x={recentMenu.x}
+          y={recentMenu.y}
+          onClose={() => setRecentMenu(null)}
+          actions={recentMenu.paths.map((path) => ({
+            label: `切换到 ${folderName(path)}`,
+            onSelect: () => void openWorkspaceAt(path),
+          }))}
+        />
+      ) : null}
     </header>
   );
 }
