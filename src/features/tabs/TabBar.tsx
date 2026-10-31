@@ -104,6 +104,14 @@ export function TabBar() {
             key={tab.path}
             ref={isActive ? activeTabRef : null}
             className={`doc-tab${isActive ? " is-active" : ""}`}
+            // 浏览器与多数编辑器里，鼠标中键点标签就是关闭它；这里照做，
+            // 不用先切过去再按 Ctrl+W，也不必瞄准很小的 ×。
+            // 关闭仍走 closeDocumentTab，未保存时照常弹保存提示。
+            onAuxClick={(event) => {
+              if (event.button !== 1) return;
+              event.preventDefault();
+              void closeDocumentTab(tab.path);
+            }}
           >
             <button
               type="button"
