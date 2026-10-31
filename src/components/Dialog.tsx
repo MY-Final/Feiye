@@ -34,15 +34,18 @@ export function trapTab(event: ReactKeyboardEvent<HTMLElement>): void {
   const last = focusables[focusables.length - 1];
   const active = document.activeElement;
   const inside = active instanceof HTMLElement && event.currentTarget.contains(active);
+  // 焦点在对话框本身（如刚打开时落在容器上）不在可 Tab 元素里，
+  // 也要把 Tab / Shift+Tab 收进首尾，否则会从容器后面绕出去。
+  const position = focusables.indexOf(active as HTMLElement);
 
   if (event.shiftKey) {
-    if (!inside || active === first) {
+    if (!inside || active === first || position < 0) {
       event.preventDefault();
       last.focus();
     }
     return;
   }
-  if (!inside || active === last) {
+  if (!inside || active === last || position < 0) {
     event.preventDefault();
     first.focus();
   }
@@ -80,6 +83,7 @@ function useDialogClose() {
 
 function ConfirmDialog({ request }: { request: ConfirmRequest }) {
   const { closing, close } = useDialogClose();
+  const dialogRef = useRef<HTMLDivElement>(null);
   const cancelValue =
     request.buttons.find((button) => button.value === "cancel")?.value ??
     request.buttons[request.buttons.length - 1]?.value ??
@@ -87,6 +91,12 @@ function ConfirmDialog({ request }: { request: ConfirmRequest }) {
   // 回车只认主按钮；「移动到回收站」这类危险按钮必须真的点一下。
   const primaryValue =
     request.buttons.find((button) => button.tone === "primary")?.value ?? null;
+
+  // 打开后把焦点移进对话框本身：读屏会报出标题，Tab 也从确认框里开始，
+  // 而不是留在后面的列表 / 编辑器里转。
+  useEffect(() => {
+    dialogRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -122,6 +132,8 @@ function ConfirmDialog({ request }: { request: ConfirmRequest }) {
       }}
     >
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         className={`modal${closing ? " is-closing" : ""}`}
         role="dialog"
         aria-modal="true"

@@ -1442,6 +1442,12 @@ body.is-resizing-split * {
   animation: modal-in var(--dur-base) var(--ease-out) both;
 }
 
+/* 确认框打开时焦点落在对话框容器上，用于让读屏报出标题；
+   它不是可点控件，不画默认焦点框。 */
+.modal:focus {
+  outline: none;
+}
+
 /* 弹窗从下方 6px 处轻轻抬起，配合遮罩淡入，不用缩放弹跳。 */
 @keyframes modal-in {
   from {

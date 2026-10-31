@@ -109,6 +109,9 @@ export function HistoryDialog() {
     if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      // 确认框叠在历史上面时，Esc 只关最上层，历史保持打开。
+      const ui = useUiStore.getState();
+      if (ui.confirm || ui.prompt) return;
       event.preventDefault();
       closeHistory();
       const previous = restoreFocus.current;
