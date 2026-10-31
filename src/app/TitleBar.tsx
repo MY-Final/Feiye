@@ -175,21 +175,33 @@ export function TitleBar() {
             <span className="brand-divider" aria-hidden="true">
               /
             </span>
-            <span className="workspace-name" title={root ?? undefined}>
-              {workspaceName}
-            </span>
+            {/* 库名和箭头是一个入口：点名字也能切库，别让它看起来像死文字。 */}
+            <button
+              type="button"
+              className="workspace-switch"
+              title={`${root ?? workspaceName} · 切换最近工作区`}
+              aria-label={`当前工作区：${workspaceName}，切换最近工作区`}
+              aria-haspopup="menu"
+              aria-expanded={Boolean(recentMenu)}
+              onClick={(event) => void openRecentMenu(event)}
+            >
+              <span className="workspace-name">{workspaceName}</span>
+              <ChevronIcon />
+            </button>
           </>
-        ) : null}
-
-        <button
-          type="button"
-          className="icon-btn"
-          title="最近工作区"
-          aria-label="最近工作区"
-          onClick={(event) => void openRecentMenu(event)}
-        >
-          <ChevronIcon />
-        </button>
+        ) : (
+          <button
+            type="button"
+            className="icon-btn"
+            title="最近工作区"
+            aria-label="最近工作区"
+            aria-haspopup="menu"
+            aria-expanded={Boolean(recentMenu)}
+            onClick={(event) => void openRecentMenu(event)}
+          >
+            <ChevronIcon />
+          </button>
+        )}
       </div>
 
       <div className="titlebar-tabs">

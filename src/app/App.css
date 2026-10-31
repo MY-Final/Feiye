@@ -117,6 +117,49 @@
   white-space: nowrap;
 }
 
+/* 库名 + 箭头合成一个按钮，切换库的命中区域不再只剩箭头那么大。 */
+.workspace-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  min-width: 0;
+  height: 24px;
+  padding: 0 3px 0 4px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.workspace-switch:hover {
+  background: var(--bg-sunken);
+  color: var(--text);
+}
+
+.workspace-switch:focus-visible {
+  color: var(--text);
+}
+
+.workspace-switch svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.workspace-switch .workspace-name {
+  min-width: 0;
+  color: inherit;
+}
+
 .doc-title {
   display: inline-flex;
   align-items: center;
