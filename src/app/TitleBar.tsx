@@ -168,14 +168,11 @@ export function TitleBar() {
         <span className="brand-seal" aria-hidden="true">
           扉
         </span>
-        <span className="brand-name">扉页</span>
 
         {workspaceName ? (
           <>
-            <span className="brand-divider" aria-hidden="true">
-              /
-            </span>
-            {/* 库名和箭头是一个入口：点名字也能切库，别让它看起来像死文字。 */}
+            {/* 印章已经是应用标识，库名紧跟其后即可；不再用「扉页 / 库名」
+                的斜杠写法，避免看起来像一条不存在的目录层级。 */}
             <button
               type="button"
               className="workspace-switch"
