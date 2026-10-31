@@ -621,29 +621,32 @@ export default function App() {
   return (
     <div className="app">
       <TitleBar />
-      {/* 标签单独占一行：标题栏留给应用菜单与窗口控制，标签再宽也不会互相挤。 */}
-      {hasWorkspace && !zenMode ? (
-        <div className="tab-strip">
-          <TabBar />
-          <button
-            type="button"
-            className="tab-new"
-            title="新建笔记 (Ctrl+N)"
-            aria-label="新建笔记"
-            onClick={() => void newDocumentNearActive()}
-          >
-            +
-          </button>
-        </div>
-      ) : null}
-      {/* 专注模式把工具栏和侧栏都收起来，退出后按原来的偏好还原。 */}
-      {zenMode ? null : <Toolbar />}
 
       <div className="app-body">
         {hasWorkspace && sidebarVisible && !zenMode ? <WorkspaceSidebar /> : null}
 
-        {/* 专注模式只留正文：标题栏里的标签与工具栏一并收起，退出后原样回来。 */}
-        <div className="main-row">
+        {/* 文档列：标签行与工具栏只覆盖编辑区，侧栏保持整列高度。 */}
+        <div className="main-column">
+          {/* 标签单独占一行：标题栏留给应用菜单与窗口控制，标签再宽也不会互相挤。 */}
+          {hasWorkspace && !zenMode ? (
+            <div className="tab-strip">
+              <TabBar />
+              <button
+                type="button"
+                className="tab-new"
+                title="新建笔记 (Ctrl+N)"
+                aria-label="新建笔记"
+                onClick={() => void newDocumentNearActive()}
+              >
+                +
+              </button>
+            </div>
+          ) : null}
+          {/* 专注模式把工具栏和侧栏都收起来，退出后按原来的偏好还原。 */}
+          {zenMode ? null : <Toolbar />}
+
+          {/* 专注模式只留正文：标签与工具栏一并收起，退出后原样回来。 */}
+          <div className="main-row">
           <main
           className={`workspace-main mode-${viewMode}${preferences.lineNumbers ? "" : " hide-line-numbers"}`}
           style={
@@ -784,6 +787,7 @@ export default function App() {
           )}
           </main>
           <SplitPane />
+          </div>
         </div>
       </div>
 
