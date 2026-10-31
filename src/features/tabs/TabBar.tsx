@@ -216,6 +216,24 @@ export function TabBar() {
                 path: tab.path,
               });
             }}
+            // 键盘也能叫出同一份标签菜单：文件树早就支持 Shift+F10，
+            // 标签不该只能靠鼠标右键。打开后可以直接用方向键选。
+            onKeyDown={(event) => {
+              if (
+                event.key !== "ContextMenu" &&
+                !(event.shiftKey && event.key === "F10")
+              ) {
+                return;
+              }
+              event.preventDefault();
+              event.stopPropagation();
+              const rect = event.currentTarget.getBoundingClientRect();
+              setMenu({
+                x: rect.left + 16,
+                y: rect.bottom - 4,
+                path: tab.path,
+              });
+            }}
           >
             <button
               type="button"
