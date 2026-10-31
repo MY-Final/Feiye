@@ -45,6 +45,28 @@ export function TabBar() {
     return () => observer.disconnect();
   }, [hasTabs]);
 
+  // 标签放不下时滚动条被隐藏，纵向滚轮不会横向翻动这一条；
+  // 把纵向滚轮换成横向滚动，鼠标用户不用只靠 Ctrl+Tab 找被截掉的标签。
+  // 触控板横向滑动（deltaX 更大）保持原生手感。
+  useEffect(() => {
+    const bar = barRef.current;
+    if (!bar || !hasTabs) return;
+    const onWheel = (event: WheelEvent) => {
+      if (bar.scrollWidth <= bar.clientWidth) return;
+      if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+      event.preventDefault();
+      const delta =
+        event.deltaMode === 1
+          ? event.deltaY * 16
+          : event.deltaMode === 2
+            ? event.deltaY * bar.clientWidth
+            : event.deltaY;
+      bar.scrollLeft += delta;
+    };
+    bar.addEventListener("wheel", onWheel, { passive: false });
+    return () => bar.removeEventListener("wheel", onWheel);
+  }, [hasTabs]);
+
   if (tabs.length === 0) return null;
 
   const labelOf = (name: string) =>
