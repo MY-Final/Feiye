@@ -25,6 +25,9 @@ const MENUS: MenuDefinition[] = [
  */
 export function MenuBar() {
   const [open, setOpen] = useState<{ index: number; anchor: HTMLButtonElement } | null>(null);
+  // 整条菜单栏只占一个 Tab 停靠点，停在最后聚焦过的那个顶层菜单上；
+  // 其余项用 ←/→ / Home / End 到达。
+  const [tabStop, setTabStop] = useState(0);
   const buttons = useRef<(HTMLButtonElement | null)[]>([]);
 
   const switchMenu = (delta: -1 | 1) => {
@@ -43,10 +46,20 @@ export function MenuBar() {
       setOpen({ index, anchor: event.currentTarget });
       return;
     }
-    if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+    if (
+      event.key === "ArrowLeft" ||
+      event.key === "ArrowRight" ||
+      event.key === "Home" ||
+      event.key === "End"
+    ) {
       event.preventDefault();
-      const delta = event.key === "ArrowRight" ? 1 : -1;
-      const next = (index + delta + MENUS.length) % MENUS.length;
+      const next =
+        event.key === "Home"
+          ? 0
+          : event.key === "End"
+            ? MENUS.length - 1
+            : (index + (event.key === "ArrowRight" ? 1 : -1) + MENUS.length) %
+              MENUS.length;
       buttons.current[next]?.focus();
       const anchor = buttons.current[next];
       if (open && anchor) setOpen({ index: next, anchor });
@@ -71,8 +84,10 @@ export function MenuBar() {
             type="button"
             role="menuitem"
             className={`menubar-item${expanded ? " is-open" : ""}`}
+            tabIndex={index === tabStop ? 0 : -1}
             aria-haspopup="menu"
             aria-expanded={expanded}
+            onFocus={() => setTabStop(index)}
             onClick={() => {
               if (expanded) {
                 setOpen(null);
