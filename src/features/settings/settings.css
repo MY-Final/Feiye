@@ -197,13 +197,40 @@
   background: var(--accent);
 }
 
-.settings-value {
-  width: 54px;
+.settings-number-wrap {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+}
+
+.settings-number {
+  width: 44px;
+  padding: 2px 4px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  outline: none;
+  background: transparent;
   color: var(--text-muted);
   font-family: var(--font-mono);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
   text-align: right;
+}
+
+.settings-number:hover {
+  border-color: var(--line-strong);
+}
+
+.settings-number:focus {
+  border-color: var(--accent);
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.settings-unit {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
 }
 
 /* 下拉选择 */
@@ -453,4 +480,12 @@
 .settings-custom-css-input:focus {
   border-color: var(--accent);
   outline: none;
+}
+
+.settings-custom-css-count {
+  margin: 6px 0 0;
+  color: var(--text-faint);
+  font-size: 11px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }

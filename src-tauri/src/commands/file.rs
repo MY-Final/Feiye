@@ -4,11 +4,12 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 
 use super::workspace::{Entry, WorkspaceState};
 use crate::error::AppError;
 use crate::fs_path;
+use crate::history;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -71,7 +72,15 @@ fn read_path(path: &Path) -> Result<FileContent, AppError> {
 
 fn write_path(path: &Path, content: &str, expected_ms: Option<u64>) -> Result<FileMeta, AppError> {
     if let Some(expected) = expected_ms {
-        let meta = fs::metadata(path).map_err(|_| AppError::Conflict)?;
+        // 文件被外部删除时不该报「已被修改」：前端要据此提示另存 / 重建，
+        // 而不是弹一个「外部修改」的冲突对话框。
+        let meta = fs::metadata(path).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                AppError::NotFound(path.display().to_string())
+            } else {
+                AppError::Conflict
+            }
+        })?;
         if mtime_ms(&meta) != expected {
             return Err(AppError::Conflict);
         }
@@ -443,26 +452,120 @@ pub fn reveal_entry(rel_path: String, state: State<'_, WorkspaceState>) -> Resul
 pub fn rename_entry(
     rel_path: String,
     new_name: String,
+    app: AppHandle,
     state: State<'_, WorkspaceState>,
 ) -> Result<Entry, AppError> {
     let root = state.root()?;
-    rename_in(&root, &rel_path, &new_name)
+    let clean = fs_path::normalize_rel(&rel_path)?;
+    let docs = collect_history_paths(&root, &clean);
+    let entry = rename_in(&root, &clean, &new_name)?;
+    migrate_history_for(&app, &root, &docs, &clean, &entry.rel_path);
+    Ok(entry)
 }
 
 #[tauri::command]
 pub fn move_entry(
     rel_path: String,
     new_parent: String,
+    app: AppHandle,
     state: State<'_, WorkspaceState>,
 ) -> Result<Entry, AppError> {
     let root = state.root()?;
-    move_in(&root, &rel_path, &new_parent)
+    let clean = fs_path::normalize_rel(&rel_path)?;
+    let docs = collect_history_paths(&root, &clean);
+    let entry = move_in(&root, &clean, &new_parent)?;
+    migrate_history_for(&app, &root, &docs, &clean, &entry.rel_path);
+    Ok(entry)
+}
+
+/// 收集删除后要清历史快照的文档（文件夹含子目录），删除前先记下来。
+fn collect_history_paths(root: &Path, rel: &str) -> Vec<String> {
+    let Ok(path) = fs_path::resolve_in_workspace(root, rel) else {
+        return Vec::new();
+    };
+    let Ok(meta) = fs::symlink_metadata(&path) else {
+        return Vec::new();
+    };
+    if !meta.file_type().is_dir() {
+        return if fs_path::is_markdown(rel) {
+            vec![rel.to_string()]
+        } else {
+            Vec::new()
+        };
+    }
+
+    // 大目录不至于把删除拖太久；超出上限的文档历史留待下次清理。
+    const LIMIT: usize = 2000;
+    let mut paths = Vec::new();
+    let mut queue = vec![(path, rel.to_string())];
+    while let Some((dir, base)) = queue.pop() {
+        if paths.len() >= LIMIT {
+            break;
+        }
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let Ok(kind) = entry.file_type() else {
+                continue;
+            };
+            let name = entry.file_name().to_string_lossy().to_string();
+            let child = fs_path::join_rel(&base, &name);
+            if kind.is_dir() {
+                queue.push((entry.path(), child));
+            } else if kind.is_file() && fs_path::is_markdown(&name) {
+                paths.push(child);
+            }
+        }
+    }
+    paths
+}
+
+/// 重命名 / 移动成功后再迁快照；定位不到应用数据目录或迁移失败都不影响操作结果。
+/// `docs` 是操作前收集的旧路径，文件夹下每篇笔记按同名前缀换成新路径。
+fn migrate_history_for(
+    app: &AppHandle,
+    root: &Path,
+    docs: &[String],
+    old_rel: &str,
+    new_rel: &str,
+) {
+    if old_rel == new_rel || docs.is_empty() {
+        return;
+    }
+    let Ok(data) = app.path().app_data_dir() else {
+        return;
+    };
+    let pairs: Vec<(String, String)> = docs
+        .iter()
+        .map(|old| {
+            let suffix = old.strip_prefix(old_rel).unwrap_or("");
+            (old.clone(), format!("{new_rel}{suffix}"))
+        })
+        .collect();
+    history::move_documents(&data.join("history"), root, &pairs);
+}
+
+/// 删除成功后再清快照；定位不到应用数据目录或清理失败都不影响删除结果。
+fn clear_history_for(app: &AppHandle, root: &Path, docs: &[String]) {
+    let Ok(data) = app.path().app_data_dir() else {
+        return;
+    };
+    history::clear_documents(&data.join("history"), root, docs);
 }
 
 #[tauri::command]
-pub fn delete_entry(rel_path: String, state: State<'_, WorkspaceState>) -> Result<(), AppError> {
+pub fn delete_entry(
+    rel_path: String,
+    app: AppHandle,
+    state: State<'_, WorkspaceState>,
+) -> Result<(), AppError> {
     let root = state.root()?;
-    delete_in(&root, &rel_path)
+    let clean = fs_path::normalize_rel(&rel_path)?;
+    let docs = collect_history_paths(&root, &clean);
+    delete_in(&root, &clean)?;
+    clear_history_for(&app, &root, &docs);
+    Ok(())
 }
 
 #[cfg(test)]
@@ -474,6 +577,24 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let root = dunce::canonicalize(temp.path()).unwrap();
         (temp, root)
+    }
+
+    #[test]
+    fn collects_history_paths_for_files_and_folders() {
+        let (_temp, root) = workspace();
+        fs::create_dir_all(root.join("dir/sub")).unwrap();
+        fs::write(root.join("dir/a.md"), "").unwrap();
+        fs::write(root.join("dir/sub/b.markdown"), "").unwrap();
+        fs::write(root.join("dir/skip.txt"), "").unwrap();
+        fs::write(root.join("note.md"), "").unwrap();
+
+        assert_eq!(collect_history_paths(&root, "note.md"), vec!["note.md"]);
+        assert!(collect_history_paths(&root, "note.txt").is_empty());
+        assert!(collect_history_paths(&root, "../x.md").is_empty());
+
+        let mut folder = collect_history_paths(&root, "dir");
+        folder.sort();
+        assert_eq!(folder, vec!["dir/a.md", "dir/sub/b.markdown"]);
     }
 
     #[test]
@@ -679,6 +800,25 @@ mod tests {
         assert!(next_export_in(&root, "", "b.md").is_err());
         assert!(next_export_in(&root, "missing", "b.html").is_err());
         assert!(next_export_in(&root, "", "../逃逸.html").is_err());
+    }
+
+    #[test]
+    fn missing_target_with_expected_mtime_reports_not_found() {
+        let (_temp, root) = workspace();
+        let path = root.join("gone.md");
+        // 外部删除后再保存：报 not-found，让前端提示另存 / 重建，而不是冲突。
+        assert!(matches!(
+            write_path(&path, "x", Some(1)),
+            Err(AppError::NotFound(_))
+        ));
+        assert!(!path.exists());
+        // 文件仍在但 mtime 不同，仍是冲突。
+        fs::write(&path, "a").unwrap();
+        assert!(matches!(
+            write_path(&path, "x", Some(1)),
+            Err(AppError::Conflict)
+        ));
+        assert_eq!(fs::read_to_string(&path).unwrap(), "a");
     }
 
     fn read_file_path(root: &Path, rel: &str) -> Result<FileContent, AppError> {

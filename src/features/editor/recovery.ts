@@ -9,12 +9,13 @@ import {
   writeFile as apiWriteFile,
   type RecoverySnapshot,
 } from "../../lib/tauri";
-import { baseName, parentRel } from "../../lib/paths";
+import { baseName, isWithin, parentRel } from "../../lib/paths";
 import { useDocumentStore } from "../../stores/document";
 import { useUiStore } from "../../stores/ui";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { rememberLastDocument } from "../workspace/last-document";
 import { getEditorText, setEditorDocument } from "./editor-bridge";
+import { waitForCompositionEnd } from "./composition";
 import { requestPreview } from "../preview/preview-controller";
 
 let prompting = false;
@@ -43,6 +44,10 @@ export function snapshotActiveDocument(): Promise<void> {
   if (writeInFlight) return writeInFlight;
 
   const run = (async () => {
+    // 组词中触发（失焦 / 隐藏）时，等提交后再快照，副本里不留半截拼音；
+    // 超时仍未提交则本次跳过，恢复定时器或下次失焦再写。
+    if (!(await waitForCompositionEnd())) return;
+
     const doc = useDocumentStore.getState();
     if (!doc.path || !doc.name || !doc.dirty) return;
 
@@ -91,6 +96,28 @@ export async function clearRecoverySnapshot(relPath: string): Promise<void> {
 /** 用户明确放弃修改时调用。 */
 export async function discardRecoveryForPath(relPath: string): Promise<void> {
   await clearRecoverySnapshot(relPath);
+}
+
+/**
+ * 删除笔记或文件夹后，清掉被删路径（含子目录）的恢复副本。
+ * 只清当前打开的那篇不够：用户先「稍后」处理恢复副本、关掉标签再删除时，
+ * 旧副本会在下次启动把用户主动删掉的文件「恢复为文件」。
+ */
+export async function clearRecoveryForEntry(relPath: string): Promise<void> {
+  try {
+    // 等正在写的副本落盘，否则清理完它又会写回来。
+    if (writeInFlight) await writeInFlight;
+    const snapshots = await listRecoveries();
+    let cleared = false;
+    for (const snapshot of snapshots) {
+      if (!isWithin(snapshot.relPath, relPath)) continue;
+      await deleteSnapshot(snapshot.id);
+      cleared = true;
+    }
+    if (cleared) lastSnapshot = null;
+  } catch {
+    // 清理失败不应阻止删除本身；原文件已不在时下次启动仍会询问。
+  }
 }
 
 /**

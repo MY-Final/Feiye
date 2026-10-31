@@ -91,7 +91,19 @@ export function SearchPanel() {
   const openHit = async (hit: SearchHit) => {
     const name = hit.relPath.split("/").pop() ?? hit.relPath;
     if (useDocumentStore.getState().path !== hit.relPath) {
-      await openFile({ name, relPath: hit.relPath, isDir: false });
+      const result = await openFile({
+        name,
+        relPath: hit.relPath,
+        isDir: false,
+      });
+      // 文件已在应用外被删除 / 改名：摘掉这篇的所有命中，别让列表反复报同一个错。
+      if (result === "failed") {
+        setHits((current) =>
+          current.filter((h) => h.relPath !== hit.relPath),
+        );
+        setActive(0);
+        return;
+      }
     }
     // 未保存提示被取消、或读盘失败时文档没换成目标，别乱跳。
     if (useDocumentStore.getState().path !== hit.relPath) return;

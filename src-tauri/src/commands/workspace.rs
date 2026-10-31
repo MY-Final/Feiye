@@ -87,6 +87,16 @@ pub fn open_workspace(
     Ok(info(&root))
 }
 
+/// 低开销判断一个绝对路径现在是否仍是文件夹（只 stat，不扫目录）。
+/// 只有确认不存在才算失效；权限等其它读错保守当作仍可用，避免误删记录。
+#[tauri::command]
+pub fn dir_exists(path: String) -> bool {
+    match fs::metadata(&path) {
+        Ok(meta) => meta.is_dir(),
+        Err(error) => error.kind() != std::io::ErrorKind::NotFound,
+    }
+}
+
 #[tauri::command]
 pub fn current_workspace(
     state: State<'_, WorkspaceState>,

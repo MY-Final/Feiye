@@ -10,7 +10,12 @@ const KEY = "tabsByWorkspace";
 
 let byRoot: Record<string, string[]> | null = null;
 // 换库时先清空标签再恢复，这期间的库存变化不该把刚记下的列表抹掉。
-let paused = false;
+// 用计数而不是布尔：连续切库时多个恢复流程可能重叠，各自结束才真正解冻。
+let pauseCount = 0;
+
+function writeCurrentTabs(): void {
+  void rememberOpenTabs(useTabsStore.getState().tabs.map((tab) => tab.path));
+}
 
 async function readAll(): Promise<Record<string, string[]>> {
   if (byRoot) return byRoot;
@@ -34,7 +39,7 @@ async function readAll(): Promise<Record<string, string[]>> {
 /** 记住当前工作区打开的标签；关掉全部标签时一并清掉记录。 */
 export async function rememberOpenTabs(paths: string[]): Promise<void> {
   const root = useWorkspaceStore.getState().root;
-  if (!root || paused) return;
+  if (!root || pauseCount > 0) return;
   const map = await readAll();
   if (paths.length) map[root] = paths.slice(0, 12);
   else delete map[root];
@@ -49,11 +54,20 @@ export async function recallOpenTabs(root: string): Promise<string[]> {
 
 /** 恢复标签期间暂停落盘，避免「先清空、后补回」的中间态覆盖旧记录。 */
 export function pauseTabsSave(): void {
-  paused = true;
+  pauseCount += 1;
 }
 
 /** 恢复结束：解除暂停，并把当前标签写回，保证磁盘上是最终状态。 */
 export function resumeTabsSave(): void {
-  paused = false;
-  void rememberOpenTabs(useTabsStore.getState().tabs.map((tab) => tab.path));
+  pauseCount = Math.max(0, pauseCount - 1);
+  if (pauseCount > 0) return;
+  writeCurrentTabs();
+}
+
+/**
+ * 已被后来的切库请求取代：只解除自己的暂停，不写盘。
+ * 否则旧库的恢复结束会把新库正在恢复的中间态当成最终标签记下。
+ */
+export function releaseTabsSave(): void {
+  pauseCount = Math.max(0, pauseCount - 1);
 }

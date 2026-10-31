@@ -1,3 +1,5 @@
+import { invoke } from "@tauri-apps/api/core";
+
 import { copyText } from "../../lib/clipboard";
 import {
   baseName,
@@ -50,6 +52,7 @@ import {
 } from "../editor/editor-bridge";
 import { readOutline } from "../editor/outline";
 import {
+  clearRecoveryForEntry,
   clearRecoverySnapshot,
   migrateRecoverySnapshot,
   promptPendingRecoveries,
@@ -65,7 +68,12 @@ import {
   scrollPreviewToHeading,
 } from "../preview/preview-scroll";
 import { recallLastDocument, rememberLastDocument } from "./last-document";
-import { pauseTabsSave, recallOpenTabs, resumeTabsSave } from "./tabs-memory";
+import {
+  pauseTabsSave,
+  recallOpenTabs,
+  releaseTabsSave,
+  resumeTabsSave,
+} from "./tabs-memory";
 
 const MARKDOWN_NAME = /\.(md|markdown|mdx)$/i;
 const HAS_EXTENSION = /\.[^./\\]+$/;
@@ -131,6 +139,10 @@ function nextAvailableName(
 }
 
 function resetDocument(): void {
+  // 文档被整体清空（切换笔记库、删除当前笔记、关闭最后一个标签）时，
+  // 任何仍在进行的打开都应作废，别让它把旧笔记装回来。
+  openRequestSeq += 1;
+  pendingOpenPath = null;
   resetAutoSave();
   captureActiveCursor();
   setEditorDocument("");
@@ -145,6 +157,9 @@ function toastError(prefix: string, error: unknown): void {
 
 const RECENT_WORKSPACES_KEY = "recentWorkspaces";
 const RECENT_WORKSPACES_LIMIT = 5;
+
+/** 工作区打开序号：连续切库时只让最后一次的后续步骤落地（见 openWorkspaceAt）。 */
+let workspaceOpenSeq = 0;
 
 /** 切换过的笔记库只记路径；切回时重新扫盘，不留任何内容副本。 */
 export async function rememberWorkspace(path: string): Promise<void> {
@@ -180,6 +195,39 @@ export async function listRecentWorkspaces(): Promise<string[]> {
   );
 }
 
+/** 「最近工作区」每次启动只校验一次，别让菜单每次打开都去读盘。 */
+let recentWorkspacesPruned = false;
+
+/**
+ * 启动后清理一次「最近工作区」：以前会话留下、如今已被删除 / 移走的库，
+ * 不等用户点一次才消失。只按路径 stat 一条命令，不扫目录、不阻塞首屏。
+ */
+export async function pruneRecentWorkspaces(): Promise<void> {
+  if (recentWorkspacesPruned) return;
+  recentWorkspacesPruned = true;
+  const raw = await getSetting<unknown>(RECENT_WORKSPACES_KEY);
+  if (!Array.isArray(raw)) return;
+  const paths = raw.filter(
+    (item): item is string => typeof item === "string",
+  );
+  if (paths.length === 0) return;
+  const exists = await Promise.all(
+    paths.map((path) =>
+      invoke<boolean>("dir_exists", { path }).catch(() => true),
+    ),
+  );
+  const gone = new Set(paths.filter((_, index) => !exists[index]));
+  if (gone.size === 0) return;
+  // 校验期间用户可能又切了库：重读一次，只摘确认失效的，别覆盖新记录。
+  const latest = await getSetting<unknown>(RECENT_WORKSPACES_KEY);
+  if (!Array.isArray(latest)) return;
+  const next = latest.filter(
+    (item): item is string => typeof item === "string" && !gone.has(item),
+  );
+  if (next.length === latest.length) return;
+  await setSetting(RECENT_WORKSPACES_KEY, next.length > 0 ? next : null);
+}
+
 export async function chooseWorkspace(): Promise<void> {
   try {
     const path = await pickWorkspaceFolder(
@@ -195,12 +243,20 @@ export async function openWorkspaceAt(
   path: string,
   fromRecent = false,
 ): Promise<void> {
+  // 连续切库时只有最后一次的后续步骤生效：先发起的库即使读盘更慢，
+  // 也不能把它的标签、上次文档或最近记录带进后来选中的库。
+  const requestId = ++workspaceOpenSeq;
+  let pausedHere = false;
   if (!(await guardUnsaved())) return;
+  if (requestId !== workspaceOpenSeq) return;
 
   try {
     const info = await apiOpenWorkspace(path);
+    if (requestId !== workspaceOpenSeq) return;
     const savedTabs = await recallOpenTabs(info.root);
+    if (requestId !== workspaceOpenSeq) return;
     pauseTabsSave();
+    pausedHere = true;
     useWorkspaceStore.getState().setWorkspace(info);
     // 换库是重新开始浏览，专注模式不该延续到新库上；退出时照常提示。
     if (useUiStore.getState().zenMode) {
@@ -210,27 +266,24 @@ export async function openWorkspaceAt(
     useTabsStore.getState().clear();
     clearEditorStateCache();
     await useWorkspaceStore.getState().loadDir("");
+    if (requestId !== workspaceOpenSeq) return;
     await setSetting("lastWorkspace", info.root);
     await rememberWorkspace(info.root);
 
     // 每个工作区各自记着上次打开的文档：切换过来时直接打开它，
     // 和启动时一样；文件已不在时静默跳过。
     const lastDocument = await recallLastDocument(info.root);
-    const active = lastDocument ?? savedTabs[0] ?? null;
-    restoreSavedTabs(savedTabs, active);
-    if (active) {
-      await openFile(
-        {
-          relPath: active,
-          name: baseName(active),
-          isDir: false,
-        },
-        true,
-      );
-    }
+    if (requestId !== workspaceOpenSeq) return;
+    await restoreSavedTabs(
+      savedTabs,
+      lastDocument,
+      () => requestId === workspaceOpenSeq,
+    );
 
     void promptPendingRecoveries();
   } catch (error) {
+    // 切库期间又选了别的库：这次失败与当前库无关，不提示也不动画面上的人。
+    if (requestId !== workspaceOpenSeq) return;
     // 从「最近工作区」点进来的库已经不存在：摘掉过期路径再提示，
     // 否则这个点不开的条目会在菜单里一直留着。取消未保存提示不走这里。
     const gone = fromRecent && isAppError(error) && error.code === "not-found";
@@ -242,7 +295,11 @@ export async function openWorkspaceAt(
       "error",
     );
   } finally {
-    resumeTabsSave();
+    // 被后来的切库取代时只放开自己的暂停，不写盘，避免把旧库的中间态记下。
+    if (pausedHere) {
+      if (requestId === workspaceOpenSeq) resumeTabsSave();
+      else releaseTabsSave();
+    }
   }
 }
 
@@ -257,45 +314,146 @@ async function expandAncestors(relPath: string): Promise<void> {
 }
 
 export async function restoreLastWorkspace(): Promise<void> {
+  // 启动恢复期间用户已经手动切库：这份恢复作废，别把旧库又装回来。
+  const requestId = ++workspaceOpenSeq;
+  let pausedHere = false;
   const last = await getSetting<string>("lastWorkspace");
-  if (!last) return;
+  if (!last || requestId !== workspaceOpenSeq) {
+    // 没有上次的库也要清理历史失效条目，别让它们一直留在最近菜单里。
+    if (!last) void pruneRecentWorkspaces();
+    return;
+  }
 
   try {
     const info = await apiOpenWorkspace(last);
+    if (requestId !== workspaceOpenSeq) return;
     const savedTabs = await recallOpenTabs(info.root);
+    if (requestId !== workspaceOpenSeq) return;
     pauseTabsSave();
+    pausedHere = true;
     useWorkspaceStore.getState().setWorkspace(info);
     await useWorkspaceStore.getState().loadDir("");
+    if (requestId !== workspaceOpenSeq) return;
     await rememberWorkspace(info.root);
 
     // 恢复这个工作区上次打开的文档；文件已不存在时静默清除记录，不打扰启动。
     const lastDocument = await recallLastDocument(last);
-    const active = lastDocument ?? savedTabs[0] ?? null;
-    restoreSavedTabs(savedTabs, active);
-    if (active) {
-      await openFile(
-        {
-          relPath: active,
-          name: baseName(active),
-          isDir: false,
-        },
-        true,
-      );
-    }
+    if (requestId !== workspaceOpenSeq) return;
+    await restoreSavedTabs(
+      savedTabs,
+      lastDocument,
+      () => requestId === workspaceOpenSeq,
+    );
 
     await promptPendingRecoveries();
-  } catch {
+  } catch (error) {
+    if (requestId !== workspaceOpenSeq) return;
     await setSetting("lastWorkspace", null);
+    // 上次的库被删 / 移走时别静悄悄停在一片空白：说清楚发生了什么，
+    // 并把已经点不开的路径从最近工作区摘掉，空状态里可以直接再打开别的库。
+    const gone = isAppError(error) && error.code === "not-found";
+    if (gone) await forgetWorkspace(last);
+    const label = last.split(/[\\/]/).filter(Boolean).pop() ?? last;
+    useUiStore.getState().toast(
+      gone
+        ? `上次的库已不在：${label}（可能已被删除或移走，已从最近工作区移除）`
+        : `恢复上次工作区失败：${describeError(error)}`,
+      gone ? "info" : "error",
+    );
   } finally {
-    resumeTabsSave();
+    // 被后来的切库取代时只放开自己的暂停，不写盘，避免把旧库的中间态记下。
+    if (pausedHere) {
+      if (requestId === workspaceOpenSeq) resumeTabsSave();
+      else releaseTabsSave();
+    }
+    // 启动恢复结束（含失败）后在后台校验最近工作区，不拖慢恢复本身。
+    void pruneRecentWorkspaces();
   }
 }
 
-/** 把上次打开的标签摆回标签栏；当前文档仍由 openFile 打开，避免重复。 */
-function restoreSavedTabs(saved: string[], active: string | null): void {
-  for (const relPath of saved) {
-    if (relPath === active) continue;
-    useTabsStore.getState().addTab(relPath, baseName(relPath));
+/**
+ * 上次保存的标签里只留下磁盘上仍在的笔记。
+ * 目录整体不见了视为其中的文件都失效；其它读盘错误保守保留，不误伤。
+ */
+async function filterExistingPaths(paths: string[]): Promise<string[]> {
+  if (paths.length === 0) return [];
+  const listings = new Map<string, Set<string> | null>();
+  const parents = [...new Set(paths.map((path) => parentRel(path)))];
+  await Promise.all(
+    parents.map(async (parent) => {
+      try {
+        const entries = await listDir(parent);
+        listings.set(parent, new Set(entries.map((entry) => entry.name)));
+      } catch (error) {
+        listings.set(
+          parent,
+          isAppError(error) && error.code === "not-found" ? new Set() : null,
+        );
+      }
+    }),
+  );
+  return paths.filter((path) => {
+    const names = listings.get(parentRel(path));
+    return names == null || names.has(baseName(path));
+  });
+}
+
+/**
+ * 把上次打开的标签摆回标签栏，并打开上次那篇。
+ * 那篇被删 / 移走后由近到远补位；全部失效就回到空状态，不留幽灵标签。
+ */
+async function restoreSavedTabs(
+  saved: string[],
+  lastDocument: string | null,
+  isCurrent: () => boolean,
+): Promise<void> {
+  const valid = [...new Set(await filterExistingPaths(saved))];
+  if (!isCurrent()) return;
+
+  // 失效的笔记从「最近打开」里摘掉，重启后列表与文件树一致。
+  for (const relPath of new Set([...saved, lastDocument ?? ""])) {
+    if (relPath && !valid.includes(relPath)) {
+      useWorkspaceStore.getState().updateRecent(relPath, null);
+    }
+  }
+
+  // 上次那篇还在就回到它；不在了从保存顺序里由近到远补位（同距先右）。
+  const rank = new Map(saved.map((path, index) => [path, index]));
+  const anchor = lastDocument ? (rank.get(lastDocument) ?? -1) : -1;
+  const candidates = [...valid].sort((a, b) => {
+    if (a === lastDocument) return -1;
+    if (b === lastDocument) return 1;
+    const da = Math.abs((rank.get(a) ?? 0) - anchor);
+    const db = Math.abs((rank.get(b) ?? 0) - anchor);
+    if (da !== db) return da - db;
+    return Number((rank.get(b) ?? 0) > anchor) - Number((rank.get(a) ?? 0) > anchor);
+  });
+
+  const active = candidates[0] ?? null;
+  for (const relPath of valid) {
+    if (relPath !== active) {
+      useTabsStore.getState().addTab(relPath, baseName(relPath));
+    }
+  }
+  for (const relPath of candidates) {
+    if (!isCurrent()) return;
+    await openFile({ relPath, name: baseName(relPath), isDir: false }, true);
+    if (useDocumentStore.getState().path === relPath) break;
+    // 读盘失败（比如刚好又被删）：摘掉它的标签，继续试下一篇。
+    useTabsStore.getState().removeTab(relPath);
+    forgetPreview(relPath);
+  }
+
+  // 没有一个能打开：回到空状态，别再记着这次打不开的那篇。
+  if (useDocumentStore.getState().path === null) {
+    await rememberLastDocument(null);
+  }
+  const recent = useWorkspaceStore.getState().recent;
+  const alive = recent.length > 0 ? await filterExistingPaths(recent) : [];
+  for (const relPath of recent) {
+    if (!alive.includes(relPath)) {
+      useWorkspaceStore.getState().updateRecent(relPath, null);
+    }
   }
 }
 
@@ -332,18 +490,51 @@ export async function collapseAllKeepingActive(): Promise<void> {
   }
 }
 
+/**
+ * 打开请求序号：快速连点两篇笔记时，以最后一次点击为准。
+ * 先发起的读盘即使后返回（或用户点回当前这篇），也不能覆盖后来的选择。
+ */
+let openRequestSeq = 0;
+/** 正在打开的目标路径：关掉它的标签时，这次仍在读盘的打开要作废。 */
+let pendingOpenPath: string | null = null;
+
+function cancelPendingOpen(path: string): void {
+  if (pendingOpenPath !== path) return;
+  pendingOpenPath = null;
+  openRequestSeq += 1;
+}
+
+/** 打开结果：失败时调用方（如搜索面板）可据此清掉已失效的入口。 */
+export type OpenFileResult = "opened" | "cancelled" | "failed" | "superseded";
+
 export async function openFile(
   entry: Entry,
   silent = false,
   anchor?: string,
   recordHistory = true,
-): Promise<void> {
-  if (entry.isDir) return;
-  if (useDocumentStore.getState().path === entry.relPath) return;
-  if (!(await guardUnsaved())) return;
+): Promise<OpenFileResult> {
+  if (entry.isDir) return "cancelled";
+  const requestId = ++openRequestSeq;
+  pendingOpenPath = entry.relPath;
+  const finishPending = () => {
+    if (requestId === openRequestSeq) pendingOpenPath = null;
+  };
+  // 点回当前这篇：作废仍在进行的打开，最后点的算数。
+  if (useDocumentStore.getState().path === entry.relPath) {
+    finishPending();
+    return "opened";
+  }
+  if (!(await guardUnsaved())) {
+    finishPending();
+    return "cancelled";
+  }
+  if (requestId !== openRequestSeq) return "superseded";
 
   try {
     const file = await readFile(entry.relPath);
+    // 读盘期间又打开了别的笔记：丢弃这次过期结果，
+    // 否则会用旧文档覆盖新选择。
+    if (requestId !== openRequestSeq) return "superseded";
     // 成功读到新文档后再记一步浏览历史：取消未保存提示、读盘失败都不留脏记录。
     if (recordHistory) {
       const current = useDocumentStore.getState().path;
@@ -359,6 +550,7 @@ export async function openFile(
       .setDocument(entry.relPath, entry.name, file.modifiedMs);
     setEditorDocument(file.content, entry.relPath);
     useTabsStore.getState().addTab(entry.relPath, entry.name);
+    finishPending();
     // 所见 / 源码模式下预览是隐藏的：不在这里让 Worker 解析整篇，
     // 切到分栏 / 预览时 changeViewMode 会立即按当前内容补一次。
     const previewMode = useDocumentStore.getState().viewMode;
@@ -371,17 +563,23 @@ export async function openFile(
     void rememberLastDocument(entry.relPath);
     useWorkspaceStore.getState().noteRecent(entry.relPath);
     await expandAncestors(entry.relPath);
+    if (requestId !== openRequestSeq) return "superseded";
     await restoreCursorFor(entry.relPath);
+    if (requestId !== openRequestSeq) return "superseded";
     // 从文件树点开笔记后默认就要接着写：把焦点交给正文，
     // 纯预览模式没有可见的编辑区，不抢焦点。
     if (useDocumentStore.getState().viewMode !== "preview") {
       getEditorView()?.focus();
     }
     if (anchor) jumpToAnchorInOpenDocument(anchor);
+    return "opened";
   } catch (error) {
+    // 已过期（后来点了别的笔记）的失败不必提示，也别动标签栏。
+    if (requestId !== openRequestSeq) return "superseded";
+    finishPending();
     if (silent) {
       void rememberLastDocument(null);
-      return;
+      return "failed";
     }
     // 可能是文件已在应用外被删除：从最近打开、浏览历史与前进栈里摘掉，
     // 避免反复点开 / 反复按 Alt+→ 都报同一个错。
@@ -391,6 +589,7 @@ export async function openFile(
     useTabsStore.getState().removeTab(entry.relPath);
     forgetPreview(entry.relPath);
     toastError("打开文件失败", error);
+    return "failed";
   }
 }
 
@@ -399,6 +598,8 @@ export async function closeDocumentTab(path: string): Promise<void> {
   const tabs = useTabsStore.getState().tabs;
   const index = tabs.findIndex((tab) => tab.path === path);
   if (index < 0) return;
+  // 这篇还在读盘时被关掉：作废这次打开，别让读完后自己把标签加回来。
+  cancelPendingOpen(path);
 
   if (useDocumentStore.getState().path !== path) {
     useTabsStore.getState().removeTab(path);
@@ -408,21 +609,32 @@ export async function closeDocumentTab(path: string): Promise<void> {
   }
   if (!(await guardUnsaved())) return;
 
-  // 先按关闭前的顺序找邻居，再从列表里摘掉。
-  const next = tabs[index + 1] ?? tabs[index - 1] ?? null;
+  // 从关闭位置向两侧依次尝试其余标签；同样距离时先右侧（原行为）。
+  const candidates = tabs
+    .map((tab, i) => ({ tab, i }))
+    .filter(({ tab }) => tab.path !== path)
+    .sort((a, b) => {
+      const da = Math.abs(a.i - index);
+      const db = Math.abs(b.i - index);
+      if (da !== db) return da - db;
+      return (a.i > index ? 0 : 1) - (b.i > index ? 0 : 1);
+    });
   useTabsStore.getState().removeTab(path);
   forgetEditorState(path);
   forgetPreview(path);
-  if (next) {
+  for (const { tab } of candidates) {
     await openFile(
-      { name: next.name, relPath: next.path, isDir: false },
+      { name: tab.name, relPath: tab.path, isDir: false },
       false,
       undefined,
       false,
     );
-  } else {
-    resetDocument();
+    // 目标文件刚被删 / 打不开时 openFile 会摘掉它的标签并保留当前文档；
+    // 不能停在刚关掉的这篇上（标签已没了），继续试下一个。
+    if (useDocumentStore.getState().path !== path) return;
   }
+  // 没有能打开的其他标签：回到空状态，别留一个没有标签的编辑区。
+  resetDocument();
 }
 
 /** Ctrl+Tab / Ctrl+Shift+Tab 在已打开的标签之间循环切换。 */
@@ -905,13 +1117,15 @@ export async function deleteEntry(entry: Entry): Promise<void> {
 
     const doc = useDocumentStore.getState();
     if (doc.path && isWithin(doc.path, entry.relPath)) {
-      void clearRecoverySnapshot(doc.path);
       void rememberLastDocument(null);
       resetDocument();
     }
     // resetDocument 会先把当前光标记下来，所以清理放在它之后，
     // 否则同名新文件打开时会跳到被删文档的旧位置。
     forgetCursor(entry.relPath);
+    // 当前打开的 / 文件夹里没打开的笔记都可能留有恢复副本，一并清掉，
+    // 否则下次启动会把用户主动删掉的文件「恢复为文件」。
+    await clearRecoveryForEntry(entry.relPath);
   } catch (error) {
     toastError("删除失败", error);
   }

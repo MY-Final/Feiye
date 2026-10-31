@@ -9,6 +9,7 @@ import { useDocumentStore } from "../../stores/document";
 import { useUiStore } from "../../stores/ui";
 import { requestPreview } from "../preview/preview-controller";
 import { getEditorText, setEditorDocument } from "./editor-bridge";
+import { waitForCompositionEnd } from "./composition";
 import {
   clearRecoverySnapshot,
   discardRecoveryForPath,
@@ -35,26 +36,41 @@ async function performSave(options: SaveOptions): Promise<boolean> {
   const doc = useDocumentStore.getState();
   if (!doc.path) return false;
 
+  // 组词中的正文含未上屏拼音：等提交后再读文本，别把半截拼音写进源文件。
+  // 超时仍未提交则放弃本次保存，下次自动保存 / 手动保存再落盘。
+  if (!(await waitForCompositionEnd())) {
+    if (!options.auto) {
+      useUiStore.getState().toast("输入法组词尚未结束，完成输入后再保存", "info");
+    }
+    return false;
+  }
+
+  const path = doc.path;
+  // 等组词结束期间用户可能已切到别的笔记：此时编辑器正文已不属于 path，
+  // 再读正文就会把新文档的内容写进旧文件。
+  if (useDocumentStore.getState().path !== path) return false;
+
   let text = getEditorText();
   if (text === null) return false;
 
-  const path = doc.path;
   useDocumentStore.getState().setSaving(true);
 
   try {
     let meta = await writeFile(path, text, doc.savedModifiedMs);
 
-    // 写入期间用户继续输入时，尽量把最新内容一并保存。
-    let latest = getEditorText();
+    // 写入期间用户继续输入时，尽量把最新内容一并保存；
+    // 但只有仍停在同一篇时才读编辑器，避免再次串写。
+    const stillSame = () => useDocumentStore.getState().path === path;
+    let latest = stillSame() ? getEditorText() : null;
     if (latest !== null && latest !== text) {
       meta = await writeFile(path, latest, meta.modifiedMs);
       text = latest;
-      latest = getEditorText();
+      latest = stillSame() ? getEditorText() : null;
     }
 
     const current = useDocumentStore.getState();
     const sameDocument = current.path === path;
-    const stillDirty = latest !== text;
+    const stillDirty = latest === null || latest !== text;
 
     if (sameDocument) {
       current.markSaved(meta.modifiedMs, stillDirty);
@@ -69,7 +85,37 @@ async function performSave(options: SaveOptions): Promise<boolean> {
     const current = useDocumentStore.getState();
     const sameDocument = current.path === path;
 
-    if (isAppError(error) && error.code === "conflict") {
+    if (isAppError(error) && error.code === "not-found") {
+      // 文件在应用外被删除 / 移动：别假装是「被其他程序修改」。
+      if (sameDocument && options.auto) {
+        current.markSaveBlocked("文件已不在磁盘上");
+        useUiStore
+          .getState()
+          .toast(
+            "自动保存已暂停：文件已不在磁盘上。按 Ctrl+S 另存或重新创建。",
+            "error",
+          );
+      } else if (sameDocument) {
+        const choice = await useUiStore.getState().ask({
+          title: "文件已不在磁盘上",
+          message:
+            "磁盘上的文件可能已被移动或删除，编辑器里的内容仍然保留。另存为会新建一篇副本；重新创建会把当前内容写回原来的路径。",
+          buttons: [
+            { label: "另存为…", value: "copy", tone: "primary" },
+            { label: "重新创建", value: "recreate" },
+            { label: "取消", value: "cancel" },
+          ],
+        });
+        if (choice === "copy") {
+          const { saveDocumentAs } = await import(
+            "../workspace/workspace-actions"
+          );
+          await saveDocumentAs();
+        } else if (choice === "recreate") {
+          return await overwriteActiveDocument(path, true);
+        }
+      }
+    } else if (isAppError(error) && error.code === "conflict") {
       if (sameDocument && options.auto) {
         current.markSaveBlocked("文件已被其他程序修改");
         useUiStore
@@ -123,8 +169,14 @@ async function performSave(options: SaveOptions): Promise<boolean> {
 /**
  * 冲突对话框里用户明确选择「覆盖保存」后才走这里：跳过 mtime 校验，
  * 用编辑器当前内容替换磁盘版本。只在显式点击后发生，不是静默覆盖。
+ * `recreate` 用于文件已被外部删除后，用户明确选择写回原路径。
  */
-async function overwriteActiveDocument(path: string): Promise<boolean> {
+async function overwriteActiveDocument(
+  path: string,
+  recreate = false,
+): Promise<boolean> {
+  // 对话框期间可能已切走：编辑器正文不再属于 path，不能拿来覆盖。
+  if (useDocumentStore.getState().path !== path) return false;
   const text = getEditorText();
   if (text === null) return false;
 
@@ -142,7 +194,12 @@ async function overwriteActiveDocument(path: string): Promise<boolean> {
 
     useUiStore
       .getState()
-      .toast("已覆盖保存，磁盘上的外部修改已被替换", "info");
+      .toast(
+        recreate
+          ? "已在原位置重新创建文件"
+          : "已覆盖保存，磁盘上的外部修改已被替换",
+        "info",
+      );
     return true;
   } catch (error) {
     useDocumentStore
@@ -150,7 +207,12 @@ async function overwriteActiveDocument(path: string): Promise<boolean> {
       .markSaveBlocked(`保存失败：${describeError(error)}`);
     useUiStore
       .getState()
-      .toast(`覆盖保存失败：${describeError(error)}`, "error");
+      .toast(
+        recreate
+          ? `重新创建失败：${describeError(error)}`
+          : `覆盖保存失败：${describeError(error)}`,
+        "error",
+      );
     return false;
   }
 }
@@ -161,6 +223,8 @@ export async function reloadActiveDocument(): Promise<boolean> {
 
   try {
     const file = await readFile(doc.path);
+    // 读盘期间若已切到别的笔记，别把旧内容重新装回去。
+    if (useDocumentStore.getState().path !== doc.path) return false;
     useDocumentStore.getState().setDocument(doc.path, doc.name, file.modifiedMs);
     setEditorDocument(file.content, doc.path);
     requestPreview(file.content, true);
@@ -202,6 +266,10 @@ export async function guardUnsaved(): Promise<boolean> {
   }
 
   const path = useDocumentStore.getState().path;
+  // 用户已明确放弃这份修改：马上清掉脏标记与「保存暂停」，否则紧接着
+  // 打开相邻标签 / 切换工作区 / 关窗口时还会再问一次；脏标记不清，
+  // 恢复副本定时器也可能在离开前把已放弃的内容又写回一份。
+  useDocumentStore.getState().markDirty(false);
   if (path) {
     await discardRecoveryForPath(path);
   }

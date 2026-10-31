@@ -132,17 +132,36 @@ export function resetAutoSave(): void {
 }
 
 /** 自动保存或恢复节奏变化后，按新设置重排尚未触发的计时器。 */
-export function resyncAutoSave(): void {
+export function resyncAutoSave(previousRecoveryInterval?: number): void {
   const hadAutoSave = autoSaveTimer !== null;
   clearAutoSaveTimer();
-  if (hadAutoSave) {
+  // 从「关闭」重新开启自动保存时原本没有计时器：当前若有未保存内容，
+  // 也要按新间隔排一次，不必等用户再敲一个字。
+  const doc = useDocumentStore.getState();
+  const autoSaveOn = useSettingsStore.getState().preferences.autoSaveDelay > 0;
+  if (hadAutoSave || (autoSaveOn && doc.dirty && !doc.saveBlocked)) {
     scheduleAutoSave();
   }
 
-  const hadRecovery = recoveryTimer !== null;
+  const interval = useSettingsStore.getState().preferences.recoveryInterval;
+  if (
+    previousRecoveryInterval === undefined ||
+    previousRecoveryInterval === interval
+  ) {
+    // 只改了自动保存间隔：不要打断已在等待的恢复副本计时器，否则会把
+    // 「按原间隔再过几秒写副本」提前到 900ms 首次延迟。
+    return;
+  }
+
   clearRecoveryTimer();
-  if (hadRecovery) {
-    scheduleRecovery();
+  if (interval > 0 && doc.path && doc.dirty) {
+    // 原来没有待触发计时器的脏文档（如刚载入历史版本 / 恢复副本）也要重新
+    // 排期，不必再敲字；调长时按新间隔计时，避免刚调长就立刻又写一份。
+    scheduleRecovery(
+      interval > previousRecoveryInterval
+        ? interval
+        : recoveryFirstDelay(interval),
+    );
   }
 }
 
@@ -167,7 +186,7 @@ function init(): void {
       state.preferences.recoveryInterval !==
         previous.preferences.recoveryInterval
     ) {
-      resyncAutoSave();
+      resyncAutoSave(previous.preferences.recoveryInterval);
     }
   });
 

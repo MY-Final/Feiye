@@ -69,7 +69,8 @@ export function TabBar() {
               className="doc-tab-main"
               title={tab.path}
               onClick={() => {
-                if (isActive) return;
+                // 即使看起来已是当前标签也要走一次 openFile：它会把仍在
+                // 慢读的其它笔记作废，点回当前这篇就该留在原地。
                 void openFile({
                   name: tab.name,
                   relPath: tab.path,
