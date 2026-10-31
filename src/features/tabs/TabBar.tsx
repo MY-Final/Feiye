@@ -82,6 +82,47 @@ export function TabBar() {
   const labelOf = (name: string) =>
     hideExtensions ? name.replace(/\.(md|markdown|mdx)$/i, "") : name;
 
+  // 同名笔记（如两个目录下的 README.md）在标签上只显示文件名时分不清，
+  // 悬停看完整路径又太慢。只在重名时补一段所在目录：从最近的一级开始
+  // 往外找，取到第一个足以区分的后缀，不重名的标签保持原样。
+  const labels = tabs.map((tab) => labelOf(tab.name));
+  const labelCounts = new Map<string, number>();
+  for (const label of labels) {
+    labelCounts.set(label, (labelCounts.get(label) ?? 0) + 1);
+  }
+  const dirSuffixes = new Map<string, string>();
+  tabs.forEach((tab, index) => {
+    const label = labels[index];
+    if ((labelCounts.get(label) ?? 0) < 2) return;
+    const parents = tab.path.split("/").slice(0, -1);
+    if (parents.length === 0) {
+      // 根目录没有上级名可显示；若同名的另一篇也在根目录（只是扩展名不同），
+      // 退回带扩展名的文件名才分得开。
+      const rootClash = tabs.some(
+        (other, otherIndex) =>
+          otherIndex !== index &&
+          labels[otherIndex] === label &&
+          other.path.split("/").length === 1,
+      );
+      dirSuffixes.set(tab.path, rootClash ? tab.name : "根目录");
+      return;
+    }
+    for (let depth = 1; depth <= parents.length; depth++) {
+      const candidate = parents.slice(-depth).join("/");
+      const clash = tabs.some((other, otherIndex) => {
+        if (otherIndex === index || labels[otherIndex] !== label) return false;
+        const otherParents = other.path.split("/").slice(0, -1);
+        return otherParents.slice(-depth).join("/") === candidate;
+      });
+      if (!clash) {
+        dirSuffixes.set(tab.path, candidate);
+        return;
+      }
+    }
+    // 同目录同显示名只可能来自不同扩展名，退回带扩展名的文件名。
+    dirSuffixes.set(tab.path, tab.name);
+  });
+
   // 右键菜单：一次关掉一串标签，不用逐个切过去按 Ctrl+W。
   // 只列出有意义的项——只剩一个标签时不出现「关闭其它标签」，
   // 最右侧标签不出现「关闭右侧标签」。
@@ -135,9 +176,10 @@ export function TabBar() {
         next?.click();
       }}
     >
-      {tabs.map((tab) => {
+      {tabs.map((tab, index) => {
         const isActive = tab.path === active;
-        const label = labelOf(tab.name);
+        const label = labels[index];
+        const dirSuffix = dirSuffixes.get(tab.path);
         return (
           <div
             key={tab.path}
@@ -177,6 +219,11 @@ export function TabBar() {
               }}
             >
               <span className="doc-tab-label">{label}</span>
+              {dirSuffix ? (
+                <span className="doc-tab-dir" aria-hidden="true">
+                  · {dirSuffix}
+                </span>
+              ) : null}
               {isActive && dirty ? (
                 <span className="doc-tab-dirty" aria-label="有未保存的修改">
                   •
@@ -186,7 +233,7 @@ export function TabBar() {
             <button
               type="button"
               className="doc-tab-close"
-              aria-label={`关闭 ${label}`}
+              aria-label={`关闭 ${label}${dirSuffix ? `（${dirSuffix}）` : ""}`}
               title="关闭标签（Ctrl+W）"
               onClick={(event) => {
                 event.stopPropagation();
