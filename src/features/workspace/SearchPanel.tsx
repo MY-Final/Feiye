@@ -162,6 +162,12 @@ export function SearchPanel() {
         autoFocus
         placeholder="搜索全部笔记…"
         aria-label="在工作区中搜索"
+        // 焦点留在输入框，用 ↑↓ 换选中项；把当前项告诉读屏，
+        // 否则读屏只会重复输入框，听不出选中了哪一条。
+        aria-controls={needle && hits.length ? "workspace-search-results" : undefined}
+        aria-activedescendant={
+          needle && hits.length ? `workspace-search-hit-${active}` : undefined
+        }
         onChange={(event) => setQuery(event.target.value)}
         onKeyDown={onKeyDown}
       />
@@ -177,11 +183,21 @@ export function SearchPanel() {
       ) : null}
 
       {needle && hits.length ? (
-        <ul className="search-results" ref={listRef} aria-label="搜索结果">
+        <ul
+          id="workspace-search-results"
+          className="search-results"
+          ref={listRef}
+          role="listbox"
+          aria-label="搜索结果"
+        >
           {hits.map((hit, position) => (
-            <li key={`${hit.relPath}:${hit.line}`}>
+            // 选项沿用按钮的点击行为；li 只是布局容器，不进读屏的列表结构。
+            <li key={`${hit.relPath}:${hit.line}`} role="presentation">
               <button
                 type="button"
+                id={`workspace-search-hit-${position}`}
+                role="option"
+                aria-selected={position === active}
                 className={`search-result${position === active ? " is-active" : ""}`}
                 title={`${hit.relPath} 第 ${hit.line} 行`}
                 onMouseEnter={() => setActive(position)}
