@@ -637,6 +637,37 @@ export async function closeDocumentTab(path: string): Promise<void> {
   resetDocument();
 }
 
+/** 批量关闭时把当前文档那篇放到最后：关闭当前标签会先切到邻居，
+    先关别的标签能让最后这次切换落在真正保留的标签上。 */
+async function closeTabsInOrder(paths: string[]): Promise<void> {
+  if (paths.length === 0) return;
+  const active = useDocumentStore.getState().path;
+  const ordered = [...paths].sort(
+    (a, b) => Number(a === active) - Number(b === active),
+  );
+  for (const path of ordered) {
+    await closeDocumentTab(path);
+  }
+}
+
+/** 标签右键「关闭其它标签」：保留这一篇，其余逐个关闭（当前篇最后处理）。 */
+export async function closeOtherDocumentTabs(path: string): Promise<void> {
+  await closeTabsInOrder(
+    useTabsStore
+      .getState()
+      .tabs.filter((tab) => tab.path !== path)
+      .map((tab) => tab.path),
+  );
+}
+
+/** 标签右键「关闭右侧标签」：只关掉排在它后面的那些。 */
+export async function closeDocumentTabsToRight(path: string): Promise<void> {
+  const tabs = useTabsStore.getState().tabs;
+  const index = tabs.findIndex((tab) => tab.path === path);
+  if (index < 0) return;
+  await closeTabsInOrder(tabs.slice(index + 1).map((tab) => tab.path));
+}
+
 /** Ctrl+Tab / Ctrl+Shift+Tab 在已打开的标签之间循环切换。 */
 export async function switchDocumentTab(delta: number): Promise<void> {
   const tabs = useTabsStore.getState().tabs;

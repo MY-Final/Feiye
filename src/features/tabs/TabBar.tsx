@@ -1,9 +1,16 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
+import { ContextMenu, type MenuAction } from "../../components/Menu";
 import { useDocumentStore } from "../../stores/document";
 import { useSettingsStore } from "../../stores/settings";
 import { useTabsStore } from "../../stores/tabs";
-import { closeDocumentTab, openFile } from "../workspace/workspace-actions";
+import {
+  closeDocumentTab,
+  closeDocumentTabsToRight,
+  closeOtherDocumentTabs,
+  openFile,
+} from "../workspace/workspace-actions";
 import "./tabs.css";
 
 /**
@@ -19,6 +26,9 @@ export function TabBar() {
   );
   const activeTabRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; path: string } | null>(
+    null,
+  );
 
   // 标签多到放不下时，用快捷键切到屏幕外的标签要把它们滚进来。
   useEffect(() => {
@@ -72,6 +82,35 @@ export function TabBar() {
   const labelOf = (name: string) =>
     hideExtensions ? name.replace(/\.(md|markdown|mdx)$/i, "") : name;
 
+  // 右键菜单：一次关掉一串标签，不用逐个切过去按 Ctrl+W。
+  // 只列出有意义的项——只剩一个标签时不出现「关闭其它标签」，
+  // 最右侧标签不出现「关闭右侧标签」。
+  const menuIndex = menu ? tabs.findIndex((tab) => tab.path === menu.path) : -1;
+  const menuActions: MenuAction[] = menu
+    ? [
+        {
+          label: "关闭标签",
+          onSelect: () => void closeDocumentTab(menu.path),
+        },
+        ...(tabs.length > 1
+          ? [
+              {
+                label: "关闭其它标签",
+                onSelect: () => void closeOtherDocumentTabs(menu.path),
+              },
+            ]
+          : []),
+        ...(menuIndex >= 0 && menuIndex < tabs.length - 1
+          ? [
+              {
+                label: "关闭右侧标签",
+                onSelect: () => void closeDocumentTabsToRight(menu.path),
+              },
+            ]
+          : []),
+      ]
+    : [];
+
   return (
     <div
       ref={barRef}
@@ -112,6 +151,14 @@ export function TabBar() {
               event.preventDefault();
               void closeDocumentTab(tab.path);
             }}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              setMenu({
+                x: event.clientX,
+                y: event.clientY,
+                path: tab.path,
+              });
+            }}
           >
             <button
               type="button"
@@ -151,6 +198,18 @@ export function TabBar() {
           </div>
         );
       })}
+      {/* 菜单挂到 body：标签条有横向滚动，菜单不该跟着滚或被裁掉。 */}
+      {menu
+        ? createPortal(
+            <ContextMenu
+              x={menu.x}
+              y={menu.y}
+              actions={menuActions}
+              onClose={() => setMenu(null)}
+            />,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
