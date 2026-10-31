@@ -23,7 +23,11 @@ export function trapTab(event: ReactKeyboardEvent<HTMLElement>): void {
     event.currentTarget.querySelectorAll<HTMLElement>(
       "button, input, textarea, select, a[href], [tabindex]:not([tabindex='-1'])",
     ),
-  ).filter((element) => !element.hasAttribute("disabled"));
+    // 显式移出 Tab 顺序的元素（如历史列表里未选中的版本）不参与首尾循环，
+    // 否则 Tab 走到末尾会绕到一个不可 Tab 的按钮上，焦点与选中态脱节。
+  ).filter(
+    (element) => !element.hasAttribute("disabled") && element.tabIndex >= 0,
+  );
   if (focusables.length === 0) return;
 
   const first = focusables[0];

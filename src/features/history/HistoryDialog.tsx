@@ -1,4 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 
 import { trapTab } from "../../components/Dialog";
 import {
@@ -46,6 +51,7 @@ export function HistoryDialog() {
   const [content, setContent] = useState<string | null>(null);
   const [reading, setReading] = useState(false);
   const restoreFocus = useRef<HTMLElement | null>(null);
+  const listRef = useRef<HTMLUListElement>(null);
 
   useEffect(() => {
     if (!open || !docPath) return;
@@ -145,6 +151,31 @@ export function HistoryDialog() {
       .toast("已载入历史版本，按 Ctrl+S 保存后写入磁盘");
   };
 
+  // 历史最多 20 个版本，逐个 Tab 太慢：像大纲一样用方向键换版本，
+  // 选中即预览；只有当前版本留在 Tab 顺序里，Tab 一次就能到窗口按钮。
+  const handleListKeys = (event: ReactKeyboardEvent<HTMLUListElement>) => {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    const item = (event.target as Element | null)?.closest<HTMLElement>(
+      "[data-history-index]",
+    );
+    if (!item) return;
+    const index = Number(item.dataset.historyIndex);
+    let next: number | null = null;
+    if (event.key === "ArrowDown") next = index + 1;
+    else if (event.key === "ArrowUp") next = index - 1;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = entries.length - 1;
+    if (next === null) return;
+    event.preventDefault();
+    const position = Math.min(Math.max(next, 0), entries.length - 1);
+    const target = entries[position];
+    if (!target) return;
+    setSelected(target.id);
+    listRef.current
+      ?.querySelector<HTMLElement>(`[data-history-index="${position}"]`)
+      ?.focus();
+  };
+
   return (
     <div
       className="modal-backdrop"
@@ -172,11 +203,21 @@ export function HistoryDialog() {
           </div>
         ) : (
           <div className="history-layout">
-            <ul className="history-list" aria-label="历史版本列表">
+            <ul
+              className="history-list"
+              ref={listRef}
+              role="listbox"
+              aria-label="历史版本列表"
+              onKeyDown={handleListKeys}
+            >
               {entries.map((entry, position) => (
-                <li key={entry.id}>
+                <li key={entry.id} role="presentation">
                   <button
                     type="button"
+                    role="option"
+                    aria-selected={entry.id === selected}
+                    tabIndex={entry.id === selected ? 0 : -1}
+                    data-history-index={position}
                     className={`history-item${entry.id === selected ? " is-active" : ""}`}
                     autoFocus={position === 0}
                     onClick={() => setSelected(entry.id)}
