@@ -4,6 +4,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 
@@ -21,13 +22,17 @@ const OutlineRow = memo(function OutlineRow({
   level,
   index,
   active,
+  tabStop,
   onJump,
+  onTabStop,
 }: {
   text: string;
   level: number;
   index: number;
   active: boolean;
+  tabStop: boolean;
   onJump: (index: number) => void;
+  onTabStop: (index: number) => void;
 }) {
   return (
     <button
@@ -35,10 +40,14 @@ const OutlineRow = memo(function OutlineRow({
       role="treeitem"
       aria-level={level}
       aria-selected={active}
+      // 整张大纲只占一个 Tab 停靠点：长文档有几千个标题，
+      // 否则键盘用户要一格一格穿过整张列表才能离开侧栏。
+      tabIndex={tabStop ? 0 : -1}
       className={`outline-item${active ? " active" : ""}`}
       data-outline-index={index}
       style={{ paddingLeft: 10 + (level - 1) * 13 }}
       title={text}
+      onFocus={() => onTabStop(index)}
       onClick={() => onJump(index)}
     >
       {text}
@@ -53,6 +62,8 @@ export function OutlinePanel() {
   const docPath = useDocumentStore((state) => state.path);
   const viewMode = useDocumentStore((state) => state.viewMode);
   const listRef = useRef<HTMLDivElement>(null);
+  // 最后聚焦过的条目留在 Tab 顺序里；未操作过时从当前标题进入。
+  const [tabStop, setTabStop] = useState<number | null>(null);
 
   const cursorIndex = useMemo(() => {
     let active = -1;
@@ -66,6 +77,16 @@ export function OutlinePanel() {
   // 纯预览模式下以滚动位置为准；编辑 / 分栏模式仍跟随光标。
   const activeIndex =
     viewMode === "preview" && scrollIndex !== null ? scrollIndex : cursorIndex;
+
+  // 换文档后从新文档的当前标题重新进入，不沿用上一篇停留的位置。
+  useEffect(() => {
+    setTabStop(null);
+  }, [docPath]);
+
+  const tabStopIndex =
+    tabStop === null
+      ? Math.max(activeIndex, 0)
+      : Math.min(tabStop, Math.max(headings.length - 1, 0));
 
   // 跳转读取最新的标题与视图模式，但回调本身保持同一引用：
   // 改行导致标题位置整体位移时，条目不再被迫全部重渲染。
@@ -155,7 +176,9 @@ export function OutlinePanel() {
           level={heading.level}
           index={index}
           active={index === activeIndex}
+          tabStop={index === tabStopIndex}
           onJump={jump}
+          onTabStop={setTabStop}
         />
       ))}
     </div>
