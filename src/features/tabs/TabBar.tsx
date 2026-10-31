@@ -30,6 +30,9 @@ export function TabBar() {
   const [menu, setMenu] = useState<{ x: number; y: number; path: string } | null>(
     null,
   );
+  // 标签放不下时，被截断的一侧渐隐，提示「这边还有标签」；
+  // 滚到端头就没有可看的了，渐隐随之消失，不新增按钮或滚动条。
+  const [fade, setFade] = useState({ left: false, right: false });
 
   // 标签多到放不下时，用快捷键切到屏幕外的标签要把它们滚进来。
   useEffect(() => {
@@ -77,6 +80,29 @@ export function TabBar() {
     bar.addEventListener("wheel", onWheel, { passive: false });
     return () => bar.removeEventListener("wheel", onWheel);
   }, [hasTabs]);
+
+  // 记录标签条两端是否还有被截掉的内容：滚动、开合侧栏、缩放窗口、
+  // 增删标签都会改变它。留 1px 余量，避免小数宽度抖动。
+  useEffect(() => {
+    const bar = barRef.current;
+    if (!bar || !hasTabs) return;
+    const update = () => {
+      const left = bar.scrollLeft > 1;
+      const right = bar.scrollWidth - bar.clientWidth - bar.scrollLeft > 1;
+      setFade((prev) =>
+        prev.left === left && prev.right === right ? prev : { left, right },
+      );
+    };
+    update();
+    bar.addEventListener("scroll", update, { passive: true });
+    const observer =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+    observer?.observe(bar);
+    return () => {
+      bar.removeEventListener("scroll", update);
+      observer?.disconnect();
+    };
+  }, [hasTabs, tabs]);
 
   if (tabs.length === 0) return null;
 
@@ -164,7 +190,7 @@ export function TabBar() {
   return (
     <div
       ref={barRef}
-      className="tab-bar"
+      className={`tab-bar${fade.left ? " is-fade-left" : ""}${fade.right ? " is-fade-right" : ""}`}
       role="tablist"
       aria-label="打开的笔记"
       // 标题栏整体是拖动区，标签条自己处理点击与横向滚动。

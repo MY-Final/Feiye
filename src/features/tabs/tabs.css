@@ -16,6 +16,36 @@
   display: none;
 }
 
+/* 被截断的一侧渐隐，提示「这边还有标签」；滚到端头或不再溢出时
+   TabBar 会摘掉对应类名，渐隐随之消失。渐变相对元素边框盒定位，
+   不随内容滚动，只让边缘的标签轻轻淡出。 */
+.tab-bar.is-fade-left {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 16px);
+  mask-image: linear-gradient(to right, transparent, #000 16px);
+}
+
+.tab-bar.is-fade-right {
+  -webkit-mask-image: linear-gradient(to left, transparent, #000 16px);
+  mask-image: linear-gradient(to left, transparent, #000 16px);
+}
+
+.tab-bar.is-fade-left.is-fade-right {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 16px,
+    #000 calc(100% - 16px),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 16px,
+    #000 calc(100% - 16px),
+    transparent
+  );
+}
+
 .doc-tab {
   display: flex;
   flex: none;
