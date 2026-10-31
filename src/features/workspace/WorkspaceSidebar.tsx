@@ -216,6 +216,9 @@ interface TreeNodeProps {
   dropTarget: string | null;
   onDropTarget(path: string | null): void;
   onMenuAt(x: number, y: number, entry: Entry): void;
+  /** 整棵树只留一个 Tab 停靠点，其余行靠方向键移动。 */
+  stopPath: string | null;
+  onFocusEntry(path: string): void;
 }
 
 function TreeNode({
@@ -224,6 +227,8 @@ function TreeNode({
   dropTarget,
   onDropTarget,
   onMenuAt,
+  stopPath,
+  onFocusEntry,
 }: TreeNodeProps) {
   const expanded = useWorkspaceStore((state) =>
     Boolean(state.expanded[entry.relPath]),
@@ -294,7 +299,10 @@ function TreeNode({
         aria-level={depth + 1}
         aria-selected={active}
         data-depth={depth}
+        data-path={entry.relPath}
+        tabIndex={entry.relPath === stopPath ? 0 : -1}
         aria-expanded={entry.isDir ? expanded : undefined}
+        onFocus={() => onFocusEntry(entry.relPath)}
         onClick={() => {
           if (entry.isDir) {
             void toggleDir(entry.relPath);
@@ -389,6 +397,8 @@ function TreeNode({
               dropTarget={dropTarget}
               onDropTarget={onDropTarget}
               onMenuAt={onMenuAt}
+              stopPath={stopPath}
+              onFocusEntry={onFocusEntry}
             />
           ))}
           {children && children.length === 0 ? (
@@ -433,6 +443,10 @@ export function WorkspaceSidebar() {
   const rootLoading = useWorkspaceStore((state) => Boolean(state.loading[""]));
   const rootFailed = useWorkspaceStore((state) => Boolean(state.failed[""]));
   const refreshTree = useWorkspaceStore((state) => state.refreshTree);
+  // 停靠点默认落在当前笔记上；行被折叠 / 删除后由下面的 effect 兜底。
+  const activePath = useDocumentStore((state) => state.path);
+  const childrenByPath = useWorkspaceStore((state) => state.children);
+  const expandedByPath = useWorkspaceStore((state) => state.expanded);
   const headingCount = useOutlineStore((state) => state.headings.length);
   const searchRequest = useUiStore((state) => state.searchRequest);
   const [tab, setTab] = useState<SidebarTab>("files");
@@ -440,6 +454,10 @@ export function WorkspaceSidebar() {
   const [refreshing, setRefreshing] = useState(false);
   // 拖动时高亮当前可放下的目录，松手前就知道会落到哪。
   const [dropTarget, setDropTarget] = useState<string | null>(null);
+  // 文件树只保留一个 Tab 停靠点：最近聚焦的那一行。
+  const [treeStop, setTreeStop] = useState<string | null>(null);
+  const treeRef = useRef<HTMLDivElement>(null);
+  const stopPath = treeStop ?? activePath ?? children?.[0]?.relPath ?? null;
   const [moveTarget, setMoveTarget] = useState<Entry | null>(null);
   const [width, setWidth] = useState<number>(SIDEBAR_WIDTH.default);
   const widthRef = useRef<number>(SIDEBAR_WIDTH.default);
@@ -465,6 +483,17 @@ export function WorkspaceSidebar() {
         ?.focus();
     });
   }, [searchRequest]);
+
+  // 停靠点所在的行被折叠 / 删除后，树里会一个可 Tab 的行都不剩，挪到第一行。
+  useEffect(() => {
+    const tree = treeRef.current;
+    if (!tree) return;
+    const rows = Array.from(tree.querySelectorAll<HTMLElement>(".tree-row"));
+    if (rows.length === 0) return;
+    if (rows.some((row) => row.tabIndex === 0)) return;
+    const first = rows[0].dataset.path;
+    if (first) setTreeStop(first);
+  }, [stopPath, childrenByPath, expandedByPath, children]);
 
   useEffect(() => {
     void getSetting<number>(SIDEBAR_WIDTH_KEY).then((value) => {
@@ -747,6 +776,7 @@ export function WorkspaceSidebar() {
 
       {tab === "files" ? (
         <div
+          ref={treeRef}
           className="tree"
           role="tree"
           aria-label="工作区文件"
@@ -794,6 +824,8 @@ export function WorkspaceSidebar() {
               dropTarget={dropTarget}
               onDropTarget={setDropTarget}
               onMenuAt={openMenuAt}
+              stopPath={stopPath}
+              onFocusEntry={setTreeStop}
             />
           ))}
 
