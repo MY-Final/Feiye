@@ -451,6 +451,10 @@ export function WorkspaceSidebar() {
   const headingCount = useOutlineStore((state) => state.headings.length);
   const searchRequest = useUiStore((state) => state.searchRequest);
   const [tab, setTab] = useState<SidebarTab>("files");
+  // 侧栏三个标签只保留一个 Tab 停靠点，停在最后聚焦 / 当前打开的那个上；
+  // 其余用 ←/→ / Home / End 到达，和菜单栏、大纲的做法一致。
+  const [tabStop, setTabStop] = useState<SidebarTab | null>(null);
+  const stopTab = tabStop ?? tab;
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   // 拖动时高亮当前可放下的目录，松手前就知道会落到哪。
@@ -698,7 +702,9 @@ export function WorkspaceSidebar() {
             type="button"
             role="tab"
             aria-selected={tab === "files"}
+            tabIndex={stopTab === "files" ? 0 : -1}
             className={`sidebar-tab${tab === "files" ? " active" : ""}`}
+            onFocus={() => setTabStop("files")}
             onClick={() => selectTab("files")}
           >
             文件
@@ -707,7 +713,9 @@ export function WorkspaceSidebar() {
             type="button"
             role="tab"
             aria-selected={tab === "outline"}
+            tabIndex={stopTab === "outline" ? 0 : -1}
             className={`sidebar-tab${tab === "outline" ? " active" : ""}`}
+            onFocus={() => setTabStop("outline")}
             onClick={() => selectTab("outline")}
           >
             大纲
@@ -719,7 +727,9 @@ export function WorkspaceSidebar() {
             type="button"
             role="tab"
             aria-selected={tab === "search"}
+            tabIndex={stopTab === "search" ? 0 : -1}
             className={`sidebar-tab${tab === "search" ? " active" : ""}`}
+            onFocus={() => setTabStop("search")}
             onClick={() => selectTab("search")}
           >
             搜索
