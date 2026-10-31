@@ -444,6 +444,7 @@ export function WorkspaceSidebar() {
   const rootFailed = useWorkspaceStore((state) => Boolean(state.failed[""]));
   const refreshTree = useWorkspaceStore((state) => state.refreshTree);
   // 停靠点默认落在当前笔记上；行被折叠 / 删除后由下面的 effect 兜底。
+  const root = useWorkspaceStore((state) => state.root);
   const activePath = useDocumentStore((state) => state.path);
   const childrenByPath = useWorkspaceStore((state) => state.children);
   const expandedByPath = useWorkspaceStore((state) => state.expanded);
@@ -454,10 +455,19 @@ export function WorkspaceSidebar() {
   const [refreshing, setRefreshing] = useState(false);
   // 拖动时高亮当前可放下的目录，松手前就知道会落到哪。
   const [dropTarget, setDropTarget] = useState<string | null>(null);
-  // 文件树只保留一个 Tab 停靠点：最近聚焦的那一行。
-  const [treeStop, setTreeStop] = useState<string | null>(null);
+  // 文件树只保留一个 Tab 停靠点：最近聚焦的那一行；记下所属的库，
+  // 换库后上一库的相对路径不再适用，自动回到新库的当前笔记。
+  const [treeStop, setTreeStop] = useState<{
+    root: string | null;
+    path: string;
+  } | null>(null);
   const treeRef = useRef<HTMLDivElement>(null);
-  const stopPath = treeStop ?? activePath ?? children?.[0]?.relPath ?? null;
+  const focusEntry = (path: string) => setTreeStop({ root, path });
+  const stopPath =
+    (treeStop && treeStop.root === root ? treeStop.path : null) ??
+    activePath ??
+    children?.[0]?.relPath ??
+    null;
   const [moveTarget, setMoveTarget] = useState<Entry | null>(null);
   const [width, setWidth] = useState<number>(SIDEBAR_WIDTH.default);
   const widthRef = useRef<number>(SIDEBAR_WIDTH.default);
@@ -492,8 +502,8 @@ export function WorkspaceSidebar() {
     if (rows.length === 0) return;
     if (rows.some((row) => row.tabIndex === 0)) return;
     const first = rows[0].dataset.path;
-    if (first) setTreeStop(first);
-  }, [stopPath, childrenByPath, expandedByPath, children]);
+    if (first) setTreeStop({ root, path: first });
+  }, [stopPath, childrenByPath, expandedByPath, children, root]);
 
   useEffect(() => {
     void getSetting<number>(SIDEBAR_WIDTH_KEY).then((value) => {
@@ -825,7 +835,7 @@ export function WorkspaceSidebar() {
               onDropTarget={setDropTarget}
               onMenuAt={openMenuAt}
               stopPath={stopPath}
-              onFocusEntry={setTreeStop}
+              onFocusEntry={focusEntry}
             />
           ))}
 
