@@ -170,19 +170,44 @@ export function TabBar() {
       // 标题栏整体是拖动区，标签条自己处理点击与横向滚动。
       data-tauri-drag-region="false"
       onKeyDown={(event) => {
-        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+        // 和侧栏的标签页一样：←/→ 逐篇切换，Home / End 直接到首尾。
+        // 切换后把焦点交给目标标签，下一次按键才从新位置继续走；
+        // 否则焦点留在原处或落进编辑器，方向键会卡在同一个位置。
+        if (
+          event.key !== "ArrowLeft" &&
+          event.key !== "ArrowRight" &&
+          event.key !== "Home" &&
+          event.key !== "End"
+        ) {
+          return;
+        }
         const buttons = Array.from(
           event.currentTarget.querySelectorAll<HTMLElement>("[role='tab']"),
         );
         const index = buttons.indexOf(document.activeElement as HTMLElement);
         if (index < 0) return;
         event.preventDefault();
-        const next =
-          buttons[
-            (index + (event.key === "ArrowRight" ? 1 : -1) + buttons.length) %
-              buttons.length
-          ];
-        next?.click();
+        const nextIndex =
+          event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? buttons.length - 1
+              : (index + (event.key === "ArrowRight" ? 1 : -1) + buttons.length) %
+                buttons.length;
+        const next = buttons[nextIndex];
+        const tab = tabs[nextIndex];
+        next?.focus();
+        if (tab) {
+          // 打开新文档时编辑器会接管焦点；在标签条里用方向键导航时，
+          // 打开完成后把焦点还给刚移到的标签，下一次按键才能继续往前走。
+          void openFile({
+            name: tab.name,
+            relPath: tab.path,
+            isDir: false,
+          }).then((result) => {
+            if (result === "opened" && next?.isConnected) next.focus();
+          });
+        }
       }}
     >
       {tabs.map((tab, index) => {
