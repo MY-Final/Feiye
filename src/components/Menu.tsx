@@ -25,6 +25,8 @@ interface ContextMenuProps {
 export function ContextMenu({ x, y, actions, onClose }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
+  // Tab 主动把焦点送到触发元素之后时，不必再让卸载逻辑抢回触发元素。
+  const skipRestore = useRef(false);
 
   // 打开后焦点进到第一项，键盘用户可以直接上下选；关闭时还回去。
   // 单独空依赖，避免父组件重渲染时反复抢焦点。
@@ -34,7 +36,7 @@ export function ContextMenu({ x, y, actions, onClose }: ContextMenuProps) {
       ?.querySelector<HTMLButtonElement>(".context-menu-item")
       ?.focus();
     return () => {
-      previousFocus.current?.focus?.();
+      if (!skipRestore.current) previousFocus.current?.focus?.();
     };
   }, []);
 
@@ -55,6 +57,39 @@ export function ContextMenu({ x, y, actions, onClose }: ContextMenuProps) {
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.altKey || event.ctrlKey || event.metaKey) return;
+    // 菜单挂在 body 末尾，按 Tab 若交给浏览器默认行为，焦点会绕回窗口最左边，
+    // 跳过触发菜单的那个标签 / 按钮之后的控件。这里关闭菜单，并从触发元素
+    // 继续按顺序走一格（Shift+Tab 反向），让键盘焦点不脱节。
+    if (event.key === "Tab") {
+      event.preventDefault();
+      const trigger = previousFocus.current;
+      const focusables = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [contenteditable="true"], [tabindex]',
+        ),
+      ).filter(
+        (el) =>
+          el.tabIndex >= 0 &&
+          el.getClientRects().length > 0 &&
+          !el.closest(".context-menu"),
+      );
+      const index = trigger ? focusables.indexOf(trigger) : -1;
+      const delta = event.shiftKey ? -1 : 1;
+      const target =
+        focusables.length > 0
+          ? focusables[
+              index < 0
+                ? delta > 0
+                  ? 0
+                  : focusables.length - 1
+                : (index + delta + focusables.length) % focusables.length
+            ]
+          : null;
+      skipRestore.current = true;
+      onClose();
+      target?.focus();
+      return;
+    }
     const items = Array.from(
       event.currentTarget.querySelectorAll<HTMLButtonElement>(
         ".context-menu-item",
