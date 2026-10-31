@@ -14,6 +14,12 @@ export default defineConfig(() => ({
     conditions: ["worker", "module", "browser", "development|production"],
   },
 
+  // Worker 用 ES 模块格式，才能把 Shiki 的语法按语言拆成独立 chunk：
+  // 预览只拉当前文档用到的几种语言，而不是把三百多种语法打进一个文件。
+  worker: {
+    format: "es",
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors

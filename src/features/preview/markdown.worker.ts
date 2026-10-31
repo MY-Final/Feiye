@@ -6,9 +6,15 @@ import remarkRehype from "remark-rehype";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import type { Options as SanitizeSchema } from "rehype-sanitize";
 import rehypeKatex from "rehype-katex";
-import rehypeShiki from "@shikijs/rehype";
+import rehypeShikiFromHighlighter from "@shikijs/rehype/core";
 import rehypeStringify from "rehype-stringify";
-import type { BuiltinLanguage } from "shiki";
+import { createBundledHighlighter } from "shiki/core";
+import { createOnigurumaEngine } from "shiki/engine/oniguruma";
+import { bundledLanguages } from "shiki/langs";
+import { bundledThemes } from "shiki/themes";
+// 走独立资源而不是 `shiki/wasm`：后者把 456KB 的 wasm 编成 base64 塞进 JS，
+// 产物会多出 150KB 和一段需要解码的大字符串。
+import wasmUrl from "shiki/onig.wasm?url";
 
 import type { PreviewRequest, PreviewResponse } from "./preview-protocol";
 
@@ -43,44 +49,55 @@ const schema: SanitizeSchema = {
   },
 };
 
-const LANGUAGES: BuiltinLanguage[] = [
-  "bash",
-  "c",
-  "cpp",
-  "css",
-  "diff",
-  "go",
-  "html",
-  "java",
-  "javascript",
-  "json",
-  "jsx",
-  "markdown",
-  "python",
-  "rust",
-  "shell",
-  "sql",
-  "toml",
-  "tsx",
-  "typescript",
-  "yaml",
-];
+/**
+ * 语法不预先全量加载：代码块第一次出现某种语言时，Shiki 才按名字
+ * 去拉对应的语法分块（构建时每种语言单独成为一个 chunk）。
+ * Worker 里只保留 26KB 左右的语言索引，三百多种语法都不进首包。
+ */
+const createHighlighter = createBundledHighlighter({
+  langs: bundledLanguages,
+  themes: {
+    "github-light": bundledThemes["github-light"],
+    "github-dark": bundledThemes["github-dark"],
+  },
+  engine: () => createOnigurumaEngine(fetch(wasmUrl)),
+});
 
-const processor = unified()
-  .use(remarkParse)
-  .use(remarkGfm)
-  .use(remarkMath)
-  .use(remarkRehype)
-  .use(rehypeSanitize, schema)
-  .use(rehypeKatex, { strict: "ignore" })
-  .use(rehypeShiki, {
-    themes: { light: "github-light", dark: "github-dark" },
-    defaultColor: "light",
-    langs: LANGUAGES,
-    fallbackLanguage: "text",
-    lazy: true,
-  })
-  .use(rehypeStringify);
+function buildProcessor(
+  highlighter: Awaited<ReturnType<typeof createHighlighter>>,
+) {
+  return unified()
+    .use(remarkParse)
+    .use(remarkGfm)
+    .use(remarkMath)
+    .use(remarkRehype)
+    .use(rehypeSanitize, schema)
+    .use(rehypeKatex, { strict: "ignore" })
+    .use(() =>
+      rehypeShikiFromHighlighter(highlighter, {
+        themes: { light: "github-light", dark: "github-dark" },
+        defaultColor: "light",
+        fallbackLanguage: "text",
+        lazy: true,
+      }),
+    )
+    .use(rehypeStringify);
+}
+
+let processorPromise: Promise<ReturnType<typeof buildProcessor>> | null = null;
+
+/**
+ * Worker 首次收到预览请求时才装配管线：加载 wasm 与语法要几十毫秒，
+ * 不能挡在模块求值阶段，否则连“打开但没预览”的场景也要付这份开销。
+ */
+function getProcessor(): Promise<ReturnType<typeof buildProcessor>> {
+  // 只预载主题；语言交给 rehype 的 lazy 选项按代码块内容加载。
+  processorPromise ??= createHighlighter({
+    themes: ["github-light", "github-dark"],
+    langs: [],
+  }).then(buildProcessor);
+  return processorPromise;
+}
 
 interface MdastNode {
   type: string;
@@ -148,6 +165,7 @@ scope.onmessage = async (event) => {
   const { id, markdown } = event.data;
 
   try {
+    const processor = await getProcessor();
     const tree = processor.parse(markdown) as unknown as MdastNode;
     applyImageAttrs(tree);
     const mermaid: string[] = [];
