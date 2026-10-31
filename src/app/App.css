@@ -244,10 +244,10 @@
 
 .toolbar-sep {
   width: 1px;
-  height: 16px;
+  height: 18px;
   flex: none;
   margin: 0 7px;
-  background: var(--line);
+  background: var(--line-strong);
 }
 
 .toolbar-spacer {
@@ -1606,6 +1606,11 @@ body.is-resizing-split * {
   }
 
   .toolbar .tool-zen {
+    display: none;
+  }
+
+  /* 专注按钮收起后，别在视图切换右边留下一条悬空的线。 */
+  .toolbar-sep-zen {
     display: none;
   }
 
