@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -43,7 +44,38 @@ export function trapTab(event: ReactKeyboardEvent<HTMLElement>): void {
   }
 }
 
+/** 关闭动效的时长；CSS 里的 .is-closing 必须与它对齐。 */
+const DIALOG_EXIT_MS = 130;
+
+/**
+ * 点按钮后先把卡片淡出，再真正 resolve。
+ * 以前是调用即卸载，遮罩和表单会整块瞬间消失，看着很硬。
+ */
+function useDialogClose() {
+  const [closing, setClosing] = useState(false);
+  const closingRef = useRef(false);
+  const timerRef = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    },
+    [],
+  );
+
+  const close = useCallback((action: () => void) => {
+    // 连点两下或回车与点击同时触发时，只认第一次关闭。
+    if (closingRef.current) return;
+    closingRef.current = true;
+    setClosing(true);
+    timerRef.current = window.setTimeout(action, DIALOG_EXIT_MS);
+  }, []);
+
+  return { closing, close };
+}
+
 function ConfirmDialog({ request }: { request: ConfirmRequest }) {
+  const { closing, close } = useDialogClose();
   const cancelValue =
     request.buttons.find((button) => button.value === "cancel")?.value ??
     request.buttons[request.buttons.length - 1]?.value ??
@@ -55,7 +87,7 @@ function ConfirmDialog({ request }: { request: ConfirmRequest }) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        useUiStore.getState().resolveConfirm(cancelValue);
+        close(() => useUiStore.getState().resolveConfirm(cancelValue));
         return;
       }
       if (event.key === "Enter" && primaryValue) {
@@ -69,24 +101,24 @@ function ConfirmDialog({ request }: { request: ConfirmRequest }) {
           return;
         }
         event.preventDefault();
-        useUiStore.getState().resolveConfirm(primaryValue);
+        close(() => useUiStore.getState().resolveConfirm(primaryValue));
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [cancelValue, primaryValue]);
+  }, [cancelValue, primaryValue, close]);
 
   return (
     <div
-      className="modal-backdrop"
+      className={`modal-backdrop${closing ? " is-closing" : ""}`}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
-          useUiStore.getState().resolveConfirm(cancelValue);
+          close(() => useUiStore.getState().resolveConfirm(cancelValue));
         }
       }}
     >
       <div
-        className="modal"
+        className={`modal${closing ? " is-closing" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-label={request.title}
@@ -102,7 +134,9 @@ function ConfirmDialog({ request }: { request: ConfirmRequest }) {
               className={`btn ${button.tone === "primary" ? "primary" : ""} ${
                 button.tone === "danger" ? "danger" : ""
               }`}
-              onClick={() => useUiStore.getState().resolveConfirm(button.value)}
+              onClick={() =>
+                close(() => useUiStore.getState().resolveConfirm(button.value))
+              }
             >
               {button.label}
             </button>
@@ -116,16 +150,17 @@ function ConfirmDialog({ request }: { request: ConfirmRequest }) {
 function PromptDialog({ request }: { request: PromptRequest }) {
   const [value, setValue] = useState(request.initialValue ?? "");
   const [error, setError] = useState<string | null>(null);
+  const { closing, close } = useDialogClose();
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        useUiStore.getState().resolvePrompt(null);
+        close(() => useUiStore.getState().resolvePrompt(null));
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [close]);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -135,20 +170,20 @@ function PromptDialog({ request }: { request: PromptRequest }) {
       setError(message);
       return;
     }
-    useUiStore.getState().resolvePrompt(trimmed);
+    close(() => useUiStore.getState().resolvePrompt(trimmed));
   };
 
   return (
     <div
-      className="modal-backdrop"
+      className={`modal-backdrop${closing ? " is-closing" : ""}`}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
-          useUiStore.getState().resolvePrompt(null);
+          close(() => useUiStore.getState().resolvePrompt(null));
         }
       }}
     >
       <form
-        className="modal"
+        className={`modal${closing ? " is-closing" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-label={request.title}
@@ -183,7 +218,9 @@ function PromptDialog({ request }: { request: PromptRequest }) {
           <button
             type="button"
             className="btn"
-            onClick={() => useUiStore.getState().resolvePrompt(null)}
+            onClick={() =>
+              close(() => useUiStore.getState().resolvePrompt(null))
+            }
           >
             取消
           </button>

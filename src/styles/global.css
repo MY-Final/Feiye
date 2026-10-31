@@ -74,6 +74,12 @@
   --text-sm: 12px;
   --z-popover: 95;
 
+  /* 交互动效：短、轻，只用透明度与几像素位移，不做弹跳。 */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 0.12s;
+  --dur-base: 0.16s;
+  --dur-slow: 0.22s;
+
   color-scheme: light;
   font-family: var(--font-ui);
   font-size: 15px;

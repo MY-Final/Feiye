@@ -43,6 +43,9 @@
   font-family: inherit;
   text-align: left;
   cursor: pointer;
+  transition:
+    background-color var(--dur-fast) ease,
+    color var(--dur-fast) ease;
 }
 
 .history-item:hover,

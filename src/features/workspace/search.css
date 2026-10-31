@@ -15,10 +15,14 @@
   color: var(--text);
   font-family: inherit;
   font-size: 12px;
+  transition:
+    border-color var(--dur-fast) ease,
+    background-color var(--dur-fast) ease;
 }
 
 .search-input:focus {
   border-color: var(--accent);
+  background: var(--bg-elevated);
   outline: none;
 }
 

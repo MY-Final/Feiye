@@ -78,6 +78,14 @@
   font-size: 17px;
   line-height: 1;
   cursor: pointer;
+  transition:
+    background-color var(--dur-fast) ease,
+    color var(--dur-fast) ease,
+    transform var(--dur-fast) ease;
+}
+
+.tab-new:active {
+  transform: translateY(1px);
 }
 
 .tab-new:hover {
@@ -191,6 +199,9 @@
   background: transparent;
   color: var(--text-muted);
   cursor: default;
+  transition:
+    background-color var(--dur-fast) ease,
+    color var(--dur-fast) ease;
 }
 
 .window-control svg {
@@ -262,7 +273,15 @@
   font-size: 12.5px;
   line-height: 1;
   cursor: pointer;
-  transition: background-color 0.12s ease, color 0.12s ease;
+  transition:
+    background-color var(--dur-fast) ease,
+    color var(--dur-fast) ease,
+    transform var(--dur-fast) ease;
+}
+
+/* 按下时下沉 1px：比缩放更克制，不改变旁边按钮的位置感。 */
+.tool-btn:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .tool-btn:hover:not(:disabled) {
@@ -410,7 +429,15 @@
   color: var(--text);
   font-size: 12.5px;
   cursor: pointer;
-  transition: background-color 0.12s ease, border-color 0.12s ease;
+  transition:
+    background-color var(--dur-fast) ease,
+    border-color var(--dur-fast) ease,
+    color var(--dur-fast) ease,
+    transform var(--dur-fast) ease;
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .btn:hover:not(:disabled) {
@@ -458,8 +485,13 @@
   font-size: 14px;
   cursor: pointer;
   transition:
-    background-color 0.12s ease,
-    color 0.12s ease;
+    background-color var(--dur-fast) ease,
+    color var(--dur-fast) ease,
+    transform var(--dur-fast) ease;
+}
+
+.icon-btn:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .icon-btn svg {
@@ -936,7 +968,8 @@ body.is-resizing-split * {
   color: var(--accent);
 }
 
-.sidebar-tab.active::after {
+/* 下划线常驻、用横向缩放收起：切换页签时线条是滑过去的，不是闪现。 */
+.sidebar-tab::after {
   content: "";
   position: absolute;
   right: 0;
@@ -944,6 +977,12 @@ body.is-resizing-split * {
   left: 0;
   height: 1.5px;
   background: var(--accent);
+  transform: scaleX(0);
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
+.sidebar-tab.active::after {
+  transform: scaleX(1);
 }
 
 .sidebar-count {
@@ -1181,8 +1220,21 @@ body.is-resizing-split * {
   white-space: nowrap;
 }
 
+/* 展开目录时子项淡入并轻轻落下，收起仍走即时移除，不拖慢操作。 */
 .tree-children {
   position: relative;
+  animation: tree-children-in var(--dur-fast) var(--ease-out);
+}
+
+@keyframes tree-children-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .tree-children::before {
@@ -1349,6 +1401,13 @@ body.is-resizing-split * {
   display: grid;
   place-items: center;
   background: rgba(16, 20, 18, 0.36);
+  animation: overlay-in var(--dur-base) ease both;
+}
+
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
 }
 
 .modal {
@@ -1359,6 +1418,37 @@ body.is-resizing-split * {
   background: var(--bg-elevated);
   /* 一层大阴影定位置，一层贴边细影让卡片边缘不发虚。 */
   box-shadow: var(--overlay-shadow), 0 1px 2px rgba(20, 24, 22, 0.08);
+  animation: modal-in var(--dur-base) var(--ease-out) both;
+}
+
+/* 弹窗从下方 6px 处轻轻抬起，配合遮罩淡入，不用缩放弹跳。 */
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* 关闭时反向收一小段；时长与 Dialog.tsx 的 DIALOG_EXIT_MS 对齐。 */
+.modal-backdrop.is-closing {
+  animation: overlay-out 0.12s ease both;
+}
+
+.modal.is-closing {
+  animation: modal-out 0.12s ease both;
+}
+
+@keyframes overlay-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes modal-out {
+  to {
+    opacity: 0;
+    transform: translateY(4px);
+  }
 }
 
 .modal-title {
@@ -1421,6 +1511,7 @@ body.is-resizing-split * {
   line-height: 30px;
   text-align: left;
   cursor: pointer;
+  transition: background-color var(--dur-fast) ease;
 }
 
 .move-option:hover,
@@ -1476,6 +1567,14 @@ body.is-resizing-split * {
   margin: 8px 0 0;
   color: var(--danger);
   font-size: 12px;
+  animation: field-error-in var(--dur-fast) ease-out;
+}
+
+@keyframes field-error-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
 }
 
 /* ---------- 右键菜单 ---------- */
@@ -1489,6 +1588,18 @@ body.is-resizing-split * {
   border-radius: var(--radius-md);
   background: var(--bg-elevated);
   box-shadow: var(--overlay-shadow-soft);
+  animation: context-menu-in 0.1s ease-out;
+}
+
+@keyframes context-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .context-menu-item {
@@ -1506,6 +1617,7 @@ body.is-resizing-split * {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  transition: background-color var(--dur-fast) ease;
 }
 
 .context-menu-item:hover {
@@ -1541,6 +1653,9 @@ body.is-resizing-split * {
   font-size: 14px;
   line-height: 1;
   cursor: pointer;
+  transition:
+    background-color var(--dur-fast) ease,
+    color var(--dur-fast) ease;
 }
 
 .context-menu-remove:hover {
@@ -1572,6 +1687,18 @@ body.is-resizing-split * {
   text-align: left;
   box-shadow: var(--overlay-shadow-soft);
   cursor: pointer;
+  animation: toast-in var(--dur-base) var(--ease-out);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .toast.error {
