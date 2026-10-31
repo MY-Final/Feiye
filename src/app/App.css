@@ -1,6 +1,6 @@
 .app {
   display: grid;
-  grid-template-rows: var(--bar-title) auto minmax(0, 1fr) var(--bar-status);
+  grid-template-rows: var(--bar-title) auto auto minmax(0, 1fr) var(--bar-status);
   /* 单列也要压住最小宽度：标签一多时，标题栏不应把整个窗口撑出横向滚动。 */
   grid-template-columns: minmax(0, 1fr);
   height: 100%;
@@ -39,6 +39,22 @@
 
 .titlebar-tabs .doc-title {
   margin: 0 auto;
+}
+
+/* 标签行：放在标题栏下面，标题栏只留菜单与窗口控制，标签再宽也不互相挤。 */
+.tab-strip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 8px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-elevated);
+}
+
+.tab-strip .tab-bar {
+  flex: 0 1 auto;
 }
 
 .titlebar-right {

@@ -17,6 +17,7 @@ import {
   saveActiveDocument,
 } from "../features/editor/save";
 import { PreviewPane } from "../features/preview/PreviewPane";
+import { TabBar } from "../features/tabs/TabBar";
 import { printActiveDocument } from "./Toolbar";
 import { CommandPalette } from "../features/commands/CommandPalette";
 import { HistoryDialog } from "../features/history/HistoryDialog";
@@ -620,6 +621,21 @@ export default function App() {
   return (
     <div className="app">
       <TitleBar />
+      {/* 标签单独占一行：标题栏留给应用菜单与窗口控制，标签再宽也不会互相挤。 */}
+      {hasWorkspace && !zenMode ? (
+        <div className="tab-strip">
+          <TabBar />
+          <button
+            type="button"
+            className="tab-new"
+            title="新建笔记 (Ctrl+N)"
+            aria-label="新建笔记"
+            onClick={() => void newDocumentNearActive()}
+          >
+            +
+          </button>
+        </div>
+      ) : null}
       {/* 专注模式把工具栏和侧栏都收起来，退出后按原来的偏好还原。 */}
       {zenMode ? null : <Toolbar />}
 

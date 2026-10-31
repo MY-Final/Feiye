@@ -1,12 +1,10 @@
 import { useState, type MouseEvent } from "react";
 
 import { ContextMenu } from "../components/Menu";
-import { TabBar } from "../features/tabs/TabBar";
 import {
   chooseWorkspace,
   forgetWorkspace,
   listRecentWorkspaces,
-  newDocumentNearActive,
   openWorkspaceAt,
   rememberWorkspace,
 } from "../features/workspace/workspace-actions";
@@ -203,30 +201,13 @@ export function TitleBar() {
       </div>
 
       <div className="titlebar-tabs">
-        {zenMode ? (
-          docName ? (
-            <span className="doc-title" title={docName}>
-              {docName}
-              {dirty ? <span className="dirty-dot" title="未保存" /> : null}
-            </span>
-          ) : null
-        ) : (
-          <>
-            <TabBar />
-            {root ? (
-              <button
-                type="button"
-                className="tab-new"
-                title="新建笔记 (Ctrl+N)"
-                aria-label="新建笔记"
-                data-tauri-drag-region="false"
-                onClick={() => void newDocumentNearActive()}
-              >
-                +
-              </button>
-            ) : null}
-          </>
-        )}
+        {/* 标签已移到标题栏下方单独一行；这里只在专注模式显示文档名。 */}
+        {zenMode && docName ? (
+          <span className="doc-title" title={docName}>
+            {docName}
+            {dirty ? <span className="dirty-dot" title="未保存" /> : null}
+          </span>
+        ) : null}
       </div>
 
       <div className="titlebar-right" data-tauri-drag-region="false">
