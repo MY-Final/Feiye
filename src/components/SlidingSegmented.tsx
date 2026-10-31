@@ -4,6 +4,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 
 export interface SegmentedOption<T extends string> {
@@ -38,6 +39,12 @@ export function SlidingSegmented<T extends string>({
 }: SlidingSegmentedProps<T>) {
   const groupRef = useRef<HTMLDivElement>(null);
   const [thumb, setThumb] = useState<Thumb>(EMPTY_THUMB);
+  // 整组只留一个 Tab 停靠点：默认停在当前值，方向键移动时跟随焦点。
+  const [stop, setStop] = useState<T | null>(null);
+  const stopValue =
+    stop !== null && options.some((option) => option.value === stop)
+      ? stop
+      : value;
 
   const measure = useCallback(() => {
     const group = groupRef.current;
@@ -70,12 +77,33 @@ export function SlidingSegmented<T extends string>({
     };
   }, [measure]);
 
+  /** ←/→ 在组内移焦点，Home / End 到首尾；回车才真正切换，扫过时不会误改视图。 */
+  const handleKeys = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const keys = ["ArrowLeft", "ArrowRight", "Home", "End"];
+    if (!keys.includes(event.key)) return;
+    const buttons = Array.from(
+      event.currentTarget.querySelectorAll<HTMLButtonElement>("button"),
+    );
+    const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    if (index < 0) return;
+    event.preventDefault();
+    const delta = event.key === "ArrowRight" ? 1 : -1;
+    const next =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? buttons.length - 1
+          : (index + delta + buttons.length) % buttons.length;
+    buttons[next]?.focus();
+  };
+
   return (
     <div
       ref={groupRef}
       className={`segmented sliding-segmented ${className}`.trim()}
       role="group"
       aria-label={ariaLabel}
+      onKeyDown={handleKeys}
     >
       <span
         className="segmented-thumb"
@@ -96,6 +124,8 @@ export function SlidingSegmented<T extends string>({
             className={active ? "active" : ""}
             title={option.title}
             aria-pressed={active}
+            tabIndex={option.value === stopValue ? 0 : -1}
+            onFocus={() => setStop(option.value)}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => onChange(option.value)}
           >
