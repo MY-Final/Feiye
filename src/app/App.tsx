@@ -21,7 +21,6 @@ import { printActiveDocument } from "./Toolbar";
 import { CommandPalette } from "../features/commands/CommandPalette";
 import { HistoryDialog } from "../features/history/HistoryDialog";
 import { SplitPane } from "../features/split/SplitPane";
-import { TabBar } from "../features/tabs/TabBar";
 import { SettingsDialog } from "../features/settings/SettingsDialog";
 import { WorkspaceSidebar } from "../features/workspace/WorkspaceSidebar";
 import {
@@ -627,10 +626,8 @@ export default function App() {
       <div className="app-body">
         {hasWorkspace && sidebarVisible && !zenMode ? <WorkspaceSidebar /> : null}
 
-        <div className="main-column">
-          {/* 专注模式只留正文：标签栏也一并收起，退出后原样回来。 */}
-          {zenMode ? null : <TabBar />}
-          <div className="main-row">
+        {/* 专注模式只留正文：标题栏里的标签与工具栏一并收起，退出后原样回来。 */}
+        <div className="main-row">
           <main
           className={`workspace-main mode-${viewMode}${preferences.lineNumbers ? "" : " hide-line-numbers"}`}
           style={
@@ -771,9 +768,8 @@ export default function App() {
           )}
           </main>
           <SplitPane />
-          </div>
-          </div>
         </div>
+      </div>
 
       <StatusBar />
 

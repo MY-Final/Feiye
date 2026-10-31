@@ -1,41 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 
-import {
-  copyActiveAsHtml,
-  exportActiveAsHtml,
-  printActiveDocument,
-} from "../../app/Toolbar";
 import { trapTab } from "../../components/Dialog";
-import { openEditorSearch } from "../editor/editor-bridge";
-import { saveActiveDocument } from "../editor/save";
-import {
-  changeViewMode,
-  chooseWorkspace,
-  newDocumentNearActive,
-  openNextDocument,
-  openPreviousDocument,
-  renameActiveDocument,
-  saveDocumentAs,
-} from "../workspace/workspace-actions";
-import {
-  PREFERENCE_LIMITS,
-  useSettingsStore,
-} from "../../stores/settings";
 import { useDocumentStore } from "../../stores/document";
-import { useTabsStore } from "../../stores/tabs";
 import { useUiStore } from "../../stores/ui";
 import { useWorkspaceStore } from "../../stores/workspace";
+import {
+  APP_COMMANDS,
+  readCommandContext,
+  type AppCommand,
+} from "./commands";
 import "./commands.css";
-
-interface Command {
-  id: string;
-  title: string;
-  hint?: string;
-  shortcut?: string;
-  keywords?: string;
-  run(): void | Promise<void>;
-}
 
 /**
  * 命令面板：一个输入框搜出应用内的动作，键盘上下选、回车执行。
@@ -53,222 +28,12 @@ export function CommandPalette() {
   const inputRef = useRef<HTMLInputElement>(null);
   const restoreFocus = useRef<HTMLElement | null>(null);
 
-  const commands = useMemo<Command[]>(() => {
-    const hasDoc = Boolean(docPath);
-    const fontSize = () => useSettingsStore.getState().preferences.fontSize;
-    const changeFontSize = (delta: number) => {
-      const { min, max, step } = PREFERENCE_LIMITS.fontSize;
-      const next = Math.min(max, Math.max(min, fontSize() + delta * step));
-      if (next !== fontSize()) {
-        useSettingsStore.getState().update({ fontSize: next });
-      }
-    };
-    const list: Command[] = [
-      {
-        id: "new",
-        title: "新建笔记",
-        hint: "在当前笔记旁",
-        shortcut: "Ctrl+N",
-        keywords: "new note 新建",
-        run: async () => {
-          if (!useWorkspaceStore.getState().root) {
-            useUiStore.getState().toast("先打开一个工作区再新建笔记");
-            return;
-          }
-          await newDocumentNearActive();
-        },
-      },
-      {
-        id: "open-workspace",
-        title: "打开文件夹…",
-        shortcut: "Ctrl+O",
-        keywords: "workspace folder 工作区 库",
-        run: () => chooseWorkspace(),
-      },
-      {
-        id: "save",
-        title: "保存",
-        shortcut: "Ctrl+S",
-        keywords: "save 保存",
-        run: () => saveActiveDocument(),
-      },
-      {
-        id: "save-as",
-        title: "另存为…",
-        shortcut: "Ctrl+Shift+S",
-        keywords: "save as 副本",
-        run: () => saveDocumentAs(),
-      },
-      {
-        id: "rename",
-        title: "重命名当前笔记…",
-        shortcut: "F2",
-        keywords: "rename 改名",
-        run: () => renameActiveDocument(),
-      },
-      {
-        id: "copy-html",
-        title: "复制 HTML",
-        hint: "按预览排版，可直接粘进邮件",
-        shortcut: "Ctrl+Shift+E",
-        keywords: "copy html 剪贴板",
-        run: () => copyActiveAsHtml(),
-      },
-      {
-        id: "export-html",
-        title: "导出 HTML…",
-        hint: "写到当前笔记同目录",
-        keywords: "export html 导出",
-        run: () => exportActiveAsHtml(),
-      },
-      {
-        id: "print-pdf",
-        title: "导出 PDF…",
-        hint: "按打印版式打开系统打印对话框，可选另存为 PDF",
-        shortcut: "Ctrl+P",
-        keywords: "pdf print 打印 导出 另存",
-        run: () => printActiveDocument(),
-      },
-      {
-        id: "split-preview",
-        title: "分屏对照",
-        hint: "右侧并排预览另一篇已打开的笔记",
-        shortcut: "Ctrl+\\",
-        keywords: "split 分屏 对照 并排",
-        run: () => {
-          if (useTabsStore.getState().tabs.length < 2) {
-            useUiStore
-              .getState()
-              .toast("先打开至少两篇笔记再分屏对照");
-            return;
-          }
-          useUiStore.getState().toggleSplitPreview();
-        },
-      },
-      {
-        id: "history",
-        title: "版本历史…",
-        hint: "回看每次保存留下的快照并恢复",
-        shortcut: "Ctrl+Alt+H",
-        keywords: "history version 历史 快照 版本",
-        run: () => useUiStore.getState().openHistory(),
-      },
-      {
-        id: "search-workspace",
-        title: "在工作区中搜索",
-        hint: "跨全部笔记，结果直接跳到命中行",
-        keywords: "search find 全文 搜索 工作区",
-        run: () => useUiStore.getState().openSearchPanel(),
-      },
-      {
-        id: "find",
-        title: "查找与替换",
-        shortcut: "Ctrl+F",
-        keywords: "find search 搜索",
-        run: async () => {
-          if (useDocumentStore.getState().viewMode === "preview") {
-            await changeViewMode("split");
-          }
-          openEditorSearch();
-        },
-      },
-      {
-        id: "view-source",
-        title: "视图：源码",
-        keywords: "view source 源码",
-        run: () => changeViewMode("source"),
-      },
-      {
-        id: "view-split",
-        title: "视图：分栏",
-        keywords: "view split 分栏",
-        run: () => changeViewMode("split"),
-      },
-      {
-        id: "view-preview",
-        title: "视图：预览",
-        keywords: "view preview 预览 阅读",
-        run: () => changeViewMode("preview"),
-      },
-      {
-        id: "view-live",
-        title: "视图：所见即所得",
-        keywords: "view live wysiwyg 所见",
-        run: () => changeViewMode("wysiwyg"),
-      },
-      {
-        id: "zen",
-        title: "专注模式",
-        shortcut: "Ctrl+Shift+F",
-        keywords: "zen focus 专注",
-        run: () => useUiStore.getState().toggleZenMode(),
-      },
-      {
-        id: "sidebar",
-        title: "显示 / 隐藏侧栏",
-        shortcut: "Ctrl+B",
-        keywords: "sidebar 侧栏",
-        run: () => useUiStore.getState().toggleSidebar(),
-      },
-      {
-        id: "settings",
-        title: "偏好设置…",
-        shortcut: "Ctrl+,",
-        keywords: "settings preferences 设置",
-        run: () => useUiStore.getState().openSettings(),
-      },
-      {
-        id: "refresh-tree",
-        title: "刷新文件树",
-        keywords: "refresh 刷新",
-        run: () => useWorkspaceStore.getState().refreshTree(),
-      },
-      {
-        id: "font-larger",
-        title: "放大正文字号",
-        shortcut: "Ctrl+=",
-        keywords: "zoom font 字号 放大",
-        run: () => changeFontSize(1),
-      },
-      {
-        id: "font-smaller",
-        title: "缩小正文字号",
-        shortcut: "Ctrl+-",
-        keywords: "zoom font 字号 缩小",
-        run: () => changeFontSize(-1),
-      },
-      {
-        id: "back",
-        title: "返回上一篇笔记",
-        shortcut: "Alt+←",
-        keywords: "back history 返回 后退",
-        run: () => openPreviousDocument(),
-      },
-      {
-        id: "forward",
-        title: "前进到下一篇笔记",
-        shortcut: "Alt+→",
-        keywords: "forward history 前进",
-        run: () => openNextDocument(),
-      },
-    ];
-
-    return list.filter((command) => {
-      if (["save", "save-as", "rename", "copy-html", "export-html", "find"].includes(command.id)) {
-        return hasDoc;
-      }
-      if (["view-source", "view-split", "view-preview", "view-live", "zen"].includes(command.id)) {
-        return hasDoc;
-      }
-      if (command.id === "back") return historyLength > 0;
-      if (command.id === "forward") return forwardLength > 0;
-      if (command.id === "refresh-tree") return Boolean(root);
-      if (command.id === "search-workspace") return Boolean(root);
-      if (command.id === "history") return hasDoc;
-      if (command.id === "split-preview") return Boolean(root);
-      if (command.id === "print-pdf") return hasDoc;
-      return true;
-    });
+  const commands = useMemo<AppCommand[]>(() => {
+    const context = readCommandContext();
+    return APP_COMMANDS.filter(
+      (command) =>
+        command.palette !== false && command.enabled(context),
+    );
   }, [docPath, root, historyLength, forwardLength]);
 
   const filtered = useMemo(() => {
@@ -305,7 +70,7 @@ export function CommandPalette() {
     if (previous?.isConnected) previous.focus();
   };
 
-  const run = (command: Command) => {
+  const run = (command: AppCommand) => {
     close();
     void command.run();
   };

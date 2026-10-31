@@ -20,16 +20,10 @@ import {
   toggleFencedCode,
   toggleInline,
 } from "../features/editor/formatting";
-import { saveActiveDocument } from "../features/editor/save";
 import {
   changeViewMode,
   existingNameError,
   nameCharError,
-  newDocumentNearActive,
-  openNextDocument,
-  openPreviousDocument,
-  renameActiveDocument,
-  saveDocumentAs,
 } from "../features/workspace/workspace-actions";
 import { renderMarkdownToHtml } from "../features/preview/preview-controller";
 import { useDocumentStore } from "../stores/document";
@@ -456,12 +450,6 @@ export function Toolbar() {
   const docPath = useDocumentStore((state) => state.path);
   const viewMode = useDocumentStore((state) => state.viewMode);
   const format = useEditorStore((state) => state.format);
-  const previousPath = useWorkspaceStore((state) =>
-    docPath ? (state.history[state.history.length - 1] ?? null) : null,
-  );
-  const nextPath = useWorkspaceStore((state) =>
-    docPath ? (state.forward[state.forward.length - 1] ?? null) : null,
-  );
   const imageInput = useRef<HTMLInputElement>(null);
 
   const hasDoc = Boolean(docPath);
@@ -485,99 +473,6 @@ export function Toolbar() {
           insertImageFiles(files);
         }}
       />
-      <div className="toolbar-group file-actions">
-        <button
-          type="button"
-          className="toolbar-text-btn"
-          title={
-            previousPath
-              ? `返回上一篇笔记 (Alt+←)：${previousPath}`
-              : "返回上一篇笔记（本次会话里还没有打开过其他笔记）"
-          }
-          disabled={!previousPath}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => void openPreviousDocument()}
-        >
-          返回
-        </button>
-        <button
-          type="button"
-          className="toolbar-text-btn"
-          title={
-            nextPath
-              ? `前进下一篇笔记 (Alt+→)：${nextPath}`
-              : "前进下一篇笔记（还没有可前进的笔记）"
-          }
-          disabled={!nextPath}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => void openNextDocument()}
-        >
-          前进
-        </button>
-        <button
-          type="button"
-          className="toolbar-text-btn"
-          title="新建 Markdown (Ctrl+N)"
-          disabled={!root}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => void newDocumentNearActive()}
-        >
-          新建
-        </button>
-        <button
-          type="button"
-          className="toolbar-text-btn"
-          title="保存 (Ctrl+S)"
-          disabled={!hasDoc}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => void saveActiveDocument()}
-        >
-          保存
-        </button>
-        <button
-          type="button"
-          className="toolbar-text-btn"
-          title="另存为 (Ctrl+Shift+S)"
-          disabled={!hasDoc}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => void saveDocumentAs()}
-        >
-          另存为
-        </button>
-        <button
-          type="button"
-          className="toolbar-text-btn"
-          title="按预览排版复制 HTML (Ctrl+Shift+E)；选中正文时只复制所选部分，本地图片自动内联（单张 4 MB 以内）"
-          disabled={!hasDoc}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => void copyActiveAsHtml()}
-        >
-          复制 HTML
-        </button>
-        <button
-          type="button"
-          className="toolbar-text-btn"
-          title="把整篇笔记导出成当前目录下的 .html 文件（不覆盖已有文件）"
-          disabled={!hasDoc}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => void exportActiveAsHtml()}
-        >
-          导出 HTML…
-        </button>
-        <button
-          type="button"
-          className="toolbar-text-btn"
-          title="重命名当前文件 (F2)"
-          disabled={!hasDoc}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => void renameActiveDocument()}
-        >
-          重命名
-        </button>
-      </div>
-
-      <span className="toolbar-sep" aria-hidden="true" />
-
       <div className="toolbar-group" aria-label="撤销与重做">
         <ToolButton
           title="撤销 (Ctrl+Z)"
@@ -597,7 +492,7 @@ export function Toolbar() {
 
       <span className="toolbar-sep" aria-hidden="true" />
 
-      <div className="toolbar-group" aria-label="行内格式">
+      <div className="toolbar-group toolbar-inline" aria-label="行内格式">
         <ToolButton
           title="加粗 (Ctrl+B)"
           active={format.bold}
@@ -647,7 +542,7 @@ export function Toolbar() {
 
       <span className="toolbar-sep" aria-hidden="true" />
 
-      <div className="toolbar-group" aria-label="段落样式">
+      <div className="toolbar-group toolbar-paragraph" aria-label="段落样式">
         <select
           className="heading-select"
           title="段落样式"
@@ -693,6 +588,7 @@ export function Toolbar() {
         </ToolButton>
         <ToolButton
           title="任务列表 (Ctrl+Shift+X)"
+          className="tool-p2"
           active={list === "task"}
           disabled={formattingDisabled}
           onClick={() => runEditorCommand((view) => toggleBlockPrefix(view, "task"))}
@@ -703,7 +599,7 @@ export function Toolbar() {
 
       <span className="toolbar-sep" aria-hidden="true" />
 
-      <div className="toolbar-group" aria-label="块级内容">
+      <div className="toolbar-group toolbar-insert" aria-label="块级内容">
         <ToolButton
           title="代码块 (Ctrl+Shift+K)"
           active={format.codeBlock}
@@ -714,6 +610,7 @@ export function Toolbar() {
         </ToolButton>
         <ToolButton
           title="公式 (Ctrl+Shift+M)"
+          className="tool-p2"
           active={format.math !== "none"}
           disabled={formattingDisabled}
           onClick={() => runEditorCommand((view) => insertMath(view, true))}
@@ -722,6 +619,7 @@ export function Toolbar() {
         </ToolButton>
         <ToolButton
           title="表格 (Ctrl+T)"
+          className="tool-p2"
           active={format.table}
           disabled={formattingDisabled}
           onClick={() => runEditorCommand((view) => insertTable(view))}
@@ -730,6 +628,7 @@ export function Toolbar() {
         </ToolButton>
         <ToolButton
           title="分隔线 (Ctrl+Shift+H)"
+          className="tool-p3"
           disabled={formattingDisabled}
           onClick={() => runEditorCommand((view) => insertHorizontalRule(view))}
         >
@@ -762,6 +661,7 @@ export function Toolbar() {
           {/* 快捷键之外也给一个看得见的入口，不然只有翻快捷键表才知道。 */}
           <ToolButton
             title="专注模式 (Ctrl + Shift + F)"
+            className="tool-zen"
             disabled={!hasDoc}
             onClick={() => useUiStore.getState().toggleZenMode()}
           >

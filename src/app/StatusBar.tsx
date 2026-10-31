@@ -183,28 +183,33 @@ export function StatusBar() {
           <>
             {viewMode !== "preview" ? (
               // 纯预览里编辑器不显示，光标行列是切走前的旧值，只会让人误解。
-              <span>
+              <span className="status-group status-cursor">
                 {cursor.line}:{cursor.column}
               </span>
             ) : null}
-            {shownSelectedWords > 0 ? (
-              <span className="status-stat" title="当前选区的字数（不含空白）">
-                选中 {shownSelectedWords.toLocaleString("zh-CN")} 字
+            <span className="status-group status-stats">
+              {shownSelectedWords > 0 ? (
+                <span
+                  className="status-stat status-selected"
+                  title="当前选区的字数（不含空白）"
+                >
+                  选中 {shownSelectedWords.toLocaleString("zh-CN")} 字
+                </span>
+              ) : null}
+              <span
+                className="status-stat"
+                title={`${charsLabel} 个字符（不含空白）`}
+              >
+                {wordsLabel} 字
               </span>
-            ) : null}
-            <span
-              className="status-stat"
-              title={`${charsLabel} 个字符（不含空白）`}
-            >
-              {wordsLabel} 字
             </span>
-            <span>UTF-8</span>
+            <span className="status-group status-encoding">UTF-8</span>
             {saveBlocked ? (
               // 自动保存被冲突或错误挡下后，状态栏直接作为重试入口，
               // 不用让用户自己猜「按 Ctrl+S」。
               <button
                 type="button"
-                className="status-save status-blocked status-action"
+                className="status-group status-save status-blocked status-action"
                 title={saveTitle || "点击重试保存"}
                 onClick={() => void saveActiveDocument()}
               >
@@ -214,7 +219,7 @@ export function StatusBar() {
               </button>
             ) : (
               <span
-                className={`status-save${dirty ? " status-dirty" : ""}`}
+                className={`status-group status-save${dirty ? " status-dirty" : ""}`}
                 title={saveTitle || undefined}
               >
                 <span key={saveKey} className="status-save-text">
