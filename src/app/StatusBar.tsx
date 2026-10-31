@@ -1,9 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 
+import { ContextMenu } from "../components/Menu";
 import { copyText } from "../lib/clipboard";
 import { countTextStats } from "../lib/text-stats";
 import { saveActiveDocument } from "../features/editor/save";
-import { chooseWorkspace } from "../features/workspace/workspace-actions";
+import {
+  changeViewMode,
+  chooseWorkspace,
+} from "../features/workspace/workspace-actions";
+import { VIEW_MODES } from "../lib/view-modes";
 import { useDocumentStore } from "../stores/document";
 import { useEditorStore } from "../stores/editor";
 import { useSettingsStore } from "../stores/settings";
@@ -53,6 +59,13 @@ export function StatusBar() {
   const autoSaveOff = useSettingsStore(
     (state) => state.preferences.autoSaveDelay <= 0,
   );
+
+  // 窄窗口里工具栏的视图切换会收起，状态栏留一个常驻入口。
+  const [viewMenu, setViewMenu] = useState<{ x: number; y: number } | null>(
+    null,
+  );
+  const currentViewLabel =
+    VIEW_MODES.find((mode) => mode.value === viewMode)?.label ?? "视图";
 
   // 预览里也能选中正文，和编辑区一样在状态栏报出选中字数。
   // 纯预览时编辑器可能还留着切走前的选区，此时以预览里的选择为准。
@@ -181,6 +194,28 @@ export function StatusBar() {
       <span className="status-meta">
         {docPath ? (
           <>
+            {/* 工具栏窄到收起视图分段控件时，这里仍能看见并切换当前视图。 */}
+            <button
+              type="button"
+              className="status-group status-view"
+              title={`切换视图（当前：${currentViewLabel} · Ctrl+E）`}
+              aria-haspopup="menu"
+              aria-expanded={viewMenu !== null}
+              onMouseDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                if (viewMenu) {
+                  setViewMenu(null);
+                  return;
+                }
+                const rect = event.currentTarget.getBoundingClientRect();
+                setViewMenu({ x: rect.left, y: rect.top - 150 });
+              }}
+            >
+              {currentViewLabel}
+              <span className="status-view-caret" aria-hidden="true">
+                ▾
+              </span>
+            </button>
             {viewMode !== "preview" ? (
               // 纯预览里编辑器不显示，光标行列是切走前的旧值，只会让人误解。
               <span className="status-group status-cursor">
@@ -243,6 +278,21 @@ export function StatusBar() {
           </>
         ) : null}
       </span>
+      {viewMenu
+        ? createPortal(
+            <ContextMenu
+              x={viewMenu.x}
+              y={viewMenu.y}
+              onClose={() => setViewMenu(null)}
+              actions={VIEW_MODES.map((mode) => ({
+                label: mode.value === viewMode ? `✓ ${mode.label}` : mode.label,
+                title: mode.title,
+                onSelect: () => void changeViewMode(mode.value),
+              }))}
+            />,
+            document.body,
+          )
+        : null}
     </footer>
   );
 }

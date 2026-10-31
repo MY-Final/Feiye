@@ -1336,6 +1336,27 @@ body.is-resizing-split * {
   text-underline-offset: 2px;
 }
 
+/* 状态栏里的视图入口：显示当前模式，点开展开四种视图。 */
+.status-view {
+  gap: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+
+.status-view:hover {
+  color: var(--text);
+}
+
+.status-view-caret {
+  font-size: 9px;
+  opacity: 0.65;
+}
+
 .status-meta {
   display: flex;
   flex: none;
