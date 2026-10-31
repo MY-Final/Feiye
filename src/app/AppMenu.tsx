@@ -114,6 +114,23 @@ export function AppMenu({ anchor, onClose }: AppMenuProps) {
       onClose();
       return;
     }
+    // 视图组是单选（源码 / 分栏 / 预览 / 所见即所得），←/→ 在组内四项间移动；
+    // 只移焦点不立即切换，回车才生效，避免扫菜单时误改视图。
+    if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+      const current = document.activeElement as HTMLButtonElement | null;
+      if (current?.getAttribute("role") !== "menuitemradio") return;
+      const radios = Array.from(
+        event.currentTarget.querySelectorAll<HTMLButtonElement>(
+          '.app-menu-item[role="menuitemradio"]:not(:disabled)',
+        ),
+      );
+      const index = radios.indexOf(current);
+      if (index < 0 || radios.length < 2) return;
+      event.preventDefault();
+      const delta = event.key === "ArrowRight" ? 1 : -1;
+      radios[(index + delta + radios.length) % radios.length]?.focus();
+      return;
+    }
     if (
       event.key !== "ArrowDown" &&
       event.key !== "ArrowUp" &&
