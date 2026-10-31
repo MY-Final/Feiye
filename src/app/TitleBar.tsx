@@ -1,4 +1,4 @@
-import { useRef, useState, type MouseEvent } from "react";
+import { useState, type MouseEvent } from "react";
 
 import { ContextMenu } from "../components/Menu";
 import { TabBar } from "../features/tabs/TabBar";
@@ -11,7 +11,7 @@ import {
   rememberWorkspace,
 } from "../features/workspace/workspace-actions";
 import { useWindowControls } from "../features/window/use-window-controls";
-import { AppMenu } from "./AppMenu";
+import { MenuBar } from "./MenuBar";
 import { useDocumentStore } from "../stores/document";
 import { useUiStore } from "../stores/ui";
 import { useWorkspaceStore } from "../stores/workspace";
@@ -81,8 +81,6 @@ export function TitleBar() {
   const zenMode = useUiStore((state) => state.zenMode);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
   const controls = useWindowControls();
-  const menuButtonRef = useRef<HTMLButtonElement>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [recentMenu, setRecentMenu] = useState<{
     x: number;
     y: number;
@@ -200,19 +198,8 @@ export function TitleBar() {
           </button>
         )}
 
-        {/* 应用菜单放在左侧库名之后：它是全局菜单，不再贴着窗口控制。 */}
-        <button
-          ref={menuButtonRef}
-          type="button"
-          className={`icon-btn app-menu-trigger${menuOpen ? " is-open" : ""}`}
-          title="应用菜单"
-          aria-label="应用菜单"
-          aria-haspopup="menu"
-          aria-expanded={menuOpen}
-          onClick={() => setMenuOpen((open) => !open)}
-        >
-          ⋯
-        </button>
+        {/* 文字菜单放在库名之后：用看得见的「文件 / 编辑 / 段落…」替代 ⋯。 */}
+        <MenuBar />
       </div>
 
       <div className="titlebar-tabs">
@@ -277,13 +264,6 @@ export function TitleBar() {
           </button>
         </div>
       </div>
-
-      {menuOpen ? (
-        <AppMenu
-          anchor={menuButtonRef.current}
-          onClose={() => setMenuOpen(false)}
-        />
-      ) : null}
 
       {recentMenu ? (
         <ContextMenu

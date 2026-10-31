@@ -13,9 +13,12 @@ import {
 } from "./commands";
 import "./commands.css";
 
-/** 与 ⋯ 菜单（AppMenu.tsx）的 GROUPS 保持同样的分组与顺序。 */
+/** 与标题栏菜单（AppMenu.tsx）的 GROUPS 保持同样的分组与顺序。 */
 const GROUP_LABELS: Record<CommandGroup, string> = {
   file: "文件",
+  edit: "编辑",
+  paragraph: "段落",
+  format: "格式",
   nav: "导航",
   view: "视图",
   find: "查找",

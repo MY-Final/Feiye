@@ -46,16 +46,6 @@
   align-items: center;
 }
 
-.app-menu-trigger {
-  font-size: 17px;
-  line-height: 1;
-}
-
-.app-menu-trigger.is-open {
-  background: var(--bg-sunken);
-  color: var(--text);
-}
-
 .tab-new {
   display: inline-flex;
   flex: none;
