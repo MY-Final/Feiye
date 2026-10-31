@@ -668,6 +668,14 @@ export async function closeDocumentTabsToRight(path: string): Promise<void> {
   await closeTabsInOrder(tabs.slice(index + 1).map((tab) => tab.path));
 }
 
+/** 标签右键「关闭左侧标签」：只关掉排在它前面的那些。 */
+export async function closeDocumentTabsToLeft(path: string): Promise<void> {
+  const tabs = useTabsStore.getState().tabs;
+  const index = tabs.findIndex((tab) => tab.path === path);
+  if (index < 0) return;
+  await closeTabsInOrder(tabs.slice(0, index).map((tab) => tab.path));
+}
+
 /** Ctrl+Tab / Ctrl+Shift+Tab 在已打开的标签之间循环切换。 */
 export async function switchDocumentTab(delta: number): Promise<void> {
   const tabs = useTabsStore.getState().tabs;

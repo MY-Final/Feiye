@@ -7,6 +7,7 @@ import { useSettingsStore } from "../../stores/settings";
 import { useTabsStore } from "../../stores/tabs";
 import {
   closeDocumentTab,
+  closeDocumentTabsToLeft,
   closeDocumentTabsToRight,
   closeOtherDocumentTabs,
   openFile,
@@ -125,7 +126,7 @@ export function TabBar() {
 
   // 右键菜单：一次关掉一串标签，不用逐个切过去按 Ctrl+W。
   // 只列出有意义的项——只剩一个标签时不出现「关闭其它标签」，
-  // 最右侧标签不出现「关闭右侧标签」。
+  // 最左 / 最右标签不出现「关闭左侧 / 右侧标签」。
   const menuIndex = menu ? tabs.findIndex((tab) => tab.path === menu.path) : -1;
   const menuActions: MenuAction[] = menu
     ? [
@@ -133,11 +134,11 @@ export function TabBar() {
           label: "关闭标签",
           onSelect: () => void closeDocumentTab(menu.path),
         },
-        ...(tabs.length > 1
+        ...(menuIndex > 0
           ? [
               {
-                label: "关闭其它标签",
-                onSelect: () => void closeOtherDocumentTabs(menu.path),
+                label: "关闭左侧标签",
+                onSelect: () => void closeDocumentTabsToLeft(menu.path),
               },
             ]
           : []),
@@ -146,6 +147,14 @@ export function TabBar() {
               {
                 label: "关闭右侧标签",
                 onSelect: () => void closeDocumentTabsToRight(menu.path),
+              },
+            ]
+          : []),
+        ...(tabs.length > 1
+          ? [
+              {
+                label: "关闭其它标签",
+                onSelect: () => void closeOtherDocumentTabs(menu.path),
               },
             ]
           : []),
