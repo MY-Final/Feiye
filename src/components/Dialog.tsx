@@ -36,16 +36,18 @@ export function trapTab(event: ReactKeyboardEvent<HTMLElement>): void {
   const inside = active instanceof HTMLElement && event.currentTarget.contains(active);
   // 焦点在对话框本身（如刚打开时落在容器上）不在可 Tab 元素里，
   // 也要把 Tab / Shift+Tab 收进首尾，否则会从容器后面绕出去。
-  const position = focusables.indexOf(active as HTMLElement);
+  // 只认容器本身：框内其它可聚焦元素（如可滚动的历史预览区）不在上面的
+  // 列表里，交给浏览器按 DOM 顺序走，不能被拉回第一项。
+  const atContainer = active === event.currentTarget;
 
   if (event.shiftKey) {
-    if (!inside || active === first || position < 0) {
+    if (!inside || active === first || atContainer) {
       event.preventDefault();
       last.focus();
     }
     return;
   }
-  if (!inside || active === last || position < 0) {
+  if (!inside || active === last || atContainer) {
     event.preventDefault();
     first.focus();
   }
