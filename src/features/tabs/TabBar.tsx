@@ -109,6 +109,17 @@ export function TabBar() {
   const labelOf = (name: string) =>
     hideExtensions ? name.replace(/\.(md|markdown|mdx)$/i, "") : name;
 
+  // 关掉非当前标签时，先把焦点交给后面（末尾则前面）那枚标签。
+  // 被点的 × 会随标签一起从 DOM 里消失，焦点若还停在上面就掉回 body，
+  // 键盘用户得从窗口开头重新 Tab 回来。先移走焦点，后续 Tab 才接得上。
+  const focusSurvivingTab = (index: number) => {
+    const items = barRef.current?.querySelectorAll<HTMLElement>(
+      ".doc-tab [role='tab']",
+    );
+    if (!items || items.length === 0) return;
+    (items[index + 1] ?? items[index - 1] ?? items[0])?.focus();
+  };
+
   // 同名笔记（如两个目录下的 README.md）在标签上只显示文件名时分不清，
   // 悬停看完整路径又太慢。只在重名时补一段所在目录：从最近的一级开始
   // 往外找，取到第一个足以区分的后缀，不重名的标签保持原样。
@@ -158,7 +169,15 @@ export function TabBar() {
     ? [
         {
           label: "关闭标签",
-          onSelect: () => void closeDocumentTab(menu.path),
+          onSelect: () => {
+            // 菜单关闭时会先把焦点还给触发它的标签；那枚标签马上要被移除，
+            // 等下一帧再落到相邻标签上（关当前标签则交给编辑器）。
+            const keepsFocus = menu.path === active;
+            void closeDocumentTab(menu.path).then(() => {
+              if (keepsFocus) return;
+              requestAnimationFrame(() => focusSurvivingTab(menuIndex));
+            });
+          },
         },
         ...(menuIndex > 0
           ? [
@@ -321,6 +340,9 @@ export function TabBar() {
               title="关闭标签（Ctrl+W）"
               onClick={(event) => {
                 event.stopPropagation();
+                // 关当前标签会切到相邻一篇并由编辑器接管焦点，这里不抢；
+                // 只给「关掉别的标签」补上落点。
+                if (!isActive) focusSurvivingTab(index);
                 void closeDocumentTab(tab.path);
               }}
             >
