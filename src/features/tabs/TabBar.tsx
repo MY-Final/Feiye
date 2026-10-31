@@ -109,6 +109,13 @@ export function TabBar() {
   const labelOf = (name: string) =>
     hideExtensions ? name.replace(/\.(md|markdown|mdx)$/i, "") : name;
 
+  // 整条标签栏只占一个 Tab 停靠点：方向键已经能逐篇切换并打开，
+  // 每个标签的主按钮和 × 若都留在 Tab 序里，开七八篇就要连按十几次
+  // 才能穿过标签条。停靠点跟当前标签走（方向键切换后焦点与当前一致），
+  // 它的 × 也留一个停靠点；其它标签的 × 可用方向键切过去或 Shift+F10 菜单关。
+  const stopPath =
+    active && tabs.some((tab) => tab.path === active) ? active : tabs[0]?.path;
+
   // 关掉非当前标签时，先把焦点交给后面（末尾则前面）那枚标签。
   // 被点的 × 会随标签一起从 DOM 里消失，焦点若还停在上面就掉回 body，
   // 键盘用户得从窗口开头重新 Tab 回来。先移走焦点，后续 Tab 才接得上。
@@ -229,7 +236,15 @@ export function TabBar() {
         const buttons = Array.from(
           event.currentTarget.querySelectorAll<HTMLElement>("[role='tab']"),
         );
-        const index = buttons.indexOf(document.activeElement as HTMLElement);
+        const focused = document.activeElement as HTMLElement | null;
+        // 焦点也可能停在当前标签的 × 上（它是标签条里第二个停靠点），
+        // 方向键按它所在的那个标签继续走，不要求先 Shift+Tab 回主按钮。
+        const owner =
+          buttons.indexOf(focused as HTMLElement) < 0 &&
+          focused?.classList.contains("doc-tab-close")
+            ? focused.closest(".doc-tab")?.querySelector<HTMLElement>("[role='tab']")
+            : null;
+        const index = owner ? buttons.indexOf(owner) : buttons.indexOf(focused as HTMLElement);
         if (index < 0) return;
         event.preventDefault();
         const nextIndex =
@@ -309,6 +324,7 @@ export function TabBar() {
               type="button"
               role="tab"
               aria-selected={isActive}
+              tabIndex={tab.path === stopPath ? 0 : -1}
               className="doc-tab-main"
               title={tab.path}
               onClick={() => {
@@ -336,6 +352,7 @@ export function TabBar() {
             <button
               type="button"
               className="doc-tab-close"
+              tabIndex={tab.path === stopPath ? 0 : -1}
               aria-label={`关闭 ${label}${dirSuffix ? `（${dirSuffix}）` : ""}`}
               title="关闭标签（Ctrl+W）"
               onClick={(event) => {
