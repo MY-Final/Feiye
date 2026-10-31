@@ -1348,38 +1348,53 @@ body.is-resizing-split * {
   z-index: 100;
   display: grid;
   place-items: center;
-  background: rgba(16, 20, 18, 0.3);
+  background: rgba(16, 20, 18, 0.36);
 }
 
 .modal {
-  width: min(420px, calc(100vw - 48px));
-  padding: 22px;
+  width: min(440px, calc(100vw - 48px));
+  padding: 24px 24px 20px;
   border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
+  border-radius: 8px;
   background: var(--bg-elevated);
-  box-shadow: var(--overlay-shadow);
+  /* 一层大阴影定位置，一层贴边细影让卡片边缘不发虚。 */
+  box-shadow: var(--overlay-shadow), 0 1px 2px rgba(20, 24, 22, 0.08);
 }
 
 .modal-title {
-  margin: 0 0 10px;
+  margin: 0;
   font-family: var(--font-heading);
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  line-height: 1.45;
+  letter-spacing: 0.02em;
 }
 
 .modal-message {
-  margin: 0;
+  margin: 8px 0 0;
   color: var(--text-muted);
   font-size: 13px;
   line-height: 1.75;
 }
 
+/* 标题与表单之间留出呼吸，标题不再直接贴着输入框。 */
+.modal > .field {
+  margin-top: 18px;
+}
+
+/* 操作区用一条通栏细线与表单分开，按钮不再悬在半空。 */
 .modal-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  margin-top: 22px;
+  gap: 10px;
+  margin: 20px -24px 0;
+  padding: 16px 24px 0;
+  border-top: 1px solid var(--line);
+}
+
+.modal-actions .btn {
+  height: 30px;
+  padding: 0 14px;
 }
 
 /* 「移动到…」的目标文件夹列表：限高滚动，方便键盘上下选。 */
@@ -1423,7 +1438,7 @@ body.is-resizing-split * {
 .field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
 }
 
 .field-label {
@@ -1432,20 +1447,29 @@ body.is-resizing-split * {
 }
 
 .text-input {
-  height: 32px;
-  padding: 0 9px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  height: 36px;
+  padding: 0 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
   background: var(--bg);
   color: var(--text);
   font-size: 13px;
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
   user-select: text;
   -webkit-user-select: text;
 }
 
+.text-input::placeholder {
+  color: var(--text-faint);
+}
+
+/* 聚焦时不只换描边：加一圈软色环，输入框在当前卡片里才立得住。 */
 .text-input:focus {
   border-color: var(--accent);
   outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .field-error {
