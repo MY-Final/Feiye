@@ -18,6 +18,7 @@ export function TabBar() {
     (state) => state.preferences.hideFileExtensions,
   );
   const activeTabRef = useRef<HTMLDivElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
 
   // 标签多到放不下时，用快捷键切到屏幕外的标签要把它们滚进来。
   useEffect(() => {
@@ -27,6 +28,20 @@ export function TabBar() {
     });
   }, [active]);
 
+  // 窗口变窄后标签条变短，当前标签可能被推出视野；跟窗口一起收进来。
+  useEffect(() => {
+    const bar = barRef.current;
+    if (!bar || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      activeTabRef.current?.scrollIntoView({
+        block: "nearest",
+        inline: "nearest",
+      });
+    });
+    observer.observe(bar);
+    return () => observer.disconnect();
+  }, []);
+
   if (tabs.length === 0) return null;
 
   const labelOf = (name: string) =>
@@ -34,9 +49,12 @@ export function TabBar() {
 
   return (
     <div
+      ref={barRef}
       className="tab-bar"
       role="tablist"
       aria-label="打开的笔记"
+      // 标题栏整体是拖动区，标签条自己处理点击与横向滚动。
+      data-tauri-drag-region="false"
       onKeyDown={(event) => {
         if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
         const buttons = Array.from(

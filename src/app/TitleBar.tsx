@@ -1,14 +1,17 @@
-import { useState, type MouseEvent } from "react";
+import { useRef, useState, type MouseEvent } from "react";
 
 import { ContextMenu } from "../components/Menu";
+import { TabBar } from "../features/tabs/TabBar";
 import {
   chooseWorkspace,
   forgetWorkspace,
   listRecentWorkspaces,
+  newDocumentNearActive,
   openWorkspaceAt,
   rememberWorkspace,
 } from "../features/workspace/workspace-actions";
 import { useWindowControls } from "../features/window/use-window-controls";
+import { AppMenu } from "./AppMenu";
 import { useDocumentStore } from "../stores/document";
 import { useUiStore } from "../stores/ui";
 import { useWorkspaceStore } from "../stores/workspace";
@@ -33,28 +36,10 @@ function SidebarIcon() {
   );
 }
 
-function FolderIcon() {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.2l1.2 1.4h5.6A1.5 1.5 0 0 1 14 5.9v5.6A1.5 1.5 0 0 1 12.5 13h-9A1.5 1.5 0 0 1 2 11.5z" />
-    </svg>
-  );
-}
-
 function ChevronIcon() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
       <path d="M4.5 6.5 8 10l3.5-3.5" />
-    </svg>
-  );
-}
-
-function SettingsIcon() {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden="true">
-      <circle cx="8" cy="8" r="4.7" />
-      <circle cx="8" cy="8" r="2" />
-      <path d="M8 1.7v1.6M8 12.7v1.6M1.7 8h1.6M12.7 8h1.6M3.55 3.55l1.15 1.15M11.3 11.3l1.15 1.15M12.45 3.55l-1.15 1.15M4.7 11.3l-1.15 1.15" />
     </svg>
   );
 }
@@ -95,8 +80,9 @@ export function TitleBar() {
   const sidebarVisible = useUiStore((state) => state.sidebarVisible);
   const zenMode = useUiStore((state) => state.zenMode);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
-  const toggleSettings = useUiStore((state) => state.toggleSettings);
   const controls = useWindowControls();
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [recentMenu, setRecentMenu] = useState<{
     x: number;
     y: number;
@@ -144,7 +130,11 @@ export function TitleBar() {
       data-tauri-drag-region="deep"
       // 自绘标题栏没有系统默认行为，双击空白处最大化 / 还原是大家的肌肉记忆。
       onDoubleClick={(event) => {
-        if ((event.target as HTMLElement).closest("button")) return;
+        // 标签、菜单与窗口控制都在标题栏里，双击它们不应把窗口最大化。
+        const interactive = (event.target as HTMLElement).closest(
+          "button, .tab-bar, .app-menu, .window-controls",
+        );
+        if (interactive) return;
         void controls.toggleMaximize();
       }}
     >
@@ -193,15 +183,6 @@ export function TitleBar() {
 
         <button
           type="button"
-          className="icon-btn titlebar-folder"
-          title="打开文件夹 (Ctrl+O)"
-          onClick={() => void chooseWorkspace()}
-        >
-          <FolderIcon />
-        </button>
-
-        <button
-          type="button"
           className="icon-btn"
           title="最近工作区"
           aria-label="最近工作区"
@@ -209,60 +190,89 @@ export function TitleBar() {
         >
           <ChevronIcon />
         </button>
-
-        <button
-          type="button"
-          className="icon-btn"
-          title="偏好设置 (Ctrl+,)"
-          aria-label="偏好设置"
-          onClick={toggleSettings}
-        >
-          <SettingsIcon />
-        </button>
       </div>
 
-      <div className="titlebar-center">
-        {docName ? (
-          <span className="doc-title" title={docName}>
-            {docName}
-            {dirty ? <span className="dirty-dot" title="未保存" /> : null}
-          </span>
-        ) : null}
+      <div className="titlebar-tabs">
+        {zenMode ? (
+          docName ? (
+            <span className="doc-title" title={docName}>
+              {docName}
+              {dirty ? <span className="dirty-dot" title="未保存" /> : null}
+            </span>
+          ) : null
+        ) : (
+          <>
+            <TabBar />
+            {root ? (
+              <button
+                type="button"
+                className="tab-new"
+                title="新建笔记 (Ctrl+N)"
+                aria-label="新建笔记"
+                data-tauri-drag-region="false"
+                onClick={() => void newDocumentNearActive()}
+              >
+                +
+              </button>
+            ) : null}
+          </>
+        )}
       </div>
 
-      <div
-        className="window-controls"
-        data-tauri-drag-region="false"
-        hidden={!controls.available}
-      >
+      <div className="titlebar-right" data-tauri-drag-region="false">
         <button
+          ref={menuButtonRef}
           type="button"
-          className="window-control"
-          title="最小化"
-          aria-label="最小化"
-          onClick={() => void controls.minimize()}
+          className={`icon-btn app-menu-trigger${menuOpen ? " is-open" : ""}`}
+          title="应用菜单"
+          aria-label="应用菜单"
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          onClick={() => setMenuOpen((open) => !open)}
         >
-          <MinimizeIcon />
+          ⋯
         </button>
-        <button
-          type="button"
-          className="window-control"
-          title={controls.maximized ? "还原" : "最大化"}
-          aria-label={controls.maximized ? "还原" : "最大化"}
-          onClick={() => void controls.toggleMaximize()}
+        <div
+          className="window-controls"
+          data-tauri-drag-region="false"
+          hidden={!controls.available}
         >
-          <MaximizeIcon restored={controls.maximized} />
-        </button>
-        <button
-          type="button"
-          className="window-control close"
-          title="关闭"
-          aria-label="关闭"
-          onClick={() => void controls.requestClose()}
-        >
-          <CloseIcon />
-        </button>
+          <button
+            type="button"
+            className="window-control"
+            title="最小化"
+            aria-label="最小化"
+            onClick={() => void controls.minimize()}
+          >
+            <MinimizeIcon />
+          </button>
+          <button
+            type="button"
+            className="window-control"
+            title={controls.maximized ? "还原" : "最大化"}
+            aria-label={controls.maximized ? "还原" : "最大化"}
+            onClick={() => void controls.toggleMaximize()}
+          >
+            <MaximizeIcon restored={controls.maximized} />
+          </button>
+          <button
+            type="button"
+            className="window-control close"
+            title="关闭"
+            aria-label="关闭"
+            onClick={() => void controls.requestClose()}
+          >
+            <CloseIcon />
+          </button>
+        </div>
       </div>
+
+      {menuOpen ? (
+        <AppMenu
+          anchor={menuButtonRef.current}
+          onClose={() => setMenuOpen(false)}
+        />
+      ) : null}
 
       {recentMenu ? (
         <ContextMenu
