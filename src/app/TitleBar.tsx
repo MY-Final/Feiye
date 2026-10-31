@@ -199,6 +199,20 @@ export function TitleBar() {
             <ChevronIcon />
           </button>
         )}
+
+        {/* 应用菜单放在左侧库名之后：它是全局菜单，不再贴着窗口控制。 */}
+        <button
+          ref={menuButtonRef}
+          type="button"
+          className={`icon-btn app-menu-trigger${menuOpen ? " is-open" : ""}`}
+          title="应用菜单"
+          aria-label="应用菜单"
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          onClick={() => setMenuOpen((open) => !open)}
+        >
+          ⋯
+        </button>
       </div>
 
       <div className="titlebar-tabs">
@@ -229,18 +243,6 @@ export function TitleBar() {
       </div>
 
       <div className="titlebar-right" data-tauri-drag-region="false">
-        <button
-          ref={menuButtonRef}
-          type="button"
-          className={`icon-btn app-menu-trigger${menuOpen ? " is-open" : ""}`}
-          title="应用菜单"
-          aria-label="应用菜单"
-          aria-haspopup="menu"
-          aria-expanded={menuOpen}
-          onClick={() => setMenuOpen((open) => !open)}
-        >
-          ⋯
-        </button>
         <div
           className="window-controls"
           data-tauri-drag-region="false"

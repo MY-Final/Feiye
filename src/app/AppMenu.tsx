@@ -161,8 +161,15 @@ export function AppMenu({ anchor, onClose }: AppMenuProps) {
 
   const rect = anchor?.getBoundingClientRect();
   const top = rect ? Math.round(rect.bottom + 4) : 48;
+  // 触发器在左半区时让菜单左对齐（避免整块跳到屏幕最左侧），
+  // 在右半区时仍右对齐；两种都夹在窗口内。
+  const preferredLeft = rect
+    ? rect.left + rect.width / 2 < window.innerWidth / 2
+      ? rect.left
+      : rect.right - MENU_WIDTH
+    : window.innerWidth - MENU_WIDTH;
   const left = Math.min(
-    Math.max(8, Math.round((rect?.right ?? window.innerWidth) - MENU_WIDTH)),
+    Math.max(8, Math.round(preferredLeft)),
     window.innerWidth - MENU_WIDTH - 8,
   );
 

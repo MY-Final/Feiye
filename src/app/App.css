@@ -44,8 +44,6 @@
 .titlebar-right {
   display: flex;
   align-items: center;
-  /* ⋯ 是应用菜单，不是第四个窗口按钮；和最小化之间留出明确间距。 */
-  gap: 8px;
 }
 
 .app-menu-trigger {
