@@ -170,11 +170,12 @@ export function AppMenu({ anchor, onClose }: AppMenuProps) {
       // 菜单贴着标题栏，点击内部不能让拖拽区接管。
       onMouseDown={(event) => event.stopPropagation()}
     >
-      {groups.map((group, groupIndex) => (
+      {groups.map((group) => (
         <div key={group.id} className="app-menu-group" role="group" aria-label={group.label}>
-          {groupIndex > 0 ? (
-            <div className="app-menu-sep" role="separator" />
-          ) : null}
+          {/* 分组标题替代分隔线：21 项菜单能一眼看出文件 / 视图 / 应用的边界。 */}
+          <div className="app-menu-heading" aria-hidden="true">
+            {group.label}
+          </div>
           {group.commands.map((command) => {
             const enabled = command.enabled(context);
             const checked = command.checked?.(context) ?? false;
