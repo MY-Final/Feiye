@@ -1,4 +1,10 @@
-import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 
 import { searchWorkspace, type SearchHit } from "../../lib/tauri";
 import { useDocumentStore } from "../../stores/document";
@@ -53,6 +59,7 @@ export function SearchPanel() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [active, setActive] = useState(0);
+  const listRef = useRef<HTMLUListElement>(null);
 
   useEffect(() => {
     const needle = query.trim();
@@ -134,6 +141,16 @@ export function SearchPanel() {
     }
   };
 
+  // 键盘在输入框里上下选结果时，焦点始终留在输入框，列表不会自己滚动；
+  // 选中项一旦走出可视区就看不见了。把它滚进视野（与大纲一致）。
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    list
+      .querySelector<HTMLElement>(".search-result.is-active")
+      ?.scrollIntoView({ block: "nearest" });
+  }, [active, hits]);
+
   const needle = query.trim();
 
   return (
@@ -160,7 +177,7 @@ export function SearchPanel() {
       ) : null}
 
       {needle && hits.length ? (
-        <ul className="search-results" aria-label="搜索结果">
+        <ul className="search-results" ref={listRef} aria-label="搜索结果">
           {hits.map((hit, position) => (
             <li key={`${hit.relPath}:${hit.line}`}>
               <button
