@@ -1,3 +1,6 @@
+import { redo, undo } from "@codemirror/commands";
+import type { EditorView } from "@codemirror/view";
+
 import {
   copyActiveAsHtml,
   exportActiveAsHtml,
@@ -8,10 +11,21 @@ import {
   useSettingsStore,
 } from "../../stores/settings";
 import { useDocumentStore, type ViewMode } from "../../stores/document";
+import { useEditorStore } from "../../stores/editor";
 import { useTabsStore } from "../../stores/tabs";
 import { useUiStore } from "../../stores/ui";
 import { useWorkspaceStore } from "../../stores/workspace";
-import { openEditorSearch } from "../editor/editor-bridge";
+import { openEditorSearch, runEditorCommand } from "../editor/editor-bridge";
+import {
+  insertHorizontalRule,
+  insertLink,
+  insertMath,
+  insertTable,
+  setHeading,
+  toggleBlockPrefix,
+  toggleFencedCode,
+  toggleInline,
+} from "../editor/formatting";
 import { saveActiveDocument } from "../editor/save";
 import {
   changeViewMode,
@@ -29,14 +43,24 @@ export interface CommandContext {
   hasWorkspace: boolean;
   canBack: boolean;
   canForward: boolean;
+  canUndo: boolean;
+  canRedo: boolean;
   viewMode: ViewMode;
   sidebarVisible: boolean;
 }
 
-export type CommandGroup = "file" | "nav" | "view" | "find" | "app";
+export type CommandGroup =
+  | "file"
+  | "edit"
+  | "paragraph"
+  | "format"
+  | "nav"
+  | "view"
+  | "find"
+  | "app";
 
 /** 不可用时用来解释原因，菜单项的 title 直接取这里的描述。 */
-type CommandNeed = "workspace" | "doc" | "back" | "forward";
+type CommandNeed = "workspace" | "doc" | "editable" | "back" | "forward";
 
 export interface AppCommand {
   id: string;
@@ -61,12 +85,15 @@ export interface AppCommand {
 export function readCommandContext(): CommandContext {
   const doc = useDocumentStore.getState();
   const workspace = useWorkspaceStore.getState();
+  const editor = useEditorStore.getState();
   const ui = useUiStore.getState();
   return {
     hasDoc: Boolean(doc.path),
     hasWorkspace: Boolean(workspace.root),
     canBack: Boolean(doc.path) && workspace.history.length > 0,
     canForward: Boolean(doc.path) && workspace.forward.length > 0,
+    canUndo: Boolean(doc.path) && editor.format.canUndo,
+    canRedo: Boolean(doc.path) && editor.format.canRedo,
     viewMode: doc.viewMode,
     sidebarVisible: ui.sidebarVisible,
   };
@@ -81,6 +108,10 @@ export function disabledReason(
       return "先打开一个工作区";
     case "doc":
       return "先打开一篇笔记";
+    case "editable":
+      return context.hasDoc
+        ? "当前视图不可编辑，切到源码或分栏后再试"
+        : "先打开一篇笔记";
     case "back":
       return context.hasDoc
         ? "本次会话里还没有可返回的笔记"
@@ -102,7 +133,209 @@ function changeFontSize(delta: number): void {
   if (next !== preferences.fontSize) update({ fontSize: next });
 }
 
-/** 应用内动作的单一来源：命令面板按 available 过滤，⋯ 菜单显示全部分组。 */
+/** 预览里编辑器不可见，排版类命令统一置灰，避免对隐藏的选区动手。 */
+const canFormat = (ctx: CommandContext) =>
+  ctx.hasDoc && ctx.viewMode !== "preview";
+
+/** 包一层编辑器动作：执行后把焦点交还正文，菜单关闭不会把光标留在按钮上。 */
+function runEditor(action: (view: EditorView) => void): void {
+  runEditorCommand((view) => {
+    action(view);
+    return true;
+  });
+}
+
+/** 段落 / 格式菜单的通用构造，省去十几条命令重复的 enabled / need / run。 */
+function formatCommand(
+  id: string,
+  label: string,
+  group: "paragraph" | "format",
+  action: (view: EditorView) => void,
+  options: { shortcut?: string; keywords?: string } = {},
+): AppCommand {
+  return {
+    id,
+    title: `${group === "paragraph" ? "段落" : "格式"}：${label}`,
+    menuLabel: label,
+    shortcut: options.shortcut,
+    keywords: options.keywords ?? `${label} ${id}`,
+    group,
+    need: "editable",
+    enabled: canFormat,
+    run: () => runEditor(action),
+  };
+}
+
+const editCommands: AppCommand[] = [
+  {
+    id: "undo",
+    title: "撤销",
+    shortcut: "Ctrl+Z",
+    keywords: "undo 撤销 回退",
+    group: "edit",
+    need: "editable",
+    enabled: (ctx) => canFormat(ctx) && ctx.canUndo,
+    run: () => runEditor((view) => void undo(view)),
+  },
+  {
+    id: "redo",
+    title: "重做",
+    shortcut: "Ctrl+Shift+Z",
+    keywords: "redo 重做 恢复",
+    group: "edit",
+    need: "editable",
+    enabled: (ctx) => canFormat(ctx) && ctx.canRedo,
+    run: () => runEditor((view) => void redo(view)),
+  },
+];
+
+const paragraphCommands: AppCommand[] = [
+  formatCommand(
+    "heading-0",
+    "正文",
+    "paragraph",
+    (view) => void setHeading(view, 0),
+    { shortcut: "Ctrl+0", keywords: "正文 段落 body" },
+  ),
+  formatCommand(
+    "heading-1",
+    "标题 1",
+    "paragraph",
+    (view) => void setHeading(view, 1),
+    { shortcut: "Ctrl+1", keywords: "标题 heading h1" },
+  ),
+  formatCommand(
+    "heading-2",
+    "标题 2",
+    "paragraph",
+    (view) => void setHeading(view, 2),
+    { shortcut: "Ctrl+2", keywords: "标题 heading h2" },
+  ),
+  formatCommand(
+    "heading-3",
+    "标题 3",
+    "paragraph",
+    (view) => void setHeading(view, 3),
+    { shortcut: "Ctrl+3", keywords: "标题 heading h3" },
+  ),
+  formatCommand(
+    "heading-4",
+    "标题 4",
+    "paragraph",
+    (view) => void setHeading(view, 4),
+    { shortcut: "Ctrl+4", keywords: "标题 heading h4" },
+  ),
+  formatCommand(
+    "heading-5",
+    "标题 5",
+    "paragraph",
+    (view) => void setHeading(view, 5),
+    { shortcut: "Ctrl+5", keywords: "标题 heading h5" },
+  ),
+  formatCommand(
+    "heading-6",
+    "标题 6",
+    "paragraph",
+    (view) => void setHeading(view, 6),
+    { shortcut: "Ctrl+6", keywords: "标题 heading h6" },
+  ),
+  formatCommand(
+    "quote",
+    "引用",
+    "paragraph",
+    (view) => void toggleBlockPrefix(view, "quote"),
+    { shortcut: "Ctrl+Shift+Q", keywords: "引用 quote" },
+  ),
+  formatCommand(
+    "list-bullet",
+    "无序列表",
+    "paragraph",
+    (view) => void toggleBlockPrefix(view, "bullet"),
+    { shortcut: "Ctrl+Shift+[", keywords: "无序列表 bullet list" },
+  ),
+  formatCommand(
+    "list-ordered",
+    "有序列表",
+    "paragraph",
+    (view) => void toggleBlockPrefix(view, "ordered"),
+    { shortcut: "Ctrl+Shift+]", keywords: "有序列表 ordered list" },
+  ),
+  formatCommand(
+    "list-task",
+    "任务列表",
+    "paragraph",
+    (view) => void toggleBlockPrefix(view, "task"),
+    { shortcut: "Ctrl+Shift+X", keywords: "任务列表 task list" },
+  ),
+  formatCommand(
+    "code-block",
+    "代码块",
+    "paragraph",
+    (view) => void toggleFencedCode(view),
+    { shortcut: "Ctrl+Shift+K", keywords: "代码块 code block" },
+  ),
+  formatCommand(
+    "math-block",
+    "公式",
+    "paragraph",
+    (view) => void insertMath(view, true),
+    { shortcut: "Ctrl+Shift+M", keywords: "公式 math latex" },
+  ),
+  formatCommand(
+    "table",
+    "表格",
+    "paragraph",
+    (view) => void insertTable(view),
+    { shortcut: "Ctrl+T", keywords: "表格 table" },
+  ),
+  formatCommand(
+    "rule",
+    "分隔线",
+    "paragraph",
+    (view) => void insertHorizontalRule(view),
+    { shortcut: "Ctrl+Shift+H", keywords: "分隔线 rule hr" },
+  ),
+];
+
+const formatCommands: AppCommand[] = [
+  formatCommand(
+    "format-bold",
+    "加粗",
+    "format",
+    (view) => void toggleInline(view, "bold"),
+    { shortcut: "Ctrl+B", keywords: "加粗 bold" },
+  ),
+  formatCommand(
+    "format-italic",
+    "斜体",
+    "format",
+    (view) => void toggleInline(view, "italic"),
+    { shortcut: "Ctrl+I", keywords: "斜体 italic" },
+  ),
+  formatCommand(
+    "format-strike",
+    "删除线",
+    "format",
+    (view) => void toggleInline(view, "strike"),
+    { shortcut: "Ctrl+Shift+5", keywords: "删除线 strike" },
+  ),
+  formatCommand(
+    "format-code",
+    "行内代码",
+    "format",
+    (view) => void toggleInline(view, "code"),
+    { shortcut: "Ctrl+Shift+`", keywords: "行内代码 code inline" },
+  ),
+  formatCommand(
+    "format-link",
+    "链接",
+    "format",
+    (view) => void insertLink(view),
+    { shortcut: "Ctrl+K", keywords: "链接 link" },
+  ),
+];
+
+/** 应用内动作的单一来源：命令面板按 available 过滤，标题栏菜单按分组展示。 */
 export const APP_COMMANDS: AppCommand[] = [
   {
     id: "new",
@@ -206,6 +439,9 @@ export const APP_COMMANDS: AppCommand[] = [
     enabled: hasDoc,
     run: () => useUiStore.getState().openHistory(),
   },
+  ...editCommands,
+  ...paragraphCommands,
+  ...formatCommands,
   {
     id: "back",
     title: "返回上一篇笔记",

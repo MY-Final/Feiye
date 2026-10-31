@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 
 import { trapTab } from "../../components/Dialog";
@@ -9,8 +9,21 @@ import {
   APP_COMMANDS,
   readCommandContext,
   type AppCommand,
+  type CommandGroup,
 } from "./commands";
 import "./commands.css";
+
+/** 与标题栏菜单（AppMenu.tsx）的 GROUPS 保持同样的分组与顺序。 */
+const GROUP_LABELS: Record<CommandGroup, string> = {
+  file: "文件",
+  edit: "编辑",
+  paragraph: "段落",
+  format: "格式",
+  nav: "导航",
+  view: "视图",
+  find: "查找",
+  app: "应用",
+};
 
 /**
  * 命令面板：一个输入框搜出应用内的动作，键盘上下选、回车执行。
@@ -128,27 +141,34 @@ export function CommandPalette() {
         />
         <ul className="palette-list" role="listbox" aria-label="命令列表">
           {filtered.map((command, position) => (
-            <li key={command.id}>
-              <button
-                type="button"
-                role="option"
-                aria-selected={position === index}
-                className={`palette-item${position === index ? " is-active" : ""}`}
-                onMouseEnter={() => setIndex(position)}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => run(command)}
-              >
-                <span className="palette-item-text">
-                  <span className="palette-item-title">{command.title}</span>
-                  {command.hint ? (
-                    <span className="palette-item-hint">{command.hint}</span>
+            <Fragment key={command.id}>
+              {position === 0 || filtered[position - 1].group !== command.group ? (
+                <li className="palette-group" role="presentation" aria-hidden="true">
+                  {GROUP_LABELS[command.group]}
+                </li>
+              ) : null}
+              <li>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={position === index}
+                  className={`palette-item${position === index ? " is-active" : ""}`}
+                  onMouseEnter={() => setIndex(position)}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => run(command)}
+                >
+                  <span className="palette-item-text">
+                    <span className="palette-item-title">{command.title}</span>
+                    {command.hint ? (
+                      <span className="palette-item-hint">{command.hint}</span>
+                    ) : null}
+                  </span>
+                  {command.shortcut ? (
+                    <kbd className="palette-item-key">{command.shortcut}</kbd>
                   ) : null}
-                </span>
-                {command.shortcut ? (
-                  <kbd className="palette-item-key">{command.shortcut}</kbd>
-                ) : null}
-              </button>
-            </li>
+                </button>
+              </li>
+            </Fragment>
           ))}
           {filtered.length === 0 ? (
             <li className="palette-empty">没有匹配的命令</li>

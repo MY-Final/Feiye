@@ -1,17 +1,15 @@
-import { useRef, useState, type MouseEvent } from "react";
+import { useState, type MouseEvent } from "react";
 
 import { ContextMenu } from "../components/Menu";
-import { TabBar } from "../features/tabs/TabBar";
 import {
   chooseWorkspace,
   forgetWorkspace,
   listRecentWorkspaces,
-  newDocumentNearActive,
   openWorkspaceAt,
   rememberWorkspace,
 } from "../features/workspace/workspace-actions";
 import { useWindowControls } from "../features/window/use-window-controls";
-import { AppMenu } from "./AppMenu";
+import { MenuBar } from "./MenuBar";
 import { useDocumentStore } from "../stores/document";
 import { useUiStore } from "../stores/ui";
 import { useWorkspaceStore } from "../stores/workspace";
@@ -81,8 +79,6 @@ export function TitleBar() {
   const zenMode = useUiStore((state) => state.zenMode);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
   const controls = useWindowControls();
-  const menuButtonRef = useRef<HTMLButtonElement>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [recentMenu, setRecentMenu] = useState<{
     x: number;
     y: number;
@@ -168,70 +164,53 @@ export function TitleBar() {
         <span className="brand-seal" aria-hidden="true">
           扉
         </span>
-        <span className="brand-name">扉页</span>
 
         {workspaceName ? (
           <>
-            <span className="brand-divider" aria-hidden="true">
-              /
-            </span>
-            <span className="workspace-name" title={root ?? undefined}>
-              {workspaceName}
-            </span>
+            {/* 印章已经是应用标识，库名紧跟其后即可；不再用「扉页 / 库名」
+                的斜杠写法，避免看起来像一条不存在的目录层级。 */}
+            <button
+              type="button"
+              className="workspace-switch"
+              title={`${root ?? workspaceName} · 切换最近工作区`}
+              aria-label={`当前工作区：${workspaceName}，切换最近工作区`}
+              aria-haspopup="menu"
+              aria-expanded={Boolean(recentMenu)}
+              onClick={(event) => void openRecentMenu(event)}
+            >
+              <span className="workspace-name">{workspaceName}</span>
+              <ChevronIcon />
+            </button>
           </>
-        ) : null}
+        ) : (
+          <button
+            type="button"
+            className="icon-btn"
+            title="最近工作区"
+            aria-label="最近工作区"
+            aria-haspopup="menu"
+            aria-expanded={Boolean(recentMenu)}
+            onClick={(event) => void openRecentMenu(event)}
+          >
+            <ChevronIcon />
+          </button>
+        )}
 
-        <button
-          type="button"
-          className="icon-btn"
-          title="最近工作区"
-          aria-label="最近工作区"
-          onClick={(event) => void openRecentMenu(event)}
-        >
-          <ChevronIcon />
-        </button>
+        {/* 文字菜单放在库名之后：用看得见的「文件 / 编辑 / 段落…」替代 ⋯。 */}
+        <MenuBar />
       </div>
 
       <div className="titlebar-tabs">
-        {zenMode ? (
-          docName ? (
-            <span className="doc-title" title={docName}>
-              {docName}
-              {dirty ? <span className="dirty-dot" title="未保存" /> : null}
-            </span>
-          ) : null
-        ) : (
-          <>
-            <TabBar />
-            {root ? (
-              <button
-                type="button"
-                className="tab-new"
-                title="新建笔记 (Ctrl+N)"
-                aria-label="新建笔记"
-                data-tauri-drag-region="false"
-                onClick={() => void newDocumentNearActive()}
-              >
-                +
-              </button>
-            ) : null}
-          </>
-        )}
+        {/* 标签已移到标题栏下方单独一行；这里只在专注模式显示文档名。 */}
+        {zenMode && docName ? (
+          <span className="doc-title" title={docName}>
+            {docName}
+            {dirty ? <span className="dirty-dot" title="未保存" /> : null}
+          </span>
+        ) : null}
       </div>
 
       <div className="titlebar-right" data-tauri-drag-region="false">
-        <button
-          ref={menuButtonRef}
-          type="button"
-          className={`icon-btn app-menu-trigger${menuOpen ? " is-open" : ""}`}
-          title="应用菜单"
-          aria-label="应用菜单"
-          aria-haspopup="menu"
-          aria-expanded={menuOpen}
-          onClick={() => setMenuOpen((open) => !open)}
-        >
-          ⋯
-        </button>
         <div
           className="window-controls"
           data-tauri-drag-region="false"
@@ -266,13 +245,6 @@ export function TitleBar() {
           </button>
         </div>
       </div>
-
-      {menuOpen ? (
-        <AppMenu
-          anchor={menuButtonRef.current}
-          onClose={() => setMenuOpen(false)}
-        />
-      ) : null}
 
       {recentMenu ? (
         <ContextMenu

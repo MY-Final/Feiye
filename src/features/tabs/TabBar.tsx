@@ -28,10 +28,13 @@ export function TabBar() {
     });
   }, [active]);
 
-  // 窗口变窄后标签条变短，当前标签可能被推出视野；跟窗口一起收进来。
+  // 标签条宽度变化（窗口缩放、侧栏开合、侧栏拖动）后标签可能被推出视野，
+  // 当前标签要跟着收进来。依赖 hasTabs：标签从零开回来时重新挂观察器，
+  // 否则挂载时没有标签条，观察器会一直缺席。
+  const hasTabs = tabs.length > 0;
   useEffect(() => {
     const bar = barRef.current;
-    if (!bar || typeof ResizeObserver === "undefined") return;
+    if (!bar || !hasTabs || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(() => {
       activeTabRef.current?.scrollIntoView({
         block: "nearest",
@@ -40,7 +43,7 @@ export function TabBar() {
     });
     observer.observe(bar);
     return () => observer.disconnect();
-  }, []);
+  }, [hasTabs]);
 
   if (tabs.length === 0) return null;
 

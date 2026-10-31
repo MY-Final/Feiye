@@ -1,4 +1,4 @@
-/* 文档标签嵌在 44px 标题栏里：不再单独占一行，也不画底色与分隔线。 */
+/* 文档标签在标题栏下方的独立一行里：不画自己的底色与外框。 */
 .tab-bar {
   display: flex;
   flex: 0 1 auto;
@@ -32,8 +32,9 @@
 }
 
 .doc-tab.is-active {
+  /* 只用底色和文字颜色区分当前标签，不再加彩色下划线；
+     标签行本身是 elevated 底，active 用正文纸色已经足够清楚。 */
   background: var(--bg);
-  box-shadow: inset 0 -2px 0 var(--accent);
   color: var(--text);
 }
 

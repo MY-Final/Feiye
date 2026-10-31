@@ -1,6 +1,6 @@
 .app {
   display: grid;
-  grid-template-rows: var(--bar-title) auto minmax(0, 1fr) var(--bar-status);
+  grid-template-rows: var(--bar-title) minmax(0, 1fr) var(--bar-status);
   /* 单列也要压住最小宽度：标签一多时，标题栏不应把整个窗口撑出横向滚动。 */
   grid-template-columns: minmax(0, 1fr);
   height: 100%;
@@ -41,20 +41,26 @@
   margin: 0 auto;
 }
 
+/* 标签行：放在标题栏下面、只覆盖编辑区，标题栏只留菜单与窗口控制。 */
+.tab-strip {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 8px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-elevated);
+}
+
+.tab-strip .tab-bar {
+  flex: 0 1 auto;
+}
+
 .titlebar-right {
   display: flex;
   align-items: center;
-  gap: 2px;
-}
-
-.app-menu-trigger {
-  font-size: 17px;
-  line-height: 1;
-}
-
-.app-menu-trigger.is-open {
-  background: var(--bg-sunken);
-  color: var(--text);
 }
 
 .tab-new {
@@ -93,20 +99,6 @@
   line-height: 1;
 }
 
-.brand-name {
-  color: var(--text);
-  font-size: 12.5px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  white-space: nowrap;
-}
-
-.brand-divider {
-  flex: none;
-  color: var(--line-strong);
-  font-size: 12px;
-}
-
 .workspace-name {
   max-width: 200px;
   overflow: hidden;
@@ -115,6 +107,49 @@
   letter-spacing: 0.02em;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 库名 + 箭头合成一个按钮，切换库的命中区域不再只剩箭头那么大。 */
+.workspace-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  min-width: 0;
+  height: 24px;
+  padding: 0 3px 0 4px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.workspace-switch:hover {
+  background: var(--bg-sunken);
+  color: var(--text);
+}
+
+.workspace-switch:focus-visible {
+  color: var(--text);
+}
+
+.workspace-switch svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.workspace-switch .workspace-name {
+  min-width: 0;
+  color: inherit;
 }
 
 .doc-title {
@@ -182,6 +217,7 @@
 
 .toolbar {
   display: flex;
+  flex: none;
   flex-wrap: nowrap;
   align-items: center;
   gap: 4px;
@@ -201,10 +237,10 @@
 
 .toolbar-sep {
   width: 1px;
-  height: 16px;
+  height: 18px;
   flex: none;
   margin: 0 7px;
-  background: var(--line);
+  background: var(--line-strong);
 }
 
 .toolbar-spacer {
@@ -451,6 +487,25 @@
 .app-body {
   display: flex;
   min-height: 0;
+}
+
+/* 侧栏右边的一整列：标签行 / 工具栏 / 正文，宽度随侧栏开合变化。 */
+.main-column {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  /* 工具栏现在只覆盖编辑区，宽度不再等于窗口宽度，
+     窄窗时要按这一列的宽度决定收起哪些按钮。 */
+  container-type: inline-size;
+}
+
+@container (max-width: 800px) {
+  /* 视图切换收进标题栏的「视图」菜单，工具栏优先保住格式动作。 */
+  .toolbar .view-switch {
+    display: none;
+  }
 }
 
 .workspace-main {
@@ -1534,14 +1589,6 @@ body.is-resizing-split * {
     padding-left: 6px;
   }
 
-  .brand-name {
-    display: none;
-  }
-
-  .brand-divider {
-    display: none;
-  }
-
   .workspace-name {
     max-width: 92px;
   }
@@ -1563,6 +1610,11 @@ body.is-resizing-split * {
   }
 
   .toolbar .tool-zen {
+    display: none;
+  }
+
+  /* 专注按钮收起后，别在视图切换右边留下一条悬空的线。 */
+  .toolbar-sep-zen {
     display: none;
   }
 
