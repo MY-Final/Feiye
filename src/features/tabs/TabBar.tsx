@@ -196,6 +196,12 @@ export function TabBar() {
             className={`doc-tab${isActive ? " is-active" : ""}`}
             // 浏览器与多数编辑器里，鼠标中键点标签就是关闭它；这里照做，
             // 不用先切过去再按 Ctrl+W，也不必瞄准很小的 ×。
+            // 中键按下的默认行为是启动页面自动滚动，滚动浮层会吞掉随后的
+            // auxclick（表现为中键偶尔关不掉标签），在 mousedown 提前拦掉。
+            onMouseDown={(event) => {
+              if (event.button !== 1) return;
+              event.preventDefault();
+            }}
             // 关闭仍走 closeDocumentTab，未保存时照常弹保存提示。
             onAuxClick={(event) => {
               if (event.button !== 1) return;
