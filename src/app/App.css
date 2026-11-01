@@ -94,17 +94,10 @@
 }
 
 .brand-seal {
-  display: grid;
-  place-items: center;
+  display: block;
   width: 18px;
   height: 18px;
   flex: none;
-  border-radius: 2px;
-  background: var(--accent);
-  color: var(--on-accent);
-  font-family: var(--font-heading);
-  font-size: 12px;
-  line-height: 1;
 }
 
 .workspace-name {
@@ -709,16 +702,10 @@ body.is-resizing-split * {
 }
 
 .empty-state .mark {
-  display: grid;
-  place-items: center;
+  display: block;
   width: 34px;
   height: 34px;
   margin-bottom: 6px;
-  border-radius: 2px;
-  background: var(--accent);
-  color: var(--on-accent);
-  font-family: var(--font-heading);
-  font-size: 19px;
 }
 
 .empty-state p {
@@ -824,17 +811,10 @@ body.is-resizing-split * {
 }
 
 .welcome .mark {
-  display: grid;
-  place-items: center;
+  display: block;
   width: 42px;
   height: 42px;
   margin: 0 auto 26px;
-  border-radius: 2px;
-  background: var(--accent);
-  color: var(--on-accent);
-  font-family: var(--font-heading);
-  font-size: 24px;
-  line-height: 1;
 }
 
 .welcome h1 {

@@ -1,5 +1,6 @@
 import { useState, type MouseEvent } from "react";
 
+import { BrandMark } from "../components/BrandMark";
 import { ContextMenu } from "../components/Menu";
 import {
   chooseWorkspace,
@@ -161,13 +162,11 @@ export function TitleBar() {
           <SidebarIcon />
         </button>
 
-        <span className="brand-seal" aria-hidden="true">
-          扉
-        </span>
+        <BrandMark className="brand-seal" />
 
         {workspaceName ? (
           <>
-            {/* 印章已经是应用标识，库名紧跟其后即可；不再用「扉页 / 库名」
+            {/* 标识已经是应用名，库名紧跟其后即可；不再用「扉页 / 库名」
                 的斜杠写法，避免看起来像一条不存在的目录层级。 */}
             <button
               type="button"

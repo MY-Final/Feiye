@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
+import { BrandMark } from "../components/BrandMark";
 import { DialogHost } from "../components/Dialog";
 import { ToastHost } from "../components/Toast";
 import { EditorPane } from "../features/editor/EditorPane";
@@ -676,9 +677,7 @@ export default function App() {
               {!docPath ? (
                 <div className="pane-overlay">
                   <div className="empty-state">
-                    <div className="mark" aria-hidden="true">
-                      扉
-                    </div>
+                    <BrandMark size={34} className="mark" />
                     <p>从左侧选择一篇 Markdown，或新建一篇。</p>
                     <button
                       type="button"
@@ -766,9 +765,7 @@ export default function App() {
           ) : (
             <div className="welcome">
               <div className="welcome-inner">
-                <div className="mark" aria-hidden="true">
-                  扉
-                </div>
+                <BrandMark size={42} className="mark" />
                 <h1>{APP_NAME}</h1>
                 <p className="welcome-tagline">{APP_TAGLINE}</p>
                 <span className="welcome-rule" aria-hidden="true" />

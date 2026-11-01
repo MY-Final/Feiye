@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- 扉页 · 应用图标 v2（浅色版）：一页纸，右缘开成门扇；纯平面，无透视、无投影 -->
+  <rect width="512" height="512" rx="112" fill="#F2ECE0"/>
+
+  <!-- 门扇：以纸页右缘为铰链，向外微开 -->
+  <path d="M336 96 L388 117 L388 395 L336 416 Z" fill="#F6F0E3"/>
+  <path d="M336 96 L388 117 L388 395 L336 416"
+        fill="none" stroke="#2F5561" stroke-width="20"
+        stroke-linejoin="round" stroke-linecap="butt"/>
+
+  <!-- 纸页 -->
+  <rect x="126" y="96" width="210" height="320" rx="8"
+        fill="#FBF8F1" stroke="#2F5561" stroke-width="24"/>
+
+  <!-- 正文：左上起，左对齐、长短不一 -->
+  <path d="M162 178h104 M162 212h76 M162 246h96"
+        fill="none" stroke="#2F5561" stroke-width="16" stroke-linecap="round"/>
+
+  <!-- 书签丝带 -->
+  <path d="M304 86h18v62l-9-11-9 11z" fill="#B4632E"/>
+</svg>
