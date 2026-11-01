@@ -1474,6 +1474,28 @@ body.is-resizing-split * {
   line-height: 1.75;
 }
 
+/* 发布说明可能有好几行，限高滚动，不把按钮顶出屏幕。 */
+.update-notes {
+  max-height: 220px;
+  overflow-y: auto;
+  white-space: pre-line;
+}
+
+.update-progress {
+  height: 4px;
+  margin: 16px 0 0;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--line);
+}
+
+.update-progress-bar {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: width 0.18s ease;
+}
+
 /* 标题与表单之间留出呼吸，标题不再直接贴着输入框。 */
 .modal > .field {
   margin-top: 18px;

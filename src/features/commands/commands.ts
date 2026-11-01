@@ -27,6 +27,7 @@ import {
   toggleInline,
 } from "../editor/formatting";
 import { saveActiveDocument } from "../editor/save";
+import { checkForUpdates } from "../updates/update-service";
 import {
   changeViewMode,
   chooseWorkspace,
@@ -623,5 +624,13 @@ export const APP_COMMANDS: AppCommand[] = [
     group: "app",
     enabled: () => true,
     run: () => useUiStore.getState().openSettings(),
+  },
+  {
+    id: "check-updates",
+    title: "检查更新…",
+    keywords: "update upgrade 更新 升级 版本",
+    group: "app",
+    enabled: () => true,
+    run: () => void checkForUpdates({ silent: false }),
   },
 ];

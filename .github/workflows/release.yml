@@ -62,16 +62,18 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         with:
           tagName: v__VERSION__
           releaseName: "扉页 v__VERSION__"
           releaseBody: |
-            扉页的第一个公开版本（v0.0.1）。
+            扉页 v__VERSION__。
 
             - 本地优先：文件始终是普通 Markdown，不建立数据库
             - 编辑 / 分栏 / 预览 / 所见即所得四种视图
             - 多标签、文档历史、全文搜索、命令面板、分屏对照
             - 导出 HTML / PDF，自定义 CSS
+            - 应用内检查更新（启动时静默检查，菜单可手动检查）
 
             本版构建未做代码签名：macOS 首次打开需右键「打开」，Windows 可能提示 SmartScreen。
           releaseDraft: true

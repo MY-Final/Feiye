@@ -24,6 +24,8 @@ import { CommandPalette } from "../features/commands/CommandPalette";
 import { HistoryDialog } from "../features/history/HistoryDialog";
 import { SplitPane } from "../features/split/SplitPane";
 import { SettingsDialog } from "../features/settings/SettingsDialog";
+import { UpdateDialog } from "../features/updates/UpdateDialog";
+import { checkForUpdates } from "../features/updates/update-service";
 import { WorkspaceSidebar } from "../features/workspace/WorkspaceSidebar";
 import {
   changeViewMode,
@@ -132,6 +134,15 @@ export default function App() {
       }
       await restoreLastWorkspace();
     })();
+  }, []);
+
+  // 启动几秒后静默查一次更新：等首屏和工作区恢复完再联网。
+  // 有更新才弹窗，没更新或离线都不打扰；StrictMode 下第一次的定时器会被清掉。
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void checkForUpdates({ silent: true });
+    }, 4000);
+    return () => window.clearTimeout(timer);
   }, []);
 
   // 标签开合后记住这一组，重启或切回库时原样摆回来。
@@ -794,6 +805,7 @@ export default function App() {
       <HistoryDialog />
       <CommandPalette />
       <DialogHost />
+      <UpdateDialog />
       <ToastHost />
     </div>
   );

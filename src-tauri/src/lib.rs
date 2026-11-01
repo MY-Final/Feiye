@@ -15,6 +15,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(WorkspaceState::default())
         .manage(watcher::WatchState::default())
         // 工作区作用域的本地图片：只能读取当前工作区内白名单格式的图片。
