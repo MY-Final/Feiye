@@ -413,6 +413,8 @@ export function SettingsDialog() {
                 type="button"
                 role="tab"
                 aria-selected={category === item.id}
+                // 四个分类只让当前项留在 Tab 顺序里，←/→ 仍可逐项切换。
+                tabIndex={category === item.id ? 0 : -1}
                 className={`settings-nav-item${category === item.id ? " active" : ""}`}
                 onClick={() => {
                   setCategory(item.id);
