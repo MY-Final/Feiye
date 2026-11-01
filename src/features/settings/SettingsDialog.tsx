@@ -16,6 +16,7 @@ import {
   type Preferences,
 } from "../../stores/settings";
 import { useUiStore } from "../../stores/ui";
+import { checkForUpdates } from "../updates/update-service";
 import { changeViewMode } from "../workspace/workspace-actions";
 import "./settings.css";
 
@@ -266,6 +267,18 @@ function AboutPanel() {
           <dd>本地 Markdown 文件，无账号与云同步</dd>
         </div>
       </dl>
+      <button
+        type="button"
+        className="btn settings-about-check"
+        title="检查是否有新版本"
+        onClick={() => {
+          // 先关设置：发现新版本时由更新对话框接管，避免两个弹层叠加。
+          useUiStore.getState().closeSettings();
+          void checkForUpdates({ silent: false });
+        }}
+      >
+        检查更新
+      </button>
     </div>
   );
 }

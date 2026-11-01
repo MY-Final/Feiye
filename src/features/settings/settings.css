@@ -371,6 +371,10 @@
   color: var(--text-muted);
 }
 
+.settings-about-check {
+  margin-top: 22px;
+}
+
 /* 底部操作 */
 
 .settings-footer {
