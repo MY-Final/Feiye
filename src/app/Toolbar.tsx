@@ -1,7 +1,13 @@
 import { redo, undo } from "@codemirror/commands";
 import katexCss from "katex/dist/katex.min.css?inline";
 import { invoke } from "@tauri-apps/api/core";
-import { useRef, type ReactNode } from "react";
+import {
+  useLayoutEffect,
+  useRef,
+  type FocusEvent as ReactFocusEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from "react";
 
 import { SlidingSegmented } from "../components/SlidingSegmented";
 import {
@@ -451,6 +457,7 @@ export function Toolbar() {
   const viewMode = useDocumentStore((state) => state.viewMode);
   const format = useEditorStore((state) => state.format);
   const imageInput = useRef<HTMLInputElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
 
   const hasDoc = Boolean(docPath);
   const formattingDisabled = !hasDoc || viewMode === "preview";
@@ -458,8 +465,78 @@ export function Toolbar() {
   const headingValue = format.heading;
   const list = format.list;
 
+  // 格式按钮平时有快捷键，键盘用户从标签条一路 Tab 去正文却要穿过近二十个
+  // 按钮。按工具栏（role=toolbar）的惯例把整组收敛成一个停靠点，←/→ /
+  // Home / End 在按钮间移动；标题下拉框保留自己的停靠点与原生方向键。
+  const toolButtons = () =>
+    Array.from(
+      toolbarRef.current?.querySelectorAll<HTMLButtonElement>(
+        ".toolbar-group .tool-btn",
+      ) ?? [],
+    );
+
+  const setToolStops = (target: HTMLButtonElement | null) => {
+    for (const button of toolButtons()) {
+      button.tabIndex = button === target ? 0 : -1;
+    }
+  };
+
+  // 每次渲染后校正停靠点：原先那枚按钮若变为禁用（切到纯预览、关掉笔记），
+  // 就把停靠点挪到第一枚可用按钮；全部不可用时整组退出 Tab 序。
+  useLayoutEffect(() => {
+    const buttons = toolButtons();
+    const current = buttons.find(
+      (button) => button.tabIndex === 0 && !button.disabled,
+    );
+    setToolStops(current ?? buttons.find((button) => !button.disabled) ?? null);
+  });
+
+  const onToolbarFocus = (event: ReactFocusEvent<HTMLDivElement>) => {
+    const target = event.target;
+    if (
+      target instanceof HTMLButtonElement &&
+      target.matches(".toolbar-group .tool-btn")
+    ) {
+      setToolStops(target);
+    }
+  };
+
+  const onToolbarKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    const current = event.target;
+    if (
+      !(current instanceof HTMLButtonElement) ||
+      !current.matches(".toolbar-group .tool-btn") ||
+      !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)
+    ) {
+      return;
+    }
+    const enabled = toolButtons().filter((button) => !button.disabled);
+    const index = enabled.indexOf(current);
+    if (index < 0) return;
+    event.preventDefault();
+    const next =
+      event.key === "Home"
+        ? enabled[0]
+        : event.key === "End"
+          ? enabled[enabled.length - 1]
+          : enabled[
+              (index + (event.key === "ArrowRight" ? 1 : -1) + enabled.length) %
+                enabled.length
+            ];
+    setToolStops(next);
+    next.focus();
+  };
+
   return (
-    <div className="toolbar" role="toolbar" aria-label="编辑工具栏">
+    <div
+      ref={toolbarRef}
+      className="toolbar"
+      role="toolbar"
+      aria-label="编辑工具栏"
+      onFocus={onToolbarFocus}
+      onKeyDown={onToolbarKeyDown}
+    >
       <input
         ref={imageInput}
         type="file"
