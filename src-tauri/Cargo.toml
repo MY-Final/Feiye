@@ -1,6 +1,6 @@
 [package]
 name = "feiye"
-version = "0.0.2"
+version = "0.0.3"
 description = "扉页 · 本地优先的 Markdown 桌面编辑器"
 authors = ["MY-Final"]
 edition = "2024"

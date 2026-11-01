@@ -226,7 +226,7 @@ function ShortcutPanel() {
 }
 
 function AboutPanel() {
-  const [version, setVersion] = useState("0.0.2");
+  const [version, setVersion] = useState("0.0.3");
 
   useEffect(() => {
     let disposed = false;
