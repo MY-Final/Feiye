@@ -52,7 +52,7 @@ function highlight(text: string, query: string): ReactNode {
  * 工作区全文搜索：边输边搜，结果显示文件、行号与命中行；
  * 点击直接打开笔记并跳到那一行。
  */
-export function SearchPanel() {
+export function SearchPanel({ autoFocus = true }: { autoFocus?: boolean }) {
   const root = useWorkspaceStore((state) => state.root);
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
@@ -159,7 +159,7 @@ export function SearchPanel() {
         className="search-input"
         type="search"
         value={query}
-        autoFocus
+        autoFocus={autoFocus}
         placeholder="搜索全部笔记…"
         aria-label="在工作区中搜索"
         // 焦点留在输入框，用 ↑↓ 换选中项；把当前项告诉读屏，

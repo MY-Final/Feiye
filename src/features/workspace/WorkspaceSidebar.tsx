@@ -455,6 +455,9 @@ export function WorkspaceSidebar() {
   // 其余用 ←/→ / Home / End 到达，和菜单栏、大纲的做法一致。
   const [tabStop, setTabStop] = useState<SidebarTab | null>(null);
   const stopTab = tabStop ?? tab;
+  // 方向键 / Home / End 切标签时焦点应留在标签上；只有点击或命令面板打开
+  // 搜索才把光标送进输入框，否则读到「搜索」就按 ←/→ 改的是输入框光标。
+  const [focusSearchOnOpen, setFocusSearchOnOpen] = useState(true);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   // 拖动时高亮当前可放下的目录，松手前就知道会落到哪。
@@ -489,6 +492,10 @@ export function WorkspaceSidebar() {
   // 命令面板 / 快捷键请求打开搜索时切到搜索标签，并把光标送进输入框。
   useEffect(() => {
     if (searchRequest === 0) return;
+    // 搜索面板可能还没挂载，等 setTab 提交后再按 autoFocus 落焦点不可靠；
+    // 同时标记停靠点，从输入框 Shift+Tab 回到的应是「搜索」标签。
+    setFocusSearchOnOpen(true);
+    setTabStop("search");
     setTab("search");
     void setSetting(SIDEBAR_TAB_KEY, "search");
     requestAnimationFrame(() => {
@@ -518,8 +525,9 @@ export function WorkspaceSidebar() {
     });
   }, []);
 
-  const selectTab = (next: SidebarTab) => {
+  const selectTab = (next: SidebarTab, focusSearch = true) => {
     setMenu(null);
+    if (next === "search") setFocusSearchOnOpen(focusSearch);
     setTab(next);
     void setSetting(SIDEBAR_TAB_KEY, next);
   };
@@ -695,12 +703,15 @@ export function WorkspaceSidebar() {
                   ? tabs[tabs.length - 1]
                   : tabs[(index + delta + tabs.length) % tabs.length];
             target?.focus();
-            target?.click();
+            const next = target?.dataset.sidebarTab as SidebarTab | undefined;
+            if (next) selectTab(next, false);
+            else target?.click();
           }}
         >
           <button
             type="button"
             role="tab"
+            data-sidebar-tab="files"
             aria-selected={tab === "files"}
             tabIndex={stopTab === "files" ? 0 : -1}
             className={`sidebar-tab${tab === "files" ? " active" : ""}`}
@@ -712,6 +723,7 @@ export function WorkspaceSidebar() {
           <button
             type="button"
             role="tab"
+            data-sidebar-tab="outline"
             aria-selected={tab === "outline"}
             tabIndex={stopTab === "outline" ? 0 : -1}
             className={`sidebar-tab${tab === "outline" ? " active" : ""}`}
@@ -726,6 +738,7 @@ export function WorkspaceSidebar() {
           <button
             type="button"
             role="tab"
+            data-sidebar-tab="search"
             aria-selected={tab === "search"}
             tabIndex={stopTab === "search" ? 0 : -1}
             className={`sidebar-tab${tab === "search" ? " active" : ""}`}
@@ -882,7 +895,7 @@ export function WorkspaceSidebar() {
       ) : tab === "outline" ? (
         <OutlinePanel />
       ) : (
-        <SearchPanel />
+        <SearchPanel autoFocus={focusSearchOnOpen} />
       )}
 
       {menu ? (
