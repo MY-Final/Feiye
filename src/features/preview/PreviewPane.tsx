@@ -625,6 +625,10 @@ export function PreviewPane() {
       wrapper.className = "preview-code-block";
       pre.replaceWith(wrapper);
       wrapper.append(pre);
+      // Shiki 默认给 pre 加 tabindex=0，让横向滚动区也进 Tab 序：
+      // 每个代码块因此占「pre + 复制」两格。只留复制按钮一个停靠点，
+      // 横向滚动改由按钮上的 ←/→ 承担（见下面的 onKeyDown）。
+      pre.tabIndex = -1;
 
       // 代码围栏写了语言时在左上角标出来，和 GitHub 的习惯一致；
       // Shiki 把语言写成 `language-*` 类，未知语言会回退成 `text`，这种不标。
@@ -685,11 +689,27 @@ export function PreviewPane() {
         );
       });
     };
+    // 代码块从 Tab 序里退出后，横向滚动跟着唯一的停靠点走：
+    // 复制按钮上按 ←/→ 滚动本块代码，其它按键与普通按钮一致。
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      const button = buttonOf(event.target);
+      const pre = button
+        ?.closest(".preview-code-block")
+        ?.querySelector("pre");
+      if (!pre || pre.scrollWidth <= pre.clientWidth) return;
+      const step = Math.max(48, Math.round(pre.clientWidth * 0.6));
+      pre.scrollLeft += event.key === "ArrowRight" ? step : -step;
+      event.preventDefault();
+    };
+
     body.addEventListener("mousedown", onMouseDown);
     body.addEventListener("click", onClick);
+    body.addEventListener("keydown", onKeyDown);
     return () => {
       body.removeEventListener("mousedown", onMouseDown);
       body.removeEventListener("click", onClick);
+      body.removeEventListener("keydown", onKeyDown);
     };
   }, [html, previewVisible]);
 
