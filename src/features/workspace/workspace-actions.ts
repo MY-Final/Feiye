@@ -43,6 +43,7 @@ import {
 import {
   clearEditorStateCache,
   forgetEditorState,
+  remapEditorState,
 } from "../editor/editor-bridge";
 import {
   getEditorText,
@@ -959,6 +960,8 @@ export async function renameEntry(entry: Entry): Promise<string | null> {
     useTabsStore.getState().remap(entry.relPath, renamed.relPath);
     // 改名后路径变了，光标记录也换到新路径，重新打开时才能接着上次的位置写。
     migrateCursor(entry.relPath, renamed.relPath);
+    // 编辑器缓存（撤销历史、阅读位置）同样按旧路径存着，一并迁走。
+    remapEditorState(entry.relPath, renamed.relPath);
     remapSplitPath(entry.relPath, renamed.relPath);
 
     const doc = useDocumentStore.getState();
@@ -1041,6 +1044,7 @@ export async function moveEntry(
     useWorkspaceStore.getState().remapHistory(entry.relPath, moved.relPath);
     useTabsStore.getState().remap(entry.relPath, moved.relPath);
     migrateCursor(entry.relPath, moved.relPath);
+    remapEditorState(entry.relPath, moved.relPath);
     remapSplitPath(entry.relPath, moved.relPath);
 
     const doc = useDocumentStore.getState();

@@ -153,6 +153,30 @@ export function restoreEditorScroll(cacheKey: string): void {
   });
 }
 
+/**
+ * 文件 / 文件夹改名或移动后，把缓存状态与阅读位置迁到新路径。
+ * 缓存键就是相对路径：不迁移的话，切走再切回会丢掉撤销历史与阅读位置。
+ */
+export function remapEditorState(from: string, to: string): void {
+  const remap = (path: string) =>
+    path === from || path.startsWith(`${from}/`)
+      ? `${to}${path.slice(from.length)}`
+      : null;
+  const move = <T>(map: Map<string, T>) => {
+    for (const [path, value] of [...map]) {
+      const next = remap(path);
+      if (next === null || next === path) continue;
+      map.delete(path);
+      map.set(next, value);
+    }
+  };
+  move(stateCache);
+  move(scrollCache);
+  if (currentKey !== null) {
+    currentKey = remap(currentKey) ?? currentKey;
+  }
+}
+
 /** 标签关闭 / 文档被删除时释放对应的缓存状态。 */
 export function forgetEditorState(cacheKey: string): void {
   stateCache.delete(cacheKey);
