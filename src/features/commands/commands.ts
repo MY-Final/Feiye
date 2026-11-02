@@ -83,6 +83,23 @@ export interface AppCommand {
   run(): void | Promise<void>;
 }
 
+/**
+ * 从菜单或命令面板执行都算「最近使用」，面板空查询时按它排序；
+ * 只在菜单里出现、面板里看不到的命令（如「命令面板」自身）不占位。
+ */
+export function rememberCommand(command: AppCommand): void {
+  if (command.palette === false) return;
+  const settings = useSettingsStore.getState();
+  settings.update({
+    recentCommands: [
+      command.id,
+      ...settings.preferences.recentCommands.filter(
+        (id) => id !== command.id,
+      ),
+    ].slice(0, 8),
+  });
+}
+
 export function readCommandContext(): CommandContext {
   const doc = useDocumentStore.getState();
   const workspace = useWorkspaceStore.getState();

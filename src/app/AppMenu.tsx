@@ -11,6 +11,7 @@ import { useWorkspaceStore } from "../stores/workspace";
 import {
   APP_COMMANDS,
   disabledReason,
+  rememberCommand,
   type AppCommand,
   type CommandContext,
   type CommandGroup,
@@ -210,6 +211,8 @@ export function AppMenu({
 
   const choose = (command: AppCommand) => {
     onClose();
+    // 从菜单执行的也算用过的命令，命令面板里能直接找到。
+    rememberCommand(command);
     void command.run();
   };
 

@@ -9,6 +9,7 @@ import { useWorkspaceStore } from "../../stores/workspace";
 import {
   APP_COMMANDS,
   readCommandContext,
+  rememberCommand,
   type AppCommand,
   type CommandGroup,
 } from "./commands";
@@ -121,15 +122,7 @@ export function CommandPalette() {
 
   const run = (command: AppCommand) => {
     close();
-    const settings = useSettingsStore.getState();
-    settings.update({
-      recentCommands: [
-        command.id,
-        ...settings.preferences.recentCommands.filter(
-          (id) => id !== command.id,
-        ),
-      ].slice(0, 8),
-    });
+    rememberCommand(command);
     void command.run();
   };
 
