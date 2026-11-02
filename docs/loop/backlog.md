@@ -19,6 +19,24 @@
 
 <!-- 从这里开始追加 -->
 
+## 第 322 轮 · 2026-11-02 11:07
+**用户需求**：场景：屏幕上已经挂着一条提示（例如「导出失败」），紧接着另一篇笔记的操作又弹出一条。现在的问题：Toast 容器用 `role="status"`，该角色隐含 `aria-atomic="true"`，新增提示时读屏会把仍在显示的前几条整段重念一遍，最新那条反而被淹没。期望：只念新增的那条，旧提示不重复。
+**产品经理**：做。本窗口「无障碍」候选的收尾——第 315 轮把播报容器改为常驻，但漏了原子性；不改视觉、计时、3 条上限与点击行为，不新增依赖，契合「安静」，不碰「暂不做」。
+**前端**：`src/components/Toast.tsx` 给常驻容器补 `aria-atomic="false"` 并注释原因；保留 `role="status"` / `aria-live="polite"`。风险：只影响读屏播报粒度，DOM 结构与视觉无变化。工作量 S。
+**后端**：无（未改 `src-tauri/`）。工作量无。
+**裁决**：做。
+**改动**：`src/components/Toast.tsx`（+8/−1 行）。
+**构建**：`bun run build` 通过（含 tsc，vite 1.25s，仅既有的 chunk 体积与动态导入提示）；未改 `src-tauri/`，未跑 cargo test。
+**CDP 实测（整页重载后，工作区 `D:\clawWorkSpeace\新建文件夹`）**：
+- 初始容器：`.toast-host` 1 个，`role=status`、`aria-live=polite`、`aria-atomic=false`、子节点 0、0×0。
+- 连续两条提示（「第一条：保存失败」→「第二条：导出失败」）：MutationObserver 只记录到容器上两次 `childList` 新增，各自只带当次的新文本；旧提示没有字符节点改写（`added` 分别为各自文案、无 `characterData` 记录），即读屏只需播报新增节点。
+- 视觉与既有行为不变：两条时有 2 个子节点（127×80），点第一条只关掉它、第二条留存；再连加 4 条只保留最后 3 条；逐条点击后容器仍在、子节点归 0。
+- Chrome 无障碍树（`Accessibility.getPartialAXTree`）：容器为 `status`，`live=polite`、`atomic=false`、`relevant="additions text"`；临时移除该属性后 `atomic` 变为 `true`（改前基线），补回后恢复 `false`。
+- 全程 `Runtime.exceptionThrown` / `Log.entryAdded` 无 error / warning。
+**人工复现**：连着触发两条 Toast（例如两次失败操作），读屏应只念新增的那条，不再重念仍显示的第一条；DOM 中容器应为 `<div class="toast-host" role="status" aria-live="polite" aria-atomic="false">`。
+**清理**：测试提示已逐条关闭（容器子节点 0）；未打开 / 修改笔记，无标签、偏好与工作区改动；临时 CDP 脚本 `C:\Users\EDY\AppData\Local\Temp\cdp322.mjs`、`cdp322b.mjs` 已删除。
+**检验计数**：3（下一轮 323 按正常需求轮）。
+
 ## 第 321 轮 · 2026-11-02 11:04
 **用户需求**：场景：应用启动几秒后自动发现新版本，更新弹窗正开着；或正在设置 / 命令面板里调整。现在的问题：更新弹窗开着时按 `Ctrl+,` / `Ctrl+Shift+P` / `Ctrl+Alt+H` 还能把设置、命令面板、历史叠上来，Esc 该关谁、焦点在哪一层都说不清；反过来，设置或命令面板开着时静默检查发现了新版本，更新弹窗会直接盖在它们上面。期望：同一时间只出现一个弹层——更新弹窗开着时全局弹层快捷键不生效；别的弹层开着时更新先等待，等它关掉再出现。
 **产品经理**：做。本窗口「更新功能收尾」的最后一块：更新弹窗此前不在第 241 轮建立的弹层互斥里。只收敛弹层叠加，不改检查 / 下载 / 跳过流程，不新增控件与依赖，不碰「暂不做」。

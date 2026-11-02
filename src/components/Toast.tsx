@@ -7,8 +7,16 @@ export function ToastHost() {
   // 读屏只播报「已存在的」live region 里新增的内容；若等第一条提示才挂载
   // 这个容器，文字和区域同时出现，多数读屏不会念。因此空着也保留一个常驻
   // 容器（无子节点时宽高为 0，不影响界面与点击）。
+  //
+  // role=status 隐含 aria-atomic=true：容器里同时挂着几条提示时，新增一条会
+  // 让读屏把仍在显示的前几条整段重念，最新的反而被淹没。改为只播报新增节点。
   return (
-    <div className="toast-host" role="status" aria-live="polite">
+    <div
+      className="toast-host"
+      role="status"
+      aria-live="polite"
+      aria-atomic="false"
+    >
       {toasts.map((toast) => (
         <button
           key={toast.id}
