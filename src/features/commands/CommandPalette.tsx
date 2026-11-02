@@ -3,6 +3,7 @@ import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 
 import { trapTab } from "../../components/Dialog";
 import { useDocumentStore } from "../../stores/document";
+import { useSettingsStore } from "../../stores/settings";
 import { useUiStore } from "../../stores/ui";
 import { useWorkspaceStore } from "../../stores/workspace";
 import {
@@ -36,6 +37,9 @@ export function CommandPalette() {
   const root = useWorkspaceStore((state) => state.root);
   const historyLength = useWorkspaceStore((state) => state.history.length);
   const forwardLength = useWorkspaceStore((state) => state.forward.length);
+  const recentIds = useSettingsStore(
+    (state) => state.preferences.recentCommands,
+  );
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -58,6 +62,38 @@ export function CommandPalette() {
         .includes(needle),
     );
   }, [commands, query]);
+
+  // 空查询时把最近用过的命令提到最前，常用的动作不必每次再搜一遍；
+  // 一旦开始输入就恢复按菜单分组的原始顺序。
+  const recent = useMemo(() => {
+    if (query.trim()) return [];
+    const byId = new Map(commands.map((command) => [command.id, command]));
+    return recentIds
+      .map((id) => byId.get(id))
+      .filter((command): command is AppCommand => Boolean(command))
+      .slice(0, 5);
+  }, [commands, query, recentIds]);
+
+  const visible = useMemo(() => {
+    if (query.trim()) return filtered;
+    const seen = new Set(recent.map((command) => command.id));
+    return [...recent, ...filtered.filter((command) => !seen.has(command.id))];
+  }, [filtered, query, recent]);
+
+  // 分组标题：最近使用单独一段，之后恢复原来的菜单分组顺序。
+  const groupHeaders = useMemo(
+    () =>
+      visible.map((command, position) => {
+        if (position < recent.length) {
+          return position === 0 ? "最近使用" : null;
+        }
+        return position === recent.length ||
+          visible[position - 1].group !== command.group
+          ? GROUP_LABELS[command.group]
+          : null;
+      }),
+    [visible, recent.length],
+  );
 
   // 换一批结果时回到第一项，避免下标越界。
   useEffect(() => {
@@ -85,6 +121,15 @@ export function CommandPalette() {
 
   const run = (command: AppCommand) => {
     close();
+    const settings = useSettingsStore.getState();
+    settings.update({
+      recentCommands: [
+        command.id,
+        ...settings.preferences.recentCommands.filter(
+          (id) => id !== command.id,
+        ),
+      ].slice(0, 8),
+    });
     void command.run();
   };
 
@@ -96,21 +141,21 @@ export function CommandPalette() {
     }
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setIndex((current) => (current + 1) % Math.max(filtered.length, 1));
+      setIndex((current) => (current + 1) % Math.max(visible.length, 1));
       return;
     }
     if (event.key === "ArrowUp") {
       event.preventDefault();
       setIndex(
         (current) =>
-          (current - 1 + Math.max(filtered.length, 1)) %
-          Math.max(filtered.length, 1),
+          (current - 1 + Math.max(visible.length, 1)) %
+          Math.max(visible.length, 1),
       );
       return;
     }
     if (event.key === "Enter") {
       event.preventDefault();
-      const command = filtered[index];
+      const command = visible[index];
       if (command) run(command);
     }
   };
@@ -140,11 +185,11 @@ export function CommandPalette() {
           onKeyDown={onKeyDown}
         />
         <ul className="palette-list" role="listbox" aria-label="命令列表">
-          {filtered.map((command, position) => (
+          {visible.map((command, position) => (
             <Fragment key={command.id}>
-              {position === 0 || filtered[position - 1].group !== command.group ? (
+              {groupHeaders[position] ? (
                 <li className="palette-group" role="presentation" aria-hidden="true">
-                  {GROUP_LABELS[command.group]}
+                  {groupHeaders[position]}
                 </li>
               ) : null}
               <li>
@@ -170,7 +215,7 @@ export function CommandPalette() {
               </li>
             </Fragment>
           ))}
-          {filtered.length === 0 ? (
+          {visible.length === 0 ? (
             <li className="palette-empty">没有匹配的命令</li>
           ) : null}
         </ul>

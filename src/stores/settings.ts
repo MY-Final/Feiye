@@ -39,6 +39,8 @@ export interface Preferences {
   defaultView: DefaultView;
   /** 用户自定义 CSS，作用于编辑器与预览；空字符串表示关闭。 */
   customCss: string;
+  /** 命令面板里最近用过的命令 id，最近的在最前；最多 8 条。 */
+  recentCommands: string[];
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -54,6 +56,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   hideFileExtensions: false,
   defaultView: "last",
   customCss: "",
+  recentCommands: [],
 };
 
 export const PREFERENCE_LIMITS = {
@@ -149,6 +152,15 @@ export function normalizePreferences(value: unknown): Preferences {
       typeof source.customCss === "string"
         ? source.customCss.slice(0, CUSTOM_CSS_LIMIT)
         : DEFAULT_PREFERENCES.customCss,
+    recentCommands: Array.isArray(source.recentCommands)
+      ? Array.from(
+          new Set(
+            source.recentCommands.filter(
+              (id): id is string => typeof id === "string",
+            ),
+          ),
+        ).slice(0, 8)
+      : DEFAULT_PREFERENCES.recentCommands,
   };
 }
 
