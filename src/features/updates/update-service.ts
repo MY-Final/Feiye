@@ -11,6 +11,9 @@ let pending: Update | null = null;
 /** 自动检查更新的节流标记，值为本地日期（YYYY-MM-DD）。 */
 const LAST_SILENT_CHECK_KEY = "lastSilentUpdateCheck";
 
+/** 用户点过「跳过此版本」的版本号：自动检查遇到它就不再打扰。 */
+const SKIPPED_VERSION_KEY = "skippedUpdateVersion";
+
 function localDateStamp(): string {
   const now = new Date();
   const month = String(now.getMonth() + 1).padStart(2, "0");
@@ -74,6 +77,15 @@ export async function checkForUpdates(options: { silent: boolean }): Promise<voi
       }
       return;
     }
+    // 只拦自动检查：用户主动点「检查更新」时仍要看到这个版本。
+    if (options.silent) {
+      const skipped = await getSetting<string>(SKIPPED_VERSION_KEY);
+      if (skipped === update.version) {
+        pending = null;
+        useUpdateStore.setState({ phase: "idle" });
+        return;
+      }
+    }
     pending = update;
     useUpdateStore.setState({
       open: true,
@@ -121,6 +133,19 @@ export async function downloadAndInstallUpdate(): Promise<void> {
     useUpdateStore.setState({ phase: "available", error: messageOf(error) });
     useUiStore.getState().toast(`更新失败：${messageOf(error)}`, "error");
   }
+}
+
+/**
+ * 跳过当前版本：自动检查不再为它弹窗，但手动检查仍可看到并安装；
+ * 发布了更新的版本时会重新提醒。
+ */
+export async function skipUpdateVersion(): Promise<void> {
+  const version = useUpdateStore.getState().version;
+  if (version) {
+    await setSetting(SKIPPED_VERSION_KEY, version);
+    useUiStore.getState().toast(`已跳过 v${version}，不再自动提醒`, "info");
+  }
+  dismissUpdate();
 }
 
 export async function restartForUpdate(): Promise<void> {

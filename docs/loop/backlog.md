@@ -19,6 +19,24 @@
 
 <!-- 从这里开始追加 -->
 
+## 第 309 轮 · 2026-11-02 10:18
+**用户需求**：场景：一个版本在 GitHub 上挂了几天还没升，我每天开合几次扉页。现在的问题：每次自动检查到同一个新版本都会弹窗，昨天已经点过「稍后」也一样，只能反复关掉。期望：弹窗里给一个「跳过此版本」，点过之后自动检查不再为它弹窗；我主动点「检查更新」时仍能看到并安装；等发布更新的版本时再提醒。
+**产品经理**：做。契合「安静」——只是记住一个被跳过的版本号，不新增常驻控件、不改下载与重启流程；手动检查保持完全可见，不扩大产品边界，不碰「暂不做」。
+**前端**：`src/features/updates/update-service.ts` 新增 `SKIPPED_VERSION_KEY = "skippedUpdateVersion"`；`checkForUpdates` 拿到更新后，若为静默检查且版本号与记录一致就复位为 `idle`、不弹窗（手动检查不受此限制）；新增 `skipUpdateVersion()`，写入版本号、弹 info Toast 并复用 `dismissUpdate()` 关闭弹层。`src/features/updates/UpdateDialog.tsx` 仅在 `phase === "available"` 时显示「跳过此版本」按钮（下载中 / 已就绪不出现），顺序为 跳过此版本 / 稍后 / 下载并安装。风险：只影响检测到新版本后的静默弹窗；下载失败回到 available 时仍可重试或跳过；设置写入失败照常关闭弹层。工作量 S。
+**后端**：无（未改 `src-tauri/`）。工作量无。
+**裁决**：做。
+**改动**：`src/features/updates/update-service.ts`（+25 行）、`src/features/updates/UpdateDialog.tsx`（+12 行）。
+**构建**：`bun run build` 通过（含 tsc，vite 1.05s，仅既有的 chunk 体积与动态导入提示）；未改 `src-tauri/`，未跑 cargo test。
+**CDP 实测（整页重载后，工作区 `D:\clawWorkSpeace\新建文件夹`；用 Vite dev 的 `/src/stores/updates.ts` 驱动弹层状态，避免依赖真实新版本）**：
+- 初始无弹层；置 `phase=available, version=9.9.9` 后出现 1 个 `role=dialog`，标题「发现新版本 v9.9.9」，按钮依次「跳过此版本 / 稍后 / 下载并安装」，焦点在 `.modal`。
+- 点击「跳过此版本」：弹层关闭（0 个），Toast「已跳过 v9.9.9，不再自动提醒」，设置 `skippedUpdateVersion` 读回 `"9.9.9"`，store 复位 `open:false / phase:idle`。
+- `phase=downloading` 与 `phase=ready` 时按钮只剩「稍后 / 下载中…」「稍后 / 重启以完成更新」，不出现跳过项；回到 `available` 又出现。
+- 全程 `Runtime.exceptionThrown` / `Log.entryAdded` 无 error / warning。
+**人工复现**：已发布更新的版本时启动（或命令面板手动检查）→ 弹窗点「跳过此版本」→ 应看到「已跳过 vX，不再自动提醒」并关窗；之后自动检查不再为同一版本弹窗；手动「检查更新」仍应弹出该版本；发布更高的版本后自动检查应重新提醒。
+**清理**：`skippedUpdateVersion` 已置空，更新 store 复位为 `open:false / phase:idle`（无弹层）；未打开 / 修改笔记，无标签、偏好与工作区改动；临时 CDP 脚本 `C:\Users\EDY\AppData\Local\Temp\cdp309.mjs` 已删除。
+**检验计数**：2（下一轮 310 按正常需求轮）。
+
+
 ## 第 308 轮 · 2026-11-02 10:16
 **用户需求**：场景：一天里因为查资料反复打开、关掉扉页好几次。现在的问题：每次启动 4 秒后都会静默联网检查更新，刚查过也一样，弱网下还得多等一次。期望：自动静默检查每天最多一次，同一天重开应用不再联网；手动「检查更新」不受限制，随时可查。
 **产品经理**：做。契合「安静」与「本地优先」——减少无谓联网，不新增可见控件、不改手动检查与更新对话框；标记只落在本机设置里，不扩产品边界，不碰「暂不做」。

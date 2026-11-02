@@ -6,6 +6,7 @@ import {
   dismissUpdate,
   downloadAndInstallUpdate,
   restartForUpdate,
+  skipUpdateVersion,
 } from "./update-service";
 
 /**
@@ -93,6 +94,17 @@ export function UpdateDialog() {
         </p>
         {error ? <p className="field-error">{error}</p> : null}
         <div className="modal-actions">
+          {phase === "available" ? (
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                void skipUpdateVersion();
+              }}
+            >
+              跳过此版本
+            </button>
+          ) : null}
           <button
             type="button"
             className="btn"
