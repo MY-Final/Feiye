@@ -52,6 +52,7 @@ export function HistoryDialog() {
   const [reading, setReading] = useState(false);
   const restoreFocus = useRef<HTMLElement | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open || !docPath) return;
@@ -80,6 +81,13 @@ export function HistoryDialog() {
       cancelled = true;
     };
   }, [open, docPath]);
+
+  // 笔记还没有历史版本时，框内没有可聚焦的条目；把焦点先收进对话框本身，
+  // 读屏会报出标题，Tab 也不会跑回后面的编辑器 / 文件树。若随后读到版本，
+  // 首条的 autoFocus 会把焦点交给它。
+  useEffect(() => {
+    if (open) dialogRef.current?.focus();
+  }, [open]);
 
   // 选中哪一版就读哪一版，避免一次把所有正文都塞进内存。
   useEffect(() => {
@@ -187,6 +195,8 @@ export function HistoryDialog() {
       }}
     >
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         className="modal history-modal"
         role="dialog"
         aria-modal="true"

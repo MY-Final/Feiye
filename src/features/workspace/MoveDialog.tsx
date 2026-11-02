@@ -60,12 +60,16 @@ export function MoveDialog({ entry, onClose }: MoveDialogProps) {
   // 与大纲 / 文件树 / 菜单栏等列表一致，Tab 不必逐个穿过每一条。
   const [stop, setStop] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const restoreRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     // 对话框关闭后把焦点还给打开前那一行，键盘整理文件不中断。
     const previous = document.activeElement;
     restoreRef.current = previous instanceof HTMLElement ? previous : null;
+    // 正在读取或一个可放的目标都没有时，焦点先落进对话框本身；
+    // 读到目标后由下面的 effect 交给第一项，别让 Tab 跑回背后的文件树。
+    dialogRef.current?.focus();
     void collectFolders(entry).then(setFolders);
     return () => {
       const restore = restoreRef.current;
@@ -124,6 +128,8 @@ export function MoveDialog({ entry, onClose }: MoveDialogProps) {
       }}
     >
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         className="modal move-modal"
         role="dialog"
         aria-modal="true"
