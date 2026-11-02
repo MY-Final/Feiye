@@ -98,12 +98,14 @@ export function StatusBar() {
     return () => document.removeEventListener("selectionchange", sync);
   }, [viewMode, docPath]);
 
+  // 以最近一次真实选区为准：分栏里在预览选中时，编辑区可能还留着切走前的
+  // 选区（CodeMirror 失焦不清空），此时该显示预览里的字数而不是旧的编辑区字数。
   const shownSelectedWords =
     viewMode === "preview"
       ? previewSelectedWords
-      : selectedWords > 0
-        ? selectedWords
-        : previewSelectedWords;
+      : previewSelectedWords > 0
+        ? previewSelectedWords
+        : selectedWords;
 
   // 击键时状态栏会跟着光标频繁重渲染，保存时间是旧值，没必要每次重新格式化。
   const savedTime = useMemo(
