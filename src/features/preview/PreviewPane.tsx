@@ -343,6 +343,25 @@ export function PreviewPane() {
         setLightbox(null);
         return;
       }
+      // 缩放原先只认滚轮，键盘用户打开大图后没法再放大看细节。
+      // 带 Ctrl / Alt 的组合留给浏览器与应用快捷键，不在这里截走。
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.key === "0") {
+        event.preventDefault();
+        setZoom(1);
+        return;
+      }
+      const zoomStep =
+        event.key === "+" || event.key === "="
+          ? 0.25
+          : event.key === "-" || event.key === "_"
+            ? -0.25
+            : 0;
+      if (zoomStep !== 0) {
+        event.preventDefault();
+        setZoom((current) => Math.min(4, Math.max(0.5, current + zoomStep)));
+        return;
+      }
       if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
       if (lightbox.images.length < 2) return;
       event.preventDefault();
@@ -914,10 +933,14 @@ export function PreviewPane() {
             {/* 放大以后操作提示也留着：不然只看到百分比，不知道怎么缩回去。 */}
             <span className="image-lightbox-hint">
               {zoom === 1
-                ? "滚轮缩放 · Esc 关闭"
+                ? "滚轮或 + / − 缩放 · Esc 关闭"
                 : canPan
-                  ? "拖动平移 · 双击复位 · 滚轮缩放 · Esc 关闭"
-                  : "双击复位 · 滚轮缩放 · Esc 关闭"}
+                  ? "拖动平移 · 双击复位 · 滚轮或 + / − 缩放 · Esc 关闭"
+                  : "双击复位 · 滚轮或 + / − 缩放 · Esc 关闭"}
+            </span>
+            {/* 键盘缩放后读屏也能听到当前倍率。 */}
+            <span className="sr-only" role="status" aria-live="polite">
+              {zoom !== 1 ? `缩放 ${Math.round(zoom * 100)}%` : ""}
             </span>
           </div>
         </div>
