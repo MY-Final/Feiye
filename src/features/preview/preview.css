@@ -145,6 +145,11 @@
   border-radius: var(--radius-sm);
 }
 
+/* 预览里的图片可点开放大；键盘聚焦时也给出与点击一致的提示。 */
+.markdown-body img[role="button"] {
+  cursor: zoom-in;
+}
+
 /* 图片宽度 / 对齐：![alt](src){width=60% align=center}；title 作图注。 */
 .markdown-body img.md-align-left {
   display: block;

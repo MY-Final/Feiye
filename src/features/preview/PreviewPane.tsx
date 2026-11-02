@@ -306,6 +306,17 @@ export function PreviewPane() {
       }
     };
 
+    // 只用键盘时图片不在点击路径里：Tab 到图片后回车 / 空格与鼠标点击一致。
+    const onImageKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      const target = event.target;
+      if (!(target instanceof HTMLImageElement) || target.closest("a")) return;
+      const src = target.currentSrc || target.src;
+      if (!src) return;
+      event.preventDefault();
+      openLightbox(src, target.alt);
+    };
+
     const onImageError = (event: Event) => {
       const target = event.target;
       if (!(target instanceof HTMLImageElement)) return;
@@ -314,9 +325,11 @@ export function PreviewPane() {
     };
 
     body.addEventListener("click", onClick);
+    body.addEventListener("keydown", onImageKeyDown);
     body.addEventListener("error", onImageError, true);
     return () => {
       body.removeEventListener("click", onClick);
+      body.removeEventListener("keydown", onImageKeyDown);
       body.removeEventListener("error", onImageError, true);
     };
   }, []);
@@ -581,6 +594,22 @@ export function PreviewPane() {
     const body = bodyRef.current;
     if (!body || !previewVisible) return;
     wrapImageCaptions(body);
+  }, [html, previewVisible]);
+
+  // 预览里的图片点击可放大，但只写了鼠标路径；把图片放进 Tab 序并标成按钮，
+  // 键盘 / 读屏用户也能打开浮层。链接里的图片由链接本身承担停靠点，不重复进入。
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (!body || !previewVisible) return;
+    for (const img of body.querySelectorAll<HTMLImageElement>("img")) {
+      if (img.closest("a")) continue;
+      img.tabIndex = 0;
+      img.setAttribute("role", "button");
+      img.setAttribute(
+        "aria-label",
+        img.alt ? `查看大图：${img.alt}` : "查看大图",
+      );
+    }
   }, [html, previewVisible]);
 
   // ```mermaid 代码块画成图：Worker 只给源码，这里按需懒加载 Mermaid。
