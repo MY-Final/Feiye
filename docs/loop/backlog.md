@@ -19,6 +19,19 @@
 
 <!-- 从这里开始追加 -->
 
+## 第 313 轮 · 2026-11-02 10:32（检验轮）
+**回归范围**：第 308–312 轮（静默检查每天一次、跳过此版本、发布说明链接可点、下载失败重试、预览链接焦点描边）。
+**构建**：`bun run build` 通过（含 tsc，vite 1.06s，仅既有的 chunk 体积与动态导入提示）；修复后再次构建通过（1.04s）；本轮未改 `src-tauri/`，未跑 cargo test。
+**CDP 实测（整页重载后，工作区 `D:\clawWorkSpeace\新建文件夹`；标签 `CaseTest.md` / `写作示例.md` / `README.md`，当前 `README.md`）**：
+- 308：重载后启动静默检查把 `lastSilentUpdateCheck` 写成 `2026-11-02`；同会话再次调用静默检查阶段保持 `idle`、标记不变（模块内 gate 生效）；手动检查走 `checking → idle` 并弹「已是最新版本」；把标记改为 `2000-01-01` 再重载，又写回当天，跨天恢复有效。
+- 309：置 `available/9.9.9`，三按钮为「跳过此版本 / 稍后 / 下载并安装」；点击跳过写入 `skippedUpdateVersion=9.9.9`、弹「已跳过 v9.9.9，不再自动提醒」、弹层关闭且 store 复位 `open:false / phase:idle / version:null`；「跳过此版本」只在 `available` 出现（`downloading` / `ready` 均无）。自动检查命中已跳过版本的分支因无真实新版本未直接触发，按代码路径核对（`silent` 且版本一致 → 复位 idle、不弹窗）；手动检查不受限。
+- 310（发现缺陷并修复）：两条链接均渲染为 `.update-note-link`（强调色 + 下划线），Tab 顺序为 链接 1 → 链接 2 → 跳过 → 稍后 → 下载并安装 → 回绕，键盘描边均为 2px 强调色。**缺陷**：链接后跟中文句末标点（如 `https://example.com/docs。`）时，`。` 被 `URL_PATTERN` 吞进锚文本与 `href`，点击会带着标点打开；此前只处理了 ASCII 句点。修复：`UpdateDialog.tsx` 的 `URL_PATTERN` 排除常用中日韩 / 全角标点（`，。、；：！？…` 及 `【】「」『』《》` 等），保留原有的全角括号与 ASCII 句末处理。修复后重载实测 `…/docs`、`…/a`、`…/b` 的锚文本与 `href` 均不含 `。，！`，标点仍留在正文；全角括号 `（URL）.` 照旧在链接外；无报错。
+- 311：`available + error` 时主按钮为「重试下载」、未禁用，错误行 `role=alert`、文案「下载失败：network error」、危险色 `rgb(166, 61, 52)`；切 `downloading/5%` 后错误与 `role=alert` 消失、主按钮「下载中…」禁用、`aria-valuenow=5`、状态区「正在下载更新…」；`ready` 时按钮「重启以完成更新」、进度 100、播报完成；清掉 error 恢复「下载并安装」且跳过项仍在。
+- 312：切「预览」后 README 有 8 条链接；真实 Tab 落在正文第一条链接「写作示例」，`:focus-visible` 命中，`outline: solid 2px rgb(47, 85, 97)`、`outline-offset: 1px`，不再是浏览器默认细黑框。
+- 全程 `Runtime.exceptionThrown` / `Log.entryAdded` 无 error / warning。
+**结论**：308、309、311、312 回归通过；310 发现并当场修复中文标点被并入链接的问题（1 行）。检验计数清零，下一轮 314 按正常需求轮。
+**清理**：`useUpdateStore` 已复位 `open:false / phase:idle`；`skippedUpdateVersion` 置空，`lastSilentUpdateCheck` 保留当天（符合正常节流）；视图还原「所见」，标签与笔记内容未改；临时 CDP 脚本 `C:\Users\EDY\AppData\Local\Temp\cdp313.mjs`、`cdp313fix.mjs`、`cdp313.out.json` 已删除。
+
 ## 第 312 轮 · 2026-11-02 10:30
 **用户需求**：场景：只用「预览」读笔记，用 Tab 在正文里的笔记 / 外部链接之间走。现在的问题：焦点圈是浏览器默认的 1px 黑框，深色主题下几乎看不见，和旁边按钮统一的 2px 靛青描边完全不是一套。期望：预览里的链接也用同一套强调色描边，键盘走到哪里一眼能看见。
 **产品经理**：做。属于本窗口无障碍候选「统一 `:focus-visible`」；只补全全局焦点样式，不新增控件、不引入依赖，不碰「暂不做」。

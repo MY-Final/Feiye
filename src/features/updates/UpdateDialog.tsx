@@ -10,7 +10,7 @@ import {
   skipUpdateVersion,
 } from "./update-service";
 
-const URL_PATTERN = /https?:\/\/[^\s<>()（）]+/g;
+const URL_PATTERN = /https?:\/\/[^\s<>()（）\[\]【】「」『』《》，。、；：！？…]+/g;
 
 /**
  * 发布说明里的链接交给系统浏览器打开：在弹窗里直接跳转会离开应用，
