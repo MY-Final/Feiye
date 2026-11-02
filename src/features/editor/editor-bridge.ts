@@ -20,6 +20,8 @@ let suppressChange = false;
 /** 多标签切换时按文档缓存 EditorState：撤销历史与选区不会随切换丢失。 */
 let currentKey: string | null = null;
 const stateCache = new Map<string, EditorState>();
+/** 阅读位置不属于 EditorState：单独按文档记住滚动距离，切回时还原。 */
+const scrollCache = new Map<string, number>();
 const MAX_CACHED_STATES = 12;
 
 const guardedHandlers: EditorHandlers = {
@@ -55,6 +57,7 @@ export function mountEditor(
   view?.destroy();
   // 编辑器重建意味着文档上下文可能整体换了（工作区切换）：缓存一并清空。
   stateCache.clear();
+  scrollCache.clear();
   currentKey = null;
   view = new EditorView({
     state: createEditorState("", guardedHandlers, nextOptions),
@@ -68,17 +71,20 @@ export function unmountEditor(): void {
   handlers = null;
   options = null;
   stateCache.clear();
+  scrollCache.clear();
   currentKey = null;
 }
 
 function cacheCurrentState(): void {
   if (!view || !currentKey) return;
   stateCache.set(currentKey, view.state);
+  scrollCache.set(currentKey, view.scrollDOM.scrollTop);
   // 只留最近的若干份：标签有上限，这里再兜一层，避免长期占用内存。
   while (stateCache.size > MAX_CACHED_STATES) {
     const oldest = stateCache.keys().next().value;
     if (oldest === undefined || oldest === currentKey) break;
     stateCache.delete(oldest);
+    scrollCache.delete(oldest);
   }
 }
 
@@ -102,6 +108,9 @@ export function setEditorDocument(content: string, cacheKey?: string): void {
     if (candidate && candidate.doc.toString() === content) {
       cached = candidate;
       stateCache.delete(cacheKey);
+    } else {
+      // 内容已变，缓存的阅读位置随之作废。
+      scrollCache.delete(cacheKey);
     }
   }
   currentKey = cacheKey ?? null;
@@ -127,14 +136,33 @@ export function setEditorDocument(content: string, cacheKey?: string): void {
   view.focus();
 }
 
+/**
+ * 切回缓存的文档后还原阅读位置。
+ * 必须在打开流程的光标恢复之后调用：那一步会滚动到光标，否则又回到光标处。
+ */
+export function restoreEditorScroll(cacheKey: string): void {
+  const top = scrollCache.get(cacheKey);
+  if (!view || top === undefined) return;
+  const target = view;
+  // 等 setState 的测量与「滚到光标」处理完，下一帧再放回阅读位置，
+  // 否则同步赋值会被 CodeMirror 随后的测量覆盖。
+  requestAnimationFrame(() => {
+    if (view === target && currentKey === cacheKey) {
+      target.scrollDOM.scrollTop = top;
+    }
+  });
+}
+
 /** 标签关闭 / 文档被删除时释放对应的缓存状态。 */
 export function forgetEditorState(cacheKey: string): void {
   stateCache.delete(cacheKey);
+  scrollCache.delete(cacheKey);
   if (currentKey === cacheKey) currentKey = null;
 }
 
 export function clearEditorStateCache(): void {
   stateCache.clear();
+  scrollCache.clear();
   currentKey = null;
 }
 

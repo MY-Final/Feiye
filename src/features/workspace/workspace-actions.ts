@@ -48,6 +48,7 @@ import {
   getEditorText,
   getEditorView,
   jumpToEditorPosition,
+  restoreEditorScroll,
   setEditorDocument,
 } from "../editor/editor-bridge";
 import { readOutline } from "../editor/outline";
@@ -577,6 +578,9 @@ export async function openFile(
     if (requestId !== openRequestSeq) return "superseded";
     await restoreCursorFor(entry.relPath);
     if (requestId !== openRequestSeq) return "superseded";
+    // 光标恢复会把视口拉回光标；切回缓存的文档时再还原用户读到的地方。
+    // 带锚点（搜索命中）的打开要停在命中的那一行，不还原旧阅读位置。
+    if (!anchor) restoreEditorScroll(entry.relPath);
     // 从文件树点开笔记后默认就要接着写：把焦点交给正文，
     // 纯预览模式没有可见的编辑区，不抢焦点。
     if (useDocumentStore.getState().viewMode !== "preview") {
