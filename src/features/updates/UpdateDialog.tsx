@@ -62,8 +62,22 @@ export function UpdateDialog() {
   const busy = phase === "downloading";
   const ready = phase === "ready";
 
+  // 打开时记住焦点、关闭后还回去：弹层卸载会把焦点丢给 body，
+  // 下一次 Tab 得从窗口最开头重走一遍。自动弹出的更新没有触发按钮，
+  // 或原控件已被移除时回到正文。
   useEffect(() => {
-    if (open) dialogRef.current?.focus();
+    if (!open) return;
+    const active = document.activeElement;
+    const previous =
+      active instanceof HTMLElement && active !== document.body ? active : null;
+    dialogRef.current?.focus();
+    return () => {
+      if (previous?.isConnected) {
+        previous.focus();
+        return;
+      }
+      document.querySelector<HTMLElement>(".cm-content")?.focus();
+    };
   }, [open]);
 
   useEffect(() => {
