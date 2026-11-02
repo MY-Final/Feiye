@@ -231,13 +231,25 @@ export async function pruneRecentWorkspaces(): Promise<void> {
 }
 
 export async function chooseWorkspace(): Promise<void> {
+  // 取消选择时系统对话框常把焦点丢回页面角落；记住触发它的控件，
+  // 取消或失败后还给人家（菜单项会随菜单卸载，isConnected 会挡住）。
+  const trigger =
+    document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
   try {
     const path = await pickWorkspaceFolder(
       useWorkspaceStore.getState().root ?? undefined,
     );
-    if (path) await openWorkspaceAt(path);
+    if (path) {
+      await openWorkspaceAt(path);
+      return;
+    }
   } catch (error) {
     toastError("选择文件夹失败", error);
+  }
+  if (trigger?.isConnected && document.activeElement !== trigger) {
+    trigger.focus();
   }
 }
 
