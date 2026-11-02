@@ -28,7 +28,12 @@ export function trapTab(event: ReactKeyboardEvent<HTMLElement>): void {
   ).filter(
     (element) => !element.hasAttribute("disabled") && element.tabIndex >= 0,
   );
-  if (focusables.length === 0) return;
+  if (focusables.length === 0) {
+    // 框内暂时没有可聚焦元素（例如更新下载中按钮全被禁用）时按住焦点，
+    // 否则 Tab 会跑到弹层后面的界面。
+    event.preventDefault();
+    return;
+  }
 
   const first = focusables[0];
   const last = focusables[focusables.length - 1];

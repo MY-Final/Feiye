@@ -80,6 +80,12 @@ export function UpdateDialog() {
     };
   }, [open]);
 
+  // 下载一开始两个按钮都被禁用，浏览器会把焦点丢回 body，之后的 Tab
+  // 就从标题栏重走、也跳出弹层；把焦点收回弹窗本身，trapTab 才能继续挡住。
+  useEffect(() => {
+    if (busy) dialogRef.current?.focus();
+  }, [busy]);
+
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
