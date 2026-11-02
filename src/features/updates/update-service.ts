@@ -61,6 +61,46 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/** 是否有别的弹层正开着：更新弹窗不和它们叠在一起抢焦点与 Esc。 */
+function anotherDialogOpen(): boolean {
+  const ui = useUiStore.getState();
+  return Boolean(
+    ui.confirm || ui.prompt || ui.settingsOpen || ui.paletteOpen || ui.historyOpen,
+  );
+}
+
+function presentUpdate(update: Update): void {
+  pending = update;
+  useUpdateStore.setState({
+    open: true,
+    phase: "available",
+    version: update.version,
+    notes: summarizeNotes(update.body),
+    progress: null,
+    error: null,
+  });
+}
+
+/**
+ * 设置 / 命令面板 / 历史 / 确认框开着时，等它们关掉再弹更新：
+ * 两个弹层同时挂上去后，Esc 该关谁、焦点在哪一层都不清楚。
+ * 单独导出，便于在开发态验证「等待后补弹」的行为。
+ */
+export function presentUpdateWhenQuiet(update: Update): void {
+  pending = update;
+  if (!anotherDialogOpen()) {
+    presentUpdate(update);
+    return;
+  }
+  const unsubscribe = useUiStore.subscribe(() => {
+    if (anotherDialogOpen()) return;
+    unsubscribe();
+    // 等待期间被手动检查或放弃顶掉时就不再冒出来。
+    if (pending !== update) return;
+    presentUpdate(update);
+  });
+}
+
 /**
  * 查询更新。silent 为 true 时用于启动后的静默检查：
  * 没有更新、或网络失败都不打扰用户；手动检查则给出明确反馈。
@@ -89,15 +129,7 @@ export async function checkForUpdates(options: { silent: boolean }): Promise<voi
         return;
       }
     }
-    pending = update;
-    useUpdateStore.setState({
-      open: true,
-      phase: "available",
-      version: update.version,
-      notes: summarizeNotes(update.body),
-      progress: null,
-      error: null,
-    });
+    presentUpdateWhenQuiet(update);
   } catch (error) {
     pending = null;
     useUpdateStore.setState({ phase: "idle" });

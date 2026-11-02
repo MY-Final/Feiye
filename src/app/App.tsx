@@ -57,6 +57,7 @@ import {
 } from "../stores/settings";
 import { useTabsStore } from "../stores/tabs";
 import { useUiStore } from "../stores/ui";
+import { useUpdateStore } from "../stores/updates";
 import { useWorkspaceStore } from "../stores/workspace";
 import {
   clampSplitRatio,
@@ -89,7 +90,8 @@ function dialogOpen(): boolean {
       ui.prompt ||
       ui.settingsOpen ||
       ui.paletteOpen ||
-      ui.historyOpen,
+      ui.historyOpen ||
+      useUpdateStore.getState().open,
   );
 }
 
@@ -213,12 +215,13 @@ export default function App() {
       if (event.defaultPrevented) return;
 
       const ui = useUiStore.getState();
+      const updateOpen = useUpdateStore.getState().open;
       const mod = event.ctrlKey || event.metaKey;
 
       // 设置面板优先处理 Ctrl+, 与 Esc，避免被 dialogOpen 提前拦截。
-      // 其它弹层开着时不再叠一个设置面板；设置面板自己仍可再按一次关闭。
+      // 其它弹层（含更新弹窗）开着时不再叠一个设置面板；设置面板自己仍可再按一次关闭。
       if (mod && (event.key === "," || event.code === "Comma")) {
-        if (ui.confirm || ui.prompt || ui.paletteOpen || ui.historyOpen) {
+        if (ui.confirm || ui.prompt || ui.paletteOpen || ui.historyOpen || updateOpen) {
           event.preventDefault();
           return;
         }
@@ -239,9 +242,9 @@ export default function App() {
       }
 
       // 命令面板：Ctrl+Shift+P 打开 / 关闭；面板内自己处理方向键与回车。
-      // 设置 / 历史开着时不叠命令面板，避免两个浮层同时抢键盘。
+      // 设置 / 历史 / 更新弹窗开着时不叠命令面板，避免两个浮层同时抢键盘。
       if (mod && event.shiftKey && event.key.toLowerCase() === "p") {
-        if (ui.confirm || ui.prompt || ui.settingsOpen || ui.historyOpen) {
+        if (ui.confirm || ui.prompt || ui.settingsOpen || ui.historyOpen || updateOpen) {
           event.preventDefault();
           return;
         }
@@ -252,9 +255,9 @@ export default function App() {
       }
 
       // 文档历史：Ctrl+Alt+H，随手回看并恢复某个保存过的版本。
-      // 设置 / 命令面板开着时不叠历史；历史自己仍可再按一次关闭。
+      // 设置 / 命令面板 / 更新弹窗开着时不叠历史；历史自己仍可再按一次关闭。
       if (mod && event.altKey && event.key.toLowerCase() === "h") {
-        if (ui.confirm || ui.prompt || ui.settingsOpen || ui.paletteOpen) {
+        if (ui.confirm || ui.prompt || ui.settingsOpen || ui.paletteOpen || updateOpen) {
           event.preventDefault();
           return;
         }
