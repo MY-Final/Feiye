@@ -31,6 +31,10 @@ export function ToastHost() {
           // 鼠标停上来时别急着消失，挪开后再留一点时间。
           onMouseEnter={() => pauseToast(toast.id)}
           onMouseLeave={() => resumeToast(toast.id, toast.kind)}
+          // 键盘焦点落到提示上（例如准备按回车撤销）时同样暂停：
+          // 到点把正在聚焦的元素移除，焦点会掉回页面开头。
+          onFocus={() => pauseToast(toast.id)}
+          onBlur={() => resumeToast(toast.id, toast.kind)}
           title={
             toast.action
               ? (toast.actionTitle ?? "点击在资源管理器中显示")
