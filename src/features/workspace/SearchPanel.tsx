@@ -96,6 +96,9 @@ export function SearchPanel({ autoFocus = true }: { autoFocus?: boolean }) {
   }, [query, root]);
 
   const openHit = async (hit: SearchHit) => {
+    // 新关键词的结果还没回来时，列表里仍是上一次查询的命中，
+    // 此时点它 / 按回车会打开别的笔记，等本次搜索结束再响应。
+    if (loading) return;
     const name = hit.relPath.split("/").pop() ?? hit.relPath;
     if (useDocumentStore.getState().path !== hit.relPath) {
       const result = await openFile({
@@ -123,7 +126,9 @@ export function SearchPanel({ autoFocus = true }: { autoFocus?: boolean }) {
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (!hits.length) return;
+    // 去抖 / 查询期间列表仍是上一次查询的结果，方向键与回车先不响应，
+    // 否则回车会打开上一个关键词的第一条。
+    if (loading || !hits.length) return;
     if (event.key === "ArrowDown") {
       event.preventDefault();
       setActive((current) => (current + 1) % hits.length);
@@ -164,9 +169,15 @@ export function SearchPanel({ autoFocus = true }: { autoFocus?: boolean }) {
         aria-label="在工作区中搜索"
         // 焦点留在输入框，用 ↑↓ 换选中项；把当前项告诉读屏，
         // 否则读屏只会重复输入框，听不出选中了哪一条。
-        aria-controls={needle && hits.length ? "workspace-search-results" : undefined}
+        aria-controls={
+          !loading && needle && hits.length
+            ? "workspace-search-results"
+            : undefined
+        }
         aria-activedescendant={
-          needle && hits.length ? `workspace-search-hit-${active}` : undefined
+          !loading && needle && hits.length
+            ? `workspace-search-hit-${active}`
+            : undefined
         }
         onChange={(event) => setQuery(event.target.value)}
         onKeyDown={onKeyDown}
