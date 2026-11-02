@@ -49,6 +49,60 @@ function canDropInto(dragged: Entry, target: Entry): boolean {
   return true;
 }
 
+/**
+ * 删除完成后把焦点留在文件树里。删除会让行随树移除，确认框关闭时焦点
+ * 也会落到正文或 body；树在删除后还会整体重读目录，重读期间所有行都
+ * 卸载，太早补焦会被重绘冲掉。这里持续几拍：焦点还在 body / 正文
+ * （或仍在树行上）就落回原位置（末尾则最后一行）的相邻行；用户移到其它
+ * 控件就停手。取消删除时这一行一直在，等几拍后把焦点还给它。
+ */
+function keepTreeFocusAfterDelete(path: string, index: number): void {
+  let ticks = 0;
+  let targetPath: string | null = null;
+  const settle = () => {
+    const active = document.activeElement;
+    const onTreeRow =
+      active instanceof HTMLElement && active.classList.contains("tree-row");
+    // 用户主动把焦点移到另一行 / 其它控件时不再接手。
+    if (onTreeRow && active.dataset.path !== targetPath && targetPath) return;
+    const closingDialog =
+      active instanceof HTMLElement &&
+      Boolean(active.closest(".modal-backdrop"));
+    const nowhere =
+      active === document.body ||
+      (active instanceof HTMLElement &&
+        active.classList.contains("cm-content"));
+    const tree = document.querySelector<HTMLElement>(".tree");
+    const rows = tree
+      ? Array.from(tree.querySelectorAll<HTMLElement>(".tree-row"))
+      : [];
+    const stillThere = rows.some((row) => row.dataset.path === path);
+    if (stillThere) {
+      // 取消删除或删除失败：这一行还在，等确认框关掉再把焦点还给它。
+      if (closingDialog || (ticks < 5 && !onTreeRow)) {
+        ticks += 1;
+        window.setTimeout(settle, 60);
+        return;
+      }
+      if (!nowhere && !onTreeRow) return;
+    } else if (!nowhere && !onTreeRow && !closingDialog) {
+      return;
+    }
+    const target = stillThere
+      ? rows.find((row) => row.dataset.path === path)
+      : rows.length > 0
+        ? rows[Math.min(Math.max(index, 0), rows.length - 1)]
+        : null;
+    if (target) {
+      targetPath = target.dataset.path ?? null;
+      if (active !== target) target.focus();
+    }
+    ticks += 1;
+    if (ticks < 20) window.setTimeout(settle, 60);
+  };
+  window.requestAnimationFrame(settle);
+}
+
 function buildMenuActions(
   entry: Entry | null,
   onMove: (entry: Entry) => void,
@@ -132,7 +186,15 @@ function buildMenuActions(
       label: "删除",
       danger: true,
       onSelect: () => {
-        void deleteEntry(entry);
+        // 菜单项触发时这一行还没消失，先按位置记下来，删完再补焦。
+        const tree = document.querySelector<HTMLElement>(".tree");
+        const rows = tree
+          ? Array.from(tree.querySelectorAll<HTMLElement>(".tree-row"))
+          : [];
+        const index = rows.findIndex((row) => row.dataset.path === entry.relPath);
+        void deleteEntry(entry).then(() =>
+          keepTreeFocusAfterDelete(entry.relPath, index),
+        );
       },
     });
   }
@@ -366,14 +428,9 @@ function TreeNode({
               ? Array.from(tree.querySelectorAll<HTMLElement>(".tree-row"))
               : [];
             const index = before.indexOf(row);
-            void deleteEntry(entry).then(() => {
-              if (!tree?.isConnected) return;
-              const rows = Array.from(
-                tree.querySelectorAll<HTMLElement>(".tree-row"),
-              );
-              if (rows.length === 0) return;
-              rows[Math.min(Math.max(index, 0), rows.length - 1)]?.focus();
-            });
+            void deleteEntry(entry).then(() =>
+              keepTreeFocusAfterDelete(entry.relPath, index),
+            );
           } else if (
             event.key === "ContextMenu" ||
             (event.shiftKey && event.key === "F10")
