@@ -254,8 +254,9 @@ export function focusEditor(): void {
 /** 打开编辑器内置的查找 / 替换面板；编辑器隐藏时调用方负责先切回可见模式。 */
 export function openEditorSearch(): void {
   if (!view) return;
+  // 面板挂载时自己会选中 / 聚焦查找框；这里再 view.focus() 会把焦点抢回正文，
+  // 从文件树、大纲或工具栏按 Ctrl+F 后直接打字就会改到笔记。
   openSearchPanel(view);
-  view.focus();
 }
 
 export function refreshEditorLayout(): void {

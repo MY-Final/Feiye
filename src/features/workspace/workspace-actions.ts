@@ -1201,7 +1201,13 @@ export async function changeViewMode(mode: ViewMode): Promise<void> {
   // 设置面板里改「默认视图」也会走到这里，那时不能把焦点抢到遮罩后面。
   const ui = useUiStore.getState();
   if (doc.path && mode !== "preview" && !ui.settingsOpen && !ui.confirm && !ui.prompt) {
-    requestAnimationFrame(() => getEditorView()?.focus());
+    requestAnimationFrame(() => {
+      // 「预览里按 Ctrl+F」会先切到分栏再打开查找面板，面板挂载时已聚焦
+      // 查找框；这一拍别再把焦点抢回正文，否则接着打字会改到笔记。
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active.closest(".cm-search")) return;
+      getEditorView()?.focus();
+    });
   }
 }
 

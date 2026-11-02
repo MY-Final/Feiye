@@ -19,6 +19,23 @@
 
 <!-- 从这里开始追加 -->
 
+## 第 345 轮 · 2026-11-02 13:11
+**用户需求**：场景：焦点在文件树、大纲或工具栏上，想找正文里的一个词。现在的问题：按 `Ctrl+F` 查找面板确实弹出来了，但焦点仍留在正文（纯预览里按更明显：先切到分栏、焦点落到正文），直接输入会改到笔记内容。期望：面板一出现，光标就在「查找」框里，输入的是关键词。
+**产品经理**：做。查找是核心写作动作，面板本身已存在，只是焦点落错；只修焦点、不改查找 / 替换逻辑与界面，符合「快、安静」，不碰「暂不做」。
+**前端**：`features/editor/editor-bridge.ts` 去掉 `openEditorSearch()` 里打开面板后的 `view.focus()`——CodeMirror 面板挂载时会 `select()` 查找框，再把焦点交给正文反而会把它抢走；`features/workspace/workspace-actions.ts` 的 `changeViewMode` 在下一帧把焦点交给正文前，若焦点已在 `.cm-search` 内则跳过（覆盖「预览里 Ctrl+F 先切分栏再开面板」与命令面板执行「查找与替换」）。风险：只影响打开查找面板时的焦点；普通视图切换仍把焦点交给正文，Esc 关闭面板仍由 CodeMirror 把焦点还给正文。工作量 S。
+**后端**：无（未改 `src-tauri/`）。工作量无。
+**裁决**：做。
+**改动**：`src/features/editor/editor-bridge.ts`（+2/−1 行）、`src/features/workspace/workspace-actions.ts`（+7/−1 行）。
+**构建**：`bun run build` 通过（含 tsc，vite 1.08s，仅既有的 chunk 体积与动态导入提示）；未改 `src-tauri/`，未跑 cargo test。
+**CDP 实测（整页重载后，工作区 `D:\clawWorkSpeace\新建文件夹`，起始 `CaseTest.md` / 分栏）**：
+- 改前：焦点在 `.tab-new` 时按 `Ctrl+F`，面板打开但 `document.activeElement` 为 `DIV.cm-content`；纯预览里按 `Ctrl+F` 先弹「已切到分栏」提示、焦点同样落在正文。直接键入会改到笔记。
+- 改后：`.tab-new` 聚焦时按 `Ctrl+F`，`activeElement` 为 `INPUT.cm-textfield`、占位符「查找」；键入「CaseTest」只进入查找框，文档未变脏（`.doc-tab-dirty` 0 个，状态栏仍「已保存 12:48」）；按 Esc 面板关闭、焦点回到 `DIV.cm-content`。
+- 纯预览（`mode-preview`）里按 `Ctrl+F`：切到 `mode-split` 后焦点在 `INPUT.cm-textfield`；命令面板执行「查找与替换」从预览切到分栏后同样聚焦查找框；编辑器内按 `Ctrl+F` 仍聚焦查找框。
+- 全程收集 `Runtime.exceptionThrown` / `Log.entryAdded`：0 error / warning。
+**人工复现**：把焦点放到文件树 / 大纲 / 工具栏，按 `Ctrl+F`：光标应在「查找」框，直接打字只出现在框里；在纯预览里按 `Ctrl+F`：应切到分栏且光标在查找框；按 Esc 关闭后光标回正文。
+**清理**：临时工作区 `D:\clawWorkSpeace\_c345rec` 已删除，`recentWorkspaces` 恢复为仅当前库；未打开 / 修改任何笔记；应用回到单标签 `CaseTest.md`、分栏、无弹层、焦点正文；临时 CDP 脚本已删除。
+**检验计数**：2（下一轮 346 按正常需求轮）。
+
 ## 第 344 轮 · 2026-11-02 13:10
 **用户需求**：场景：在命令面板里用方向键找一条不常用的命令。现在的问题：命令有四十多条，列表一屏放不下，焦点始终留在输入框，高亮项往下走几步就出了可视区，屏幕上看不到自己选到了哪条，只能盲按。期望：高亮项移动时列表跟着滚动，始终能看到当前选中的命令。
 **产品经理**：做。命令面板的方向键选择与读屏播报都已完成，只差「选中项滚进视野」这一条视觉反馈；不改命令集、分组、搜索与执行逻辑，符合「快、安静」，不碰「暂不做」。
