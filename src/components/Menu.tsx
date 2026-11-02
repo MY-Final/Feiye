@@ -29,6 +29,9 @@ export function ContextMenu({ x, y, actions, onClose }: ContextMenuProps) {
   const skipRestore = useRef(false);
   // 删除一行后焦点会跟着按钮一起消失；记住刚才在第几行，落回相邻项。
   const focusedRow = useRef(0);
+  // 被删掉的行号。列表末尾可能挂着不可删除的项（例如「打开其他文件夹…」），
+  // 按原下标 clamp 会跳过去，所以删除后优先落回上一行。
+  const removedRow = useRef<number | null>(null);
 
   // 打开后焦点进到第一项，键盘用户可以直接上下选；关闭时还回去。
   // 单独空依赖，避免父组件重渲染时反复抢焦点。
@@ -48,7 +51,13 @@ export function ContextMenu({ x, y, actions, onClose }: ContextMenuProps) {
     const menu = menuRef.current;
     if (!menu || menu.contains(document.activeElement)) return;
     const items = menu.querySelectorAll<HTMLButtonElement>(".context-menu-item");
-    items[Math.min(focusedRow.current, items.length - 1)]?.focus();
+    const removed = removedRow.current;
+    removedRow.current = null;
+    const index =
+      removed === null
+        ? Math.min(focusedRow.current, items.length - 1)
+        : Math.min(Math.max(removed - 1, 0), items.length - 1);
+    items[index]?.focus();
   }, [actions.length]);
 
   useEffect(() => {
@@ -114,6 +123,7 @@ export function ContextMenu({ x, y, actions, onClose }: ContextMenuProps) {
       if (action?.onRemove) {
         event.preventDefault();
         focusedRow.current = rowIndex;
+        removedRow.current = rowIndex;
         action.onRemove();
         return;
       }
@@ -162,7 +172,7 @@ export function ContextMenu({ x, y, actions, onClose }: ContextMenuProps) {
       }}
       onKeyDown={onKeyDown}
     >
-      {actions.map((action) => (
+      {actions.map((action, index) => (
         <div className="context-menu-row" key={action.label}>
           <button
             type="button"
@@ -187,7 +197,10 @@ export function ContextMenu({ x, y, actions, onClose }: ContextMenuProps) {
               className="context-menu-remove"
               title={action.removeTitle ?? "移除"}
               aria-label={action.removeTitle ?? "移除"}
-              onClick={() => action.onRemove?.()}
+              onClick={() => {
+                removedRow.current = index;
+                action.onRemove?.();
+              }}
             >
               ×
             </button>
