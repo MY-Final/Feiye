@@ -7,14 +7,15 @@ export interface DocumentTab {
 
 interface TabsStore {
   tabs: DocumentTab[];
-  addTab(path: string, name: string): void;
+  /** 返回因超出上限而被挤掉的最旧标签；未发生挤占时返回 null。 */
+  addTab(path: string, name: string): DocumentTab | null;
   removeTab(path: string): void;
   /** 文件或目录改名 / 移动后同步标签路径；newPath 为 null 时移除。 */
   remap(oldPath: string, newPath: string | null): void;
   clear(): void;
 }
 
-const MAX_TABS = 12;
+export const MAX_TABS = 12;
 
 function nameOf(path: string): string {
   return path.split("/").pop() ?? path;
@@ -24,24 +25,28 @@ function nameOf(path: string): string {
  * 多标签只记录「打开了哪些笔记」，当前文档仍由 document store 持有；
  * 不落盘，重启后从上次打开的笔记重新开始。
  */
-export const useTabsStore = create<TabsStore>((set) => ({
+export const useTabsStore = create<TabsStore>((set, get) => ({
   tabs: [],
 
   addTab(path, name) {
-    set((state) => {
-      const existing = state.tabs.find((tab) => tab.path === path);
-      if (existing) {
-        if (existing.name === name) return state;
-        return {
+    const state = get();
+    const existing = state.tabs.find((tab) => tab.path === path);
+    if (existing) {
+      if (existing.name !== name) {
+        set({
           tabs: state.tabs.map((tab) =>
             tab.path === path ? { ...tab, name } : tab,
           ),
-        };
+        });
       }
-      // 标签太多时先关掉最久没打开的那个（当前文档所在标签除外）。
-      const tabs = [...state.tabs, { path, name }];
-      return { tabs: tabs.slice(-MAX_TABS) };
-    });
+      return null;
+    }
+    // 标签太多时先关掉最久没打开的那个（当前文档所在标签除外），
+    // 把被挤掉的标签交给调用方提示，别让它无声消失。
+    const tabs = [...state.tabs, { path, name }];
+    const evicted = tabs.length > MAX_TABS ? (tabs.shift() ?? null) : null;
+    set({ tabs });
+    return evicted;
   },
 
   removeTab(path) {

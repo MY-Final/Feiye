@@ -26,7 +26,7 @@ import {
   type Entry,
 } from "../../lib/tauri";
 import { useDocumentStore, type ViewMode } from "../../stores/document";
-import { useTabsStore } from "../../stores/tabs";
+import { MAX_TABS, useTabsStore } from "../../stores/tabs";
 import { useOutlineStore } from "../../stores/outline";
 import { useUiStore } from "../../stores/ui";
 import { useWorkspaceStore } from "../../stores/workspace";
@@ -549,7 +549,18 @@ export async function openFile(
       .getState()
       .setDocument(entry.relPath, entry.name, file.modifiedMs);
     setEditorDocument(file.content, entry.relPath);
-    useTabsStore.getState().addTab(entry.relPath, entry.name);
+    const evicted = useTabsStore.getState().addTab(entry.relPath, entry.name);
+    if (evicted) {
+      // 剩下的标签里还有同名文件时补上路径，免得提示的是哪个「README」说不清。
+      const duplicated = useTabsStore
+        .getState()
+        .tabs.some((tab) => tab.name === evicted.name);
+      useUiStore
+        .getState()
+        .toast(
+          `已关闭最久未用的标签「${duplicated ? evicted.path : evicted.name}」（最多同时打开 ${MAX_TABS} 个）`,
+        );
+    }
     finishPending();
     // 所见 / 源码模式下预览是隐藏的：不在这里让 Worker 解析整篇，
     // 切到分栏 / 预览时 changeViewMode 会立即按当前内容补一次。
