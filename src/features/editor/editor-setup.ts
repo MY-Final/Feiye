@@ -128,6 +128,7 @@ const searchPhrases = EditorState.phrases.of({
   all: "全部",
   "match case": "区分大小写",
   regexp: "正则表达式",
+  "by word": "全字匹配",
   close: "关闭",
   replace: "替换",
   "replace all": "全部替换",
