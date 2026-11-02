@@ -6,7 +6,7 @@ import { baseName } from "../../lib/paths";
 import { readFile } from "../../lib/tauri";
 import { useDocumentStore } from "../../stores/document";
 import { useSettingsStore } from "../../stores/settings";
-import { useTabsStore } from "../../stores/tabs";
+import { useTabsStore, type DocumentTab } from "../../stores/tabs";
 import { useUiStore } from "../../stores/ui";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { wrapImageCaptions } from "../preview/figures";
@@ -19,6 +19,45 @@ interface Rendered {
   html: string;
   mermaid?: string[];
   error?: string;
+}
+
+/**
+ * 对照下拉里只显示文件名时，两个目录下的 README.md 会变成两个一样的选项。
+ * 与标签栏同一规则：仅在重名时补一段刚好能区分的上级目录。
+ */
+function distinguishLabels(tabs: DocumentTab[]): Map<string, string> {
+  const counts = new Map<string, number>();
+  for (const tab of tabs) {
+    counts.set(tab.name, (counts.get(tab.name) ?? 0) + 1);
+  }
+  const labels = new Map<string, string>();
+  tabs.forEach((tab, index) => {
+    if ((counts.get(tab.name) ?? 0) < 2) {
+      labels.set(tab.path, tab.name);
+      return;
+    }
+    const parents = tab.path.split("/").slice(0, -1);
+    if (parents.length === 0) {
+      labels.set(tab.path, `${tab.name}（根目录）`);
+      return;
+    }
+    for (let depth = 1; depth <= parents.length; depth += 1) {
+      const candidate = parents.slice(-depth).join("/");
+      const clash = tabs.some((other, otherIndex) => {
+        if (otherIndex === index || other.name !== tab.name) return false;
+        return (
+          other.path.split("/").slice(0, -1).slice(-depth).join("/") ===
+          candidate
+        );
+      });
+      if (!clash) {
+        labels.set(tab.path, `${tab.name}（${candidate}）`);
+        return;
+      }
+    }
+    labels.set(tab.path, tab.name);
+  });
+  return labels;
 }
 
 /**
@@ -40,6 +79,7 @@ export function SplitPane() {
   const bodyRef = useRef<HTMLElement>(null);
 
   const available = tabs.filter((tab) => tab.path !== docPath);
+  const labels = distinguishLabels(tabs);
 
   // 当前对照的那篇被切成了主文档、或标签被关掉，自动换一篇可对照的。
   useEffect(() => {
@@ -159,7 +199,7 @@ export function SplitPane() {
           ) : (
             available.map((tab) => (
               <option key={tab.path} value={tab.path}>
-                {tab.name}
+                {labels.get(tab.path) ?? tab.name}
               </option>
             ))
           )}
