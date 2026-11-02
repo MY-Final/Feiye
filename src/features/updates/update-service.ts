@@ -1,11 +1,39 @@
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 
+import { getSetting, setSetting } from "../../lib/tauri";
 import { useUiStore } from "../../stores/ui";
 import { useUpdateStore } from "../../stores/updates";
 
 /** 正在等待用户确认（或正在下载）的那次更新。 */
 let pending: Update | null = null;
+
+/** 自动检查更新的节流标记，值为本地日期（YYYY-MM-DD）。 */
+const LAST_SILENT_CHECK_KEY = "lastSilentUpdateCheck";
+
+function localDateStamp(): string {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
+/**
+ * 静默检查每天至多一次：同一天内重开应用不再联网。
+ * 先记下日期再发请求，弱网时也不在每次启动上反复重试；跨天自动恢复。
+ * 读不到设置就照常检查。
+ */
+let silentCheckGate: Promise<boolean> | null = null;
+function allowSilentCheck(): Promise<boolean> {
+  silentCheckGate ??= (async () => {
+    const today = localDateStamp();
+    const last = await getSetting<string>(LAST_SILENT_CHECK_KEY);
+    if (last === today) return false;
+    await setSetting(LAST_SILENT_CHECK_KEY, today);
+    return true;
+  })().catch(() => true);
+  return silentCheckGate;
+}
 
 /**
  * GitHub Release 的正文是 Markdown；这里只留前几行能直接读的文字，
@@ -34,6 +62,7 @@ function messageOf(error: unknown): string {
 export async function checkForUpdates(options: { silent: boolean }): Promise<void> {
   const { phase } = useUpdateStore.getState();
   if (phase === "checking" || phase === "downloading") return;
+  if (options.silent && !(await allowSilentCheck())) return;
 
   useUpdateStore.setState({ phase: "checking", error: null });
   try {

@@ -136,7 +136,7 @@ export default function App() {
     })();
   }, []);
 
-  // 启动几秒后静默查一次更新：等首屏和工作区恢复完再联网。
+  // 启动几秒后静默查一次更新（每天至多一次）：等首屏和工作区恢复完再联网。
   // 有更新才弹窗，没更新或离线都不打扰；StrictMode 下第一次的定时器会被清掉。
   useEffect(() => {
     const timer = window.setTimeout(() => {
