@@ -905,7 +905,8 @@ export async function revealEntry(entry: Entry | null): Promise<void> {
   }
 }
 
-export async function renameEntry(entry: Entry): Promise<void> {
+/** 返回改名后的相对路径，供调用方把焦点交回那一行；取消 / 失败返回 null。 */
+export async function renameEntry(entry: Entry): Promise<string | null> {
   const nextName = await useUiStore.getState().askInput({
     // 同名文件可能散在好几个目录里，标题带上路径才改得准。
     title: parentRel(entry.relPath)
@@ -934,10 +935,10 @@ export async function renameEntry(entry: Entry): Promise<void> {
     },
   });
 
-  if (!nextName) return;
+  if (!nextName) return null;
   const trimmed = nextName.trim();
   const target = entry.isDir ? trimmed : ensureMarkdownName(trimmed);
-  if (target === entry.name) return;
+  if (target === entry.name) return null;
 
   try {
     const renamed = await apiRenameEntry(entry.relPath, target);
@@ -989,8 +990,10 @@ export async function renameEntry(entry: Entry): Promise<void> {
         await useWorkspaceStore.getState().expandDirs(openDirs);
       }
     }
+    return renamed.relPath;
   } catch (error) {
     toastError("重命名失败", error);
+    return null;
   }
 }
 

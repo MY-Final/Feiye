@@ -320,20 +320,37 @@ function TreeNode({
           if (event.key === "F2") {
             event.preventDefault();
             event.stopPropagation();
-            // 改名后这一行会被重建，按位置把焦点找回来，方便接着改下一篇。
+            // 改名后这一行会按新名字重新排序，按位置找不可靠，甚至因节点
+            // 重建而把焦点掉回 body；等树刷新完按新路径把焦点交回去，
+            // 接着按 F2 改的就是刚改过的那一篇。
             const row = event.currentTarget;
             const tree = row.closest(".tree");
-            const before = tree
-              ? Array.from(tree.querySelectorAll<HTMLElement>(".tree-row"))
-              : [];
-            const index = before.indexOf(row);
-            void renameEntry(entry).then(() => {
-              if (!tree?.isConnected) return;
-              const rows = Array.from(
-                tree.querySelectorAll<HTMLElement>(".tree-row"),
-              );
-              if (rows.length === 0) return;
-              rows[Math.min(Math.max(index, 0), rows.length - 1)]?.focus();
+            void renameEntry(entry).then((nextPath) => {
+              if (!nextPath || !tree?.isConnected) return;
+              // 改名后目录监听还可能再刷新一次树，行被短暂卸下再重建，
+              // 刚交回的焦点会掉回 body。持续一小段时间按新路径补上焦点，
+              // 直到树稳定；用户已把焦点移到别的行 / 控件就不再抢。
+              const focusRenamed = (tries = 0) => {
+                if (!tree.isConnected) return;
+                const target = Array.from(
+                  tree.querySelectorAll<HTMLElement>(".tree-row"),
+                ).find((item) => item.dataset.path === nextPath);
+                const active = document.activeElement as HTMLElement | null;
+                if (target && active !== target) {
+                  const lost =
+                    !active ||
+                    active === document.body ||
+                    (active.classList.contains("tree-row") &&
+                      active.dataset.path === entry.relPath);
+                  // 焦点已移到别的行 / 控件时视为用户主动换位，不再补。
+                  if (!lost) return;
+                  target.focus();
+                }
+                if (tries < 25) {
+                  window.setTimeout(() => focusRenamed(tries + 1), 60);
+                }
+              };
+              focusRenamed();
             });
           } else if (event.key === "Delete") {
             event.preventDefault();
