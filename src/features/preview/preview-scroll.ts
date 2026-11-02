@@ -1,3 +1,9 @@
+/**
+ * 大纲跳转后标题与预览区顶部的距离，与编辑器的 24px 上边距保持一致；
+ * 当前标题高亮也用同一阈值，跳转后高亮不会落到上一个标题。
+ */
+const HEADING_TOP_MARGIN = 24;
+
 /** 标题文本与链接片段归一到同一形式，兼容中文标题和常见 slug 写法。 */
 export function normalizeAnchor(value: string): string {
   let text = value;
@@ -43,7 +49,7 @@ export function previewActiveHeadingIndex(
   const count = headings.length;
   if (count === 0) return -1;
   const paneTop = pane.getBoundingClientRect().top;
-  const threshold = pane.scrollTop + 12;
+  const threshold = pane.scrollTop + HEADING_TOP_MARGIN;
   let low = 0;
   let high = count - 1;
   let active = -1;
@@ -70,7 +76,10 @@ export function scrollPreviewToHeading(index: number): boolean {
   const heading = previewHeadingElements(body)[index];
   if (!heading) return false;
 
-  const top = Math.max(0, previewHeadingTop(pane, heading) - 10);
+  const top = Math.max(
+    0,
+    previewHeadingTop(pane, heading) - HEADING_TOP_MARGIN,
+  );
   pane.scrollTo({ top, behavior: "smooth" });
   return true;
 }
