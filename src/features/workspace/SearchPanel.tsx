@@ -78,7 +78,13 @@ function highlight(text: string, query: string): ReactNode {
  * 工作区全文搜索：边输边搜，结果显示文件、行号与命中行；
  * 点击直接打开笔记并跳到那一行。
  */
-export function SearchPanel({ autoFocus = true }: { autoFocus?: boolean }) {
+export function SearchPanel({
+  autoFocus = true,
+  visible = true,
+}: {
+  autoFocus?: boolean;
+  visible?: boolean;
+}) {
   const root = useWorkspaceStore((state) => state.root);
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
@@ -86,6 +92,7 @@ export function SearchPanel({ autoFocus = true }: { autoFocus?: boolean }) {
   const [searched, setSearched] = useState(false);
   const [active, setActive] = useState(0);
   const listRef = useRef<HTMLUListElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const needle = query.trim();
@@ -182,6 +189,13 @@ export function SearchPanel({ autoFocus = true }: { autoFocus?: boolean }) {
       ?.scrollIntoView({ block: "nearest" });
   }, [active, hits]);
 
+  // 面板切走时保持挂载，autoFocus 只在首次挂载生效；从其它标签切回搜索、
+  // 且这次是从点击 / 命令面板进入时，仍把光标送回输入框。
+  useEffect(() => {
+    if (!visible || !autoFocus) return;
+    if (document.activeElement !== inputRef.current) inputRef.current?.focus();
+  }, [visible, autoFocus]);
+
   const needle = query.trim();
   // 读屏播报：查询期间保持安静，结果落地后只念一次条数 / 无结果，
   // 否则每敲一个字都会先念「搜索中」再念条数。
@@ -196,12 +210,12 @@ export function SearchPanel({ autoFocus = true }: { autoFocus?: boolean }) {
       : "";
 
   return (
-    <div className="search-panel">
+    <div className="search-panel" hidden={!visible}>
       <input
+        ref={inputRef}
         className="search-input"
         type="search"
         value={query}
-        autoFocus={autoFocus}
         placeholder="搜索全部笔记…"
         aria-label="在工作区中搜索"
         // 焦点留在输入框，用 ↑↓ 换选中项；把当前项告诉读屏，

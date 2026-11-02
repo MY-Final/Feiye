@@ -5,6 +5,11 @@
   min-height: 0;
 }
 
+/* 面板在切换侧栏标签时保持挂载，display 会盖过 [hidden] 的 UA 规则。 */
+.search-panel[hidden] {
+  display: none;
+}
+
 .search-input {
   flex: none;
   margin: 8px 10px 6px;

@@ -984,9 +984,10 @@ export function WorkspaceSidebar() {
         </div>
       ) : tab === "outline" ? (
         <OutlinePanel />
-      ) : (
-        <SearchPanel autoFocus={focusSearchOnOpen} />
-      )}
+      ) : null}
+      {/* 搜索面板始终挂载、切走时只隐藏：关键词与结果不该因为顺手看一眼
+          大纲就清空，切回来还要重新输入。 */}
+      <SearchPanel autoFocus={focusSearchOnOpen} visible={tab === "search"} />
 
       {menu ? (
         <ContextMenu
