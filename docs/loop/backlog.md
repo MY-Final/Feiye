@@ -19,6 +19,25 @@
 
 <!-- 从这里开始追加 -->
 
+## 第 349 轮 · 2026-11-02 13:40（检验轮）
+**用户需求**：无新增；按 `.claude/loop.md` 第 6 节，系统性回归第 344–348 轮的五条改动。
+**产品经理**：检验轮，不做新功能。五条都是命令面板滚动、查找焦点、图片浮层键盘缩放、分屏关闭焦点与最近工作区菜单开合，需确认后续提交没有把它们带坏。
+**前端**：回归 `features/commands/CommandPalette.tsx`（344）、`features/editor/editor-bridge.ts` / `features/workspace/workspace-actions.ts`（345）、`features/preview/PreviewPane.tsx`（346）、`features/split/SplitPane.tsx`（347）、`app/TitleBar.tsx`（348）；无源码改动。
+**后端**：无（未改 `src-tauri/`）。
+**裁决**：检验完成，未发现缺陷。
+**改动**：无源码改动；仅更新 `docs/loop/backlog.md` 与 `docs/loop/state.md`。
+**构建**：`bun run build` 通过（含 tsc，vite 1.14s，仅既有的 chunk 体积与动态导入提示）；未改 `src-tauri/`，未跑 cargo test。
+**CDP 实测（整页重载后，工作区 `D:\clawWorkSpeace\新建文件夹`，起始 `CaseTest.md` / 分栏）**：
+- 344：`Ctrl+Shift+P` 打开 43 条命令，列表可视高 406 / 内容高 1659；连按 20 次 ↓ 后 `scrollTop` 0 → 390，高亮「段落：引用」底边在列表内；Esc 关闭后焦点回正文。
+- 345：焦点在 `.tab-new` 按 `Ctrl+F`，`activeElement` 为 `.cm-search` 内的 `INPUT.cm-textfield`（占位符「查找」），Esc 关闭后回正文；纯预览里按 `Ctrl+F` 先切「分栏」并同样聚焦查找框。
+- 346：`写作示例.md` 预览首图可聚焦（`IMG` / `role=button` / `tabIndex=0`），Enter 打开浮层「1 / 4」；`+` 三次到 175%（`scale(1.75)`、播报「缩放 175%」），`0` 回 100%，`-` 到 75%，连按到底分别停在 50% / 400%；`→` 翻到「2 / 4」且倍率保留；Esc 关闭后焦点回到原图 `IMG`。
+- 347：`Ctrl+\` 打开对照，点右上角「关闭对照」后 `activeElement` 为 `DIV.cm-content`；重新打开、把焦点放到对照下拉再按 `Ctrl+\`，关闭后同样回到正文。
+- 348：临时把 `D:\clawWorkSpeace\_c349other` 加进 `recentWorkspaces`；真实鼠标点库名菜单打开（`切换到 _c349other` + `打开其他文件夹…`、`aria-expanded=true`），再点同一按钮菜单归 0、`aria-expanded=false`、焦点回库名；测完恢复为仅当前库。
+- 全程收集 `Runtime.exceptionThrown` / `Log.entryAdded`：0 error / warning。
+**人工复现**：命令面板连按 ↓ 应看到高亮项滚进视野；从文件树按 `Ctrl+F` 光标应在查找框；预览里 Tab 到图片 Enter 打开后按 `+ / - / 0` 缩放；关掉分屏对照焦点应回正文；最近工作区菜单开着时再点库名应收起。
+**清理**：未修改任何笔记；`_c349other` 未创建，`recentWorkspaces` 已恢复为仅 `D:\clawWorkSpeace\新建文件夹`；整页重载后应用回到单标签 `CaseTest.md`、分栏、侧栏「文件」、焦点正文、无弹层；临时 CDP 脚本 `C:\Users\EDY\AppData\Local\Temp\cdp349-*.mjs` 已删除。
+**检验计数**：0（下一轮 350 按正常需求轮）。
+
 ## 第 348 轮 · 2026-11-02 13:35
 **用户需求**：场景：点标题栏的库名打开「最近工作区」，扫了一眼又不想切库。现在的问题：再点一次库名菜单不收，只有点别处或按 Esc 才关，和状态栏视图菜单「再点一次收起」不一致。期望：同一个按钮再点一次就把菜单收起来，Esc 与点别处关闭照旧。
 **产品经理**：做。最近工作区菜单已完整，只是触发按钮缺「再点收起」这一下；只改开合判断，不改菜单项、切库、移除记录与焦点归还，符合「安静、快」，不碰「暂不做」。
