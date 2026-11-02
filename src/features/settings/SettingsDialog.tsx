@@ -16,7 +16,11 @@ import {
   type Preferences,
 } from "../../stores/settings";
 import { useUiStore } from "../../stores/ui";
-import { checkForUpdates } from "../updates/update-service";
+import {
+  checkForUpdates,
+  getSkippedUpdateVersion,
+  restoreUpdateReminders,
+} from "../updates/update-service";
 import { changeViewMode } from "../workspace/workspace-actions";
 import "./settings.css";
 
@@ -228,6 +232,7 @@ function ShortcutPanel() {
 
 function AboutPanel() {
   const [version, setVersion] = useState("0.0.4");
+  const [skipped, setSkipped] = useState<string | null>(null);
 
   useEffect(() => {
     let disposed = false;
@@ -238,6 +243,10 @@ function AboutPanel() {
       .catch(() => {
         // 非 Tauri 环境或权限缺失时保留回退版本号。
       });
+    // 跳过记录只在打开关于页时读一次；撤销后直接清掉本地状态。
+    void getSkippedUpdateVersion().then((value) => {
+      if (!disposed) setSkipped(value);
+    });
     return () => {
       disposed = true;
     };
@@ -267,6 +276,20 @@ function AboutPanel() {
           <dd>本地 Markdown 文件，无账号与云同步</dd>
         </div>
       </dl>
+      {skipped ? (
+        <div className="settings-about-skipped">
+          <span>已跳过 v{skipped} 的自动提醒</span>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => {
+              void restoreUpdateReminders().then(() => setSkipped(null));
+            }}
+          >
+            恢复提醒
+          </button>
+        </div>
+      ) : null}
       <button
         type="button"
         className="btn settings-about-check"

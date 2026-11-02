@@ -146,9 +146,22 @@ export async function skipUpdateVersion(): Promise<void> {
   const version = useUpdateStore.getState().version;
   if (version) {
     await setSetting(SKIPPED_VERSION_KEY, version);
-    useUiStore.getState().toast(`已跳过 v${version}，不再自动提醒`, "info");
+    useUiStore
+      .getState()
+      .toast(`已跳过 v${version}，可在「设置 → 关于」恢复提醒`, "info");
   }
   dismissUpdate();
+}
+
+/** 读取「已跳过」的版本，供关于页展示；读不到按未跳过处理。 */
+export async function getSkippedUpdateVersion(): Promise<string | null> {
+  return (await getSetting<string>(SKIPPED_VERSION_KEY)) || null;
+}
+
+/** 撤销「跳过此版本」：清掉记录，自动检查重新为这个版本提醒。 */
+export async function restoreUpdateReminders(): Promise<void> {
+  await setSetting(SKIPPED_VERSION_KEY, "");
+  useUiStore.getState().toast("已恢复自动检查更新", "info");
 }
 
 export async function restartForUpdate(): Promise<void> {
