@@ -97,6 +97,20 @@ export function TitleBar() {
     setRecentMenu({ x: rect.left, y: rect.bottom + 4, paths });
   };
 
+  // 菜单开着时再点一次库名应把它收起；菜单的全局 mousedown 会先把
+  // 「关菜单」的点击吃掉，随后 onClick 又重新打开，所以这里拦住这次
+  // mousedown，让 onClick 自己判断是开还是关（与状态栏视图菜单一致）。
+  const recentMenuMouseDown = (event: MouseEvent<HTMLButtonElement>) => {
+    if (recentMenu) event.stopPropagation();
+  };
+  const toggleRecentMenu = (event: MouseEvent<HTMLButtonElement>) => {
+    if (recentMenu) {
+      setRecentMenu(null);
+      return;
+    }
+    void openRecentMenu(event);
+  };
+
   // 只想清掉菜单里的一条记录，不必先切过去；只改设置里的路径列表。
   const removeRecent = async (path: string) => {
     await forgetWorkspace(path);
@@ -175,7 +189,8 @@ export function TitleBar() {
               aria-label={`当前工作区：${workspaceName}，切换或打开工作区`}
               aria-haspopup="menu"
               aria-expanded={Boolean(recentMenu)}
-              onClick={(event) => void openRecentMenu(event)}
+              onMouseDown={recentMenuMouseDown}
+              onClick={toggleRecentMenu}
             >
               <span className="workspace-name">{workspaceName}</span>
               <ChevronIcon />
@@ -189,7 +204,8 @@ export function TitleBar() {
             aria-label="最近工作区"
             aria-haspopup="menu"
             aria-expanded={Boolean(recentMenu)}
-            onClick={(event) => void openRecentMenu(event)}
+            onMouseDown={recentMenuMouseDown}
+            onClick={toggleRecentMenu}
           >
             <ChevronIcon />
           </button>
