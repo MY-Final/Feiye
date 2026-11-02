@@ -4,8 +4,9 @@ export function ToastHost() {
   const toasts = useUiStore((state) => state.toasts);
   const dismiss = useUiStore((state) => state.dismissToast);
 
-  if (toasts.length === 0) return null;
-
+  // 读屏只播报「已存在的」live region 里新增的内容；若等第一条提示才挂载
+  // 这个容器，文字和区域同时出现，多数读屏不会念。因此空着也保留一个常驻
+  // 容器（无子节点时宽高为 0，不影响界面与点击）。
   return (
     <div className="toast-host" role="status" aria-live="polite">
       {toasts.map((toast) => (
