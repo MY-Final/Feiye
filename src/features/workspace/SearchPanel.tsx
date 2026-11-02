@@ -15,7 +15,7 @@ import "./search.css";
 
 const MAX_HITS = 200;
 
-/** 行号转成编辑器里的字符偏移：点结果后光标落在命中那一行的行首。 */
+/** 行号转成编辑器里的字符偏移。 */
 function lineOffset(text: string, line: number): number {
   let offset = 0;
   for (let current = 1; current < line; current += 1) {
@@ -24,6 +24,20 @@ function lineOffset(text: string, line: number): number {
     offset = next + 1;
   }
   return offset;
+}
+
+/**
+ * 命中位置：光标落在命中词上而不是行首。
+ * 长句里的匹配常在中后段，停在行首还得再横向找一遍。
+ */
+function hitOffset(text: string, line: number, query: string): number {
+  const start = lineOffset(text, line);
+  const end = text.indexOf("\n", start);
+  const lineText = text.slice(start, end < 0 ? text.length : end);
+  const needle = query.trim().toLowerCase();
+  if (!needle) return start;
+  const index = lineText.toLowerCase().indexOf(needle);
+  return index < 0 ? start : start + index;
 }
 
 /** 把每处命中包成 <mark>，大小写不敏感。 */
@@ -122,7 +136,7 @@ export function SearchPanel({ autoFocus = true }: { autoFocus?: boolean }) {
     }
     const text = getEditorText();
     if (text === null) return;
-    jumpToEditorPosition(lineOffset(text, hit.line));
+    jumpToEditorPosition(hitOffset(text, hit.line, query));
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
