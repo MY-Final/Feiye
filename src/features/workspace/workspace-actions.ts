@@ -835,6 +835,11 @@ export async function saveDocumentAs(): Promise<void> {
     const stillDirty = latest !== null && latest !== text;
     const oldPath = doc.path;
     useDocumentStore.getState().renameActive(created.relPath, created.name);
+    // 另存为把编辑器切到副本：原位置的标签跟着换成新名字，
+    // 否则标签栏仍停在旧文件上，副本变成没有标签的无主文档。
+    useTabsStore.getState().remap(oldPath, created.relPath);
+    // 撤销历史、选区与阅读位置同样按旧路径存着，一并迁到副本。
+    remapEditorState(oldPath, created.relPath);
     useDocumentStore.getState().markSaved(meta.modifiedMs, stillDirty);
     resetAutoSave();
     if (stillDirty) noteDocumentChange();
