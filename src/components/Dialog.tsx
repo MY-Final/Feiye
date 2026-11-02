@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useRef,
   useState,
   type FormEvent,
@@ -174,6 +175,9 @@ function PromptDialog({ request }: { request: PromptRequest }) {
   const [value, setValue] = useState(request.initialValue ?? "");
   const [error, setError] = useState<string | null>(null);
   const { closing, close } = useDialogClose();
+  // 错误行与输入框关联：读屏在提交失败时立即念出原因，之后聚焦输入框也能
+  // 重新听到，而不是只有视觉上多一行红字。
+  const errorId = useId();
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -220,6 +224,8 @@ function PromptDialog({ request }: { request: PromptRequest }) {
             className="text-input"
             value={value}
             autoFocus
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? errorId : undefined}
             onFocus={(event) => {
               const input = event.currentTarget;
               if (!request.selectBaseName) {
@@ -236,7 +242,11 @@ function PromptDialog({ request }: { request: PromptRequest }) {
             }}
           />
         </label>
-        {error ? <p className="field-error">{error}</p> : null}
+        {error ? (
+          <p className="field-error" id={errorId} role="alert">
+            {error}
+          </p>
+        ) : null}
         <div className="modal-actions">
           <button
             type="button"
