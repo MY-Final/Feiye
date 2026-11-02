@@ -214,6 +214,12 @@ export function AppMenu({
     // 从菜单执行的也算用过的命令，命令面板里能直接找到。
     rememberCommand(command);
     void command.run();
+    // 菜单项随菜单一起卸载，切换视图 / 侧栏这类命令又不会自己接管焦点，
+    // 焦点会掉到 body，下一次 Tab 从窗口最开头重走。等命令执行完（弹层与
+    // 编辑器会先拿到焦点）仍没人接时，把焦点还给触发菜单的顶层按钮。
+    requestAnimationFrame(() => {
+      if (document.activeElement === document.body) anchor?.focus();
+    });
   };
 
   return (
