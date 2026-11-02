@@ -19,6 +19,25 @@
 
 <!-- 从这里开始追加 -->
 
+## 第 337 轮 · 2026-11-02 12:33（检验轮）
+**用户需求**：无新增；按 `.claude/loop.md` 第 6 节，系统性回归第 332–336 轮的五条改动。
+**产品经理**：检验轮，不做新功能。五条都属于搜索 / 编辑器 / 分屏 / 命令面板的无障碍与文案打磨，仍需在真实运行的应用里确认键盘与读屏路径没有被后续提交带坏。
+**前端**：回归 `SearchPanel.tsx`（332、333）、`editor-setup.ts`（334）、`SplitPane.tsx`（335）、`CommandPalette.tsx`（336）；无源码改动。
+**后端**：无（未改 `src-tauri/`）。
+**裁决**：检验完成，未发现缺陷。
+**改动**：无源码改动；仅更新 `docs/loop/backlog.md` 与 `docs/loop/state.md`。
+**构建**：`bun run build` 通过（含 tsc，vite 1.40s，仅既有的 chunk 体积与动态导入提示）；未改 `src-tauri/`，未跑 cargo test。
+**CDP 实测（整页重载后，工作区 `D:\clawWorkSpeace\新建文件夹`，起始 `CaseTest.md`）**：
+- 332：侧栏搜索「不影响文件本身」得 28 条，点首条打开 `长文档.md`，光标落在命中行「…都不|不影响…」处（0-based 偏移 41，即第 42 字），行高亮与结果列表不变。
+- 333：常驻播报区 `role=status` / `aria-live=polite` / `aria-atomic=true`，查询后播「找到 28 条结果」且与结果行数一致；乱码词播「没有匹配的内容」、行数 0；清空回空串，视觉状态行仍 `aria-hidden`。
+- 334：`Ctrl+F` 面板三个勾选框为「区分大小写 / 正则表达式 / 全字匹配」，面板内不再出现「by word」，查找 / 替换输入与按钮文案未变。
+- 335：同时打开根目录与 `子目录/README.md` 后切回 `CaseTest.md`，对照下拉两项分别为「README.md（根目录）」「README.md（子目录）」，当前对照项选中根目录那篇；`aria-label` 未变；关闭分屏与 README 标签后回单标签。
+- 336：`Ctrl+Shift+P` 输入框为 `role=combobox` / `aria-autocomplete=list` / `aria-expanded=true` / `aria-controls=palette-list`，初始 `aria-activedescendant=palette-opt-new`（新建笔记），↓ 两次依次「打开文件夹…」「保存」，`aria-selected` 同步；输入 `zzzqqq` 后 `expanded=false`、引用移除；Esc 关闭后焦点回正文。
+- 全程收集 `Runtime.exceptionThrown` / `Log.entryAdded`：0 error / warning；应用回到单标签 `CaseTest.md`、侧栏「文件」、无分屏 / 弹层 / 提示。
+**人工复现**：见上五条；重点用读屏确认 332 的落点、333 的条数播报与 336 的方向键命令名。
+**清理**：临时 CDP 脚本 `C:\Users\EDY\AppData\Local\Temp\cdp337*.mjs` 已删除；未打开或修改任何笔记内容。
+**检验计数**：清零（下一轮 338 按正常需求轮）。
+
 ## 第 336 轮 · 2026-11-02 12:29
 **用户需求**：场景：只用键盘 / 读屏在命令面板里找动作，按 `Ctrl+Shift+P` 后连按 ↓ 挑命令。现在的问题：焦点一直在输入框，只有视觉高亮跟着走，读屏听不出当前选中了哪一条，只能靠记忆数按了几下；期望：像搜索面板一样，选中项被读成「第几条 / 命令名」，方向键移动时跟着报。
 **产品经理**：做。第 285 轮已给侧栏搜索结果补上 `aria-activedescendant`，命令面板是同一类「焦点留在输入框、方向键换高亮」的交互，却一直没告诉读屏选中项；只补无障碍语义，不改搜索、排序、↑↓ 与回车执行，符合「安静、快」，不碰「暂不做」。
