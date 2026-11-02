@@ -19,6 +19,23 @@
 
 <!-- 从这里开始追加 -->
 
+## 第 306 轮 · 2026-11-02 10:08
+**用户需求**：场景：用读屏软件操作「检查更新 → 下载并安装」。现在的问题：下载时只有一条视觉进度条，读屏全程不播报；若直接给进度条挂 `aria-live`，每收到一块数据就念一次百分比，吵得没法听。期望：读屏能知道正在下载、大致进度和下载完成，但不要每个数据块都念。
+**产品经理**：做。本窗口无障碍候选里「Toast 的 aria-live」已具备（`role=status` + `aria-live=polite`），剩下更新下载进度没有播报；只补读屏文案、不改视觉进度条与下载流程，不加依赖，不碰「暂不做」。
+**前端**：`src/features/updates/UpdateDialog.tsx` 在进度条旁新增常驻的 `.sr-only` 状态区（`role=status` / `aria-live=polite`）：下载中按 10% 一档播报「正在下载更新，已完成 N%」，起手未到 10% 只播「正在下载更新…」，完成后播「更新已下载，可以重启以完成更新」；进度条补 `aria-label`，视觉百分比仍逐块更新。`src/app/App.css` 新增通用 `.sr-only`（1px、绝对定位、overflow hidden）。风险：仅影响更新弹层的读屏文案；下载行为、ESC / 防关闭与按钮禁用不变。工作量 S。
+**后端**：无（未改 `src-tauri/`）。工作量无。
+**裁决**：做。
+**改动**：`src/features/updates/UpdateDialog.tsx`（+16 行）、`src/app/App.css`（+13 行）。
+**构建**：`bun run build` 通过（含 tsc，vite 1.22s，仅既有的 chunk 体积与动态导入提示）；未改 `src-tauri/`，未跑 cargo test。
+**CDP 实测（整页重载后，工作区 `D:\clawWorkSpeace\新建文件夹`；用 Vite dev 的 `/src/stores/updates.ts` 直接驱动弹层状态，避免依赖真实新版本）**：
+- 打开 `phase=downloading, progress=0.03`：出现 1 个 `role=dialog`，焦点在 `.modal`；`.sr-only` 为 `role=status` / `aria-live=polite`，计算样式 `position:absolute`、1×1px、`overflow:hidden`，文案「正在下载更新…」；进度条 `aria-label=更新下载进度`、`aria-valuenow=3`。
+- 同档推进 3%→9%（6 次 `setState`）：`.sr-only` 的 `MutationObserver` 记录 0 次文本变化，视觉 `aria-valuenow` 已到 9——不会按数据块刷屏。
+- 跨档推进 12% / 19% / 24% / 30% / 55% / 99%：文案依次停在「10%」「10%」「20%」「30%」「50%」「90%」，视觉 `aria-valuenow` 同步 12 / 19 / 24 / 30 / 55 / 99；切到 `phase=ready` 后文案变为「更新已下载，可以重启以完成更新」，进度 100。
+- 关闭弹层后 `role=dialog` 与 Toast 均为 0；全程无 exception / console error，正文与标签未受影响。
+**人工复现**：用读屏软件（NVDA / VoiceOver）在工作区触发一次有可用新版本的检查并点「下载并安装」：开始下载时应听到「正在下载更新…」，之后大致每 10% 报一次，完成时报「更新已下载，可以重启以完成更新」；中途不应连续念百分比。
+**清理**：临时 CDP 脚本 `C:\Users\EDY\AppData\Local\Temp\cdp306.mjs` 已删除；`useUpdateStore` 状态已还原为 `open:false / phase:idle`，无标签、文档内容与偏好改动。
+**检验计数**：5（下一轮 307 做检验轮，回归 302–306）。
+
 ## 第 305 轮 · 2026-11-02 09:35
 **用户需求**：场景：每天写作时反复用命令面板里的同几个动作（保存、切侧栏、切视图）。现在的问题：每次 `Ctrl+Shift+P` 打开都是一份按菜单分组的固定顺序，常用动作混在四十多条里，要么往下翻要么先输几个字。期望：最近用过的命令排在面板最前面，不输入时一眼就能点；开始搜索时仍按原来的分组结果。
 **产品经理**：做。命令面板是高频入口，把最近用过的动作提前只是重排已有项，不新增按钮、不改菜单与快捷键，也不扩大产品边界，不碰「暂不做」。

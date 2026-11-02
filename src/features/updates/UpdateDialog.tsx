@@ -43,6 +43,18 @@ export function UpdateDialog() {
 
   const primary = ready ? "重启以完成更新" : busy ? "下载中…" : "下载并安装";
 
+  // 读屏播报按 10% 一档：下载进度每收到一块就更新，
+  // 直接给进度条挂 aria-live 会每秒念几次百分比。
+  const step =
+    progress === null ? null : Math.min(100, Math.floor(progress * 10) * 10);
+  const announcement = ready
+    ? "更新已下载，可以重启以完成更新。"
+    : !busy
+      ? ""
+      : step !== null && step >= 10
+        ? `正在下载更新，已完成 ${step}%。`
+        : "正在下载更新…";
+
   return (
     <div
       className="modal-backdrop"
@@ -68,6 +80,7 @@ export function UpdateDialog() {
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={progress === null ? undefined : Math.round(progress * 100)}
+            aria-label="更新下载进度"
           >
             <div
               className="update-progress-bar"
@@ -75,6 +88,9 @@ export function UpdateDialog() {
             />
           </div>
         ) : null}
+        <p className="sr-only" role="status" aria-live="polite">
+          {announcement}
+        </p>
         {error ? <p className="field-error">{error}</p> : null}
         <div className="modal-actions">
           <button

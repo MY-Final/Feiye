@@ -1496,6 +1496,19 @@ body.is-resizing-split * {
   transition: width 0.18s ease;
 }
 
+/* 只给读屏听的播报，视觉上不占位。 */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* 标题与表单之间留出呼吸，标题不再直接贴着输入框。 */
 .modal > .field {
   margin-top: 18px;
