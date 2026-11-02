@@ -44,6 +44,7 @@ export function CommandPalette() {
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
   const restoreFocus = useRef<HTMLElement | null>(null);
 
   const commands = useMemo<AppCommand[]>(() => {
@@ -111,6 +112,15 @@ export function CommandPalette() {
     const frame = requestAnimationFrame(() => inputRef.current?.focus());
     return () => cancelAnimationFrame(frame);
   }, [open]);
+
+  // 命令多到列表需要滚动时，焦点仍在输入框，方向键移出可视区的高亮项
+  // 不会自己跟过来；把它滚进视野，否则只看得到输入框、看不到选中了哪条。
+  useEffect(() => {
+    if (!open) return;
+    listRef.current
+      ?.querySelector<HTMLElement>(".palette-item.is-active")
+      ?.scrollIntoView({ block: "nearest" });
+  }, [index, visible, open]);
 
   if (!open) return null;
 
@@ -188,6 +198,7 @@ export function CommandPalette() {
         />
         <ul
           id="palette-list"
+          ref={listRef}
           className="palette-list"
           role="listbox"
           aria-label="命令列表"
