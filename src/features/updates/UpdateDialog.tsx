@@ -78,7 +78,16 @@ export function UpdateDialog() {
 
   if (!open) return null;
 
-  const primary = ready ? "重启以完成更新" : busy ? "下载中…" : "下载并安装";
+  // 下载失败后仍停在 available：把主按钮说清楚是「重试」，
+  // 而不是让用户对着和第一次一模一样的「下载并安装」猜。
+  const failed = !busy && !ready && error !== null;
+  const primary = ready
+    ? "重启以完成更新"
+    : busy
+      ? "下载中…"
+      : failed
+        ? "重试下载"
+        : "下载并安装";
 
   // 读屏播报按 10% 一档：下载进度每收到一块就更新，
   // 直接给进度条挂 aria-live 会每秒念几次百分比。
@@ -132,7 +141,12 @@ export function UpdateDialog() {
         <p className="sr-only" role="status" aria-live="polite">
           {announcement}
         </p>
-        {error ? <p className="field-error">{error}</p> : null}
+        {error ? (
+          // role=alert：失败一到就播报，不必等用户把焦点移过来。
+          <p className="field-error" role="alert">
+            下载失败：{error}
+          </p>
+        ) : null}
         <div className="modal-actions">
           {phase === "available" ? (
             <button

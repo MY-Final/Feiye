@@ -19,6 +19,24 @@
 
 <!-- 从这里开始追加 -->
 
+## 第 311 轮 · 2026-11-02 10:24
+**用户需求**：场景：更新下到一半断网，弹窗停在原地。现在的问题：只多出一行英文错误，主按钮仍是「下载并安装」，分不清是在重新下载还是重来一次；读屏也不会主动报失败。期望：明确告诉我下载失败，主按钮变成「重试下载」，失败原因用中文起头，读屏能立即听到。
+**产品经理**：做。本窗口更新收尾里最后一项「下载失败可重试」；不改下载流程、不新增控件，只把已有的失败态说清楚，符合「安静」与「数据安全」，不碰「暂不做」。
+**前端**：`src/features/updates/UpdateDialog.tsx` 新增 `failed = !busy && !ready && error !== null`，失败态主按钮显示「重试下载」（仍走既有 `downloadAndInstallUpdate`，`pending` 保留、点击即重新开始下载并清空错误）；错误行补 `role="alert"` 并在原文前加「下载失败：」。风险：只影响 available + error 的文案与播报，正常下载 / 跳过 / 稍后 / ready 路径不变。工作量 S。
+**后端**：无（未改 `src-tauri/`）。工作量无。
+**裁决**：做。
+**改动**：`src/features/updates/UpdateDialog.tsx`（+11/−2 行）。
+**构建**：`bun run build` 通过（含 tsc，vite 1.07s，仅既有的 chunk 体积与动态导入提示）；未改 `src-tauri/`，未跑 cargo test。
+**CDP 实测（整页重载后，工作区 `D:\clawWorkSpeace\新建文件夹`；用 Vite dev 的 `/src/stores/updates.ts` 驱动弹层状态）**：
+- 置 `open:true / phase:available / version:9.9.9 / error:"network error"`：1 个 `role=dialog`，按钮依次「跳过此版本 / 稍后 / 重试下载」，主按钮未禁用；错误行 `role=alert`、文本「下载失败：network error」、危险色 `rgb(166,61,52)` 且实际可见；读到屏的进度状态区为空。
+- 模拟重试开始（`phase:downloading / progress:0.05 / error:null`）：主按钮变为「下载中…」且禁用，错误行与 `role=alert` 消失，进度条 `aria-valuenow=5`，状态区播「正在下载更新…」。
+- 真实 Tab 键从弹窗容器出发：跳过此版本 → 稍后 → 重试下载 → 回绕到跳过此版本，三键均有两像素描边（`outline-style: solid`）。
+- 清掉 error（正常 available）：主按钮恢复「下载并安装」，无 `role=alert`，「跳过此版本」仍在。
+- 关闭后弹层归 0；全程 `Runtime.exceptionThrown` / `Log.entryAdded` 无 error / warning。
+**人工复现**：断网后点「下载并安装」触发真实失败：弹窗应出现红字「下载失败：…」并由读屏立即播报；主按钮变为「重试下载」。恢复网络后点它应重新开始下载，出现进度条与「下载中…」，错误行消失；「跳过此版本 / 稍后」仍可用。正常网络下首次按钮仍是「下载并安装」。
+**清理**：更新 store 已复位 `open:false / phase:idle`；临时 CDP 脚本 `C:\Users\EDY\AppData\Local\Temp\cdp311.mjs` 已删除；未打开 / 修改笔记，无标签、偏好与工作区改动。
+**检验计数**：4（下一轮 312 按正常需求轮）。
+
 ## 第 310 轮 · 2026-11-02 10:22
 **用户需求**：场景：更新弹窗里写着「修复了崩溃，详见 https://github.com/…/issues/42」。现在的问题：发布说明被压成纯文本，链接看得见却点不动，想读细节只能自己选中、复制、再去浏览器粘贴。期望：说明里的链接可以直接点，交给系统浏览器打开，弹窗本身不跳走。
 **产品经理**：做。契合「本地优先、安静」——不引入 Markdown 渲染管线、不新增依赖，只把已有的说明文字里的 http(s) 链接变成可点链接；不新增控件、不改下载与重启流程，不碰「暂不做」。
