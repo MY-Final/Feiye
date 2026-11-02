@@ -12,6 +12,8 @@ interface DocumentStore {
   /** 自动保存因冲突或 I/O 错误暂停时的说明。 */
   saveBlocked: string | null;
   savedModifiedMs: number | null;
+  /** 手动保存成功的序号；状态栏据此向读屏播报一次「已保存」。 */
+  manualSaveSeq: number;
   viewMode: ViewMode;
   cursor: { line: number; column: number };
   stats: TextStats;
@@ -20,7 +22,7 @@ interface DocumentStore {
   renameActive(path: string, name: string): void;
   clearDocument(): void;
   markDirty(dirty: boolean): void;
-  markSaved(modifiedMs: number, keepDirty?: boolean): void;
+  markSaved(modifiedMs: number, keepDirty?: boolean, manual?: boolean): void;
   setSaving(saving: boolean): void;
   markSaveBlocked(message: string | null): void;
   setViewMode(mode: ViewMode): void;
@@ -35,6 +37,7 @@ export const useDocumentStore = create<DocumentStore>((set) => ({
   saving: false,
   saveBlocked: null,
   savedModifiedMs: null,
+  manualSaveSeq: 0,
   viewMode: "wysiwyg",
   cursor: { line: 1, column: 1 },
   stats: EMPTY_TEXT_STATS,
@@ -77,13 +80,16 @@ export const useDocumentStore = create<DocumentStore>((set) => ({
     );
   },
 
-  markSaved(modifiedMs, keepDirty = false) {
-    set({
+  markSaved(modifiedMs, keepDirty = false, manual = false) {
+    set((state) => ({
       dirty: keepDirty,
       saving: false,
       saveBlocked: null,
       savedModifiedMs: modifiedMs,
-    });
+      // 自动保存不逐次播报，避免写一会儿读屏就念一遍；手动保存才确认一次。
+      manualSaveSeq:
+        manual && !keepDirty ? state.manualSaveSeq + 1 : state.manualSaveSeq,
+    }));
   },
 
   setSaving(saving) {

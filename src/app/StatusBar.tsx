@@ -59,6 +59,14 @@ export function StatusBar() {
   const autoSaveOff = useSettingsStore(
     (state) => state.preferences.autoSaveDelay <= 0,
   );
+  const manualSaveSeq = useDocumentStore((state) => state.manualSaveSeq);
+
+  // 手动保存成功后播报一次；自动保存不逐次播报，免得写一会儿就念一遍。
+  const [saveNotice, setSaveNotice] = useState({ seq: 0, text: "" });
+  useEffect(() => {
+    if (manualSaveSeq === 0) return;
+    setSaveNotice({ seq: manualSaveSeq, text: "已保存" });
+  }, [manualSaveSeq]);
 
   // 窄窗口里工具栏的视图切换会收起，状态栏留一个常驻入口。
   const [viewMenu, setViewMenu] = useState<{ x: number; y: number } | null>(
@@ -157,6 +165,11 @@ export function StatusBar() {
 
   return (
     <footer className="statusbar">
+      <span className="sr-only" role="status" aria-live="polite">
+        {saveNotice.text ? (
+          <span key={saveNotice.seq}>{saveNotice.text}</span>
+        ) : null}
+      </span>
       {docPath && root ? (
         // 状态栏一直显示着相对路径，点一下就能拿到完整路径贴到别处。
         <button

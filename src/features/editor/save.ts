@@ -73,7 +73,7 @@ async function performSave(options: SaveOptions): Promise<boolean> {
     const stillDirty = latest === null || latest !== text;
 
     if (sameDocument) {
-      current.markSaved(meta.modifiedMs, stillDirty);
+      current.markSaved(meta.modifiedMs, stillDirty, !options.auto);
     }
     if (!stillDirty) {
       await clearRecoverySnapshot(path);
