@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
@@ -155,6 +155,27 @@ export default function App() {
       ),
     [],
   );
+
+  // 最后一篇文档被关掉 / 当前笔记被删后，编辑区还在原地但被空状态遮住；
+  // 焦点若留在里面，键盘用户会在看不见的地方打字。把焦点交给「新建文件」，
+  // 从按钮 Shift+Tab 也不会再钻进已 inert 的编辑区。
+  const hadDocument = useRef(Boolean(docPath));
+  useEffect(() => {
+    const had = hadDocument.current;
+    hadDocument.current = Boolean(docPath);
+    if (!had || docPath) return;
+    requestAnimationFrame(() => {
+      // 切库后若马上恢复了上次文档，就别和随后的打开抢焦点。
+      if (useDocumentStore.getState().path) return;
+      const active = document.activeElement;
+      const lost =
+        active === document.body ||
+        (active instanceof HTMLElement && Boolean(active.closest(".editor-pane")));
+      if (lost) {
+        document.querySelector<HTMLElement>(".empty-state .btn")?.focus();
+      }
+    });
+  }, [docPath]);
 
   // Windows 下关掉 Tauri 的原生拖放拦截后，文件由 WebView 自己分发：
   // 编辑区和预览区会拦下来插入图片，其它位置也统一挡住，别让 WebView
@@ -677,7 +698,7 @@ export default function App() {
         >
           {hasWorkspace ? (
             <>
-              <section className="editor-pane">
+              <section className="editor-pane" inert={!docPath}>
                 <EditorPane />
               </section>
               {viewMode === "split" ? (

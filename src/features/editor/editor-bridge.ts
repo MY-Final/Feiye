@@ -96,9 +96,14 @@ function normalizeLineEndings(content: string): string {
 /**
  * 用新内容替换编辑器文档（切换文件、重新加载时使用）。
  * 传入 cacheKey 后，切走时缓存当前 EditorState，切回同一篇且内容没变时恢复，
- * 撤销历史与光标位置都还在。
+ * 撤销历史与光标位置都还在。清空文档（关闭最后一篇、切库）时传 focus=false：
+ * 此时编辑区被空状态遮住，焦点不该再被拉回里面。
  */
-export function setEditorDocument(content: string, cacheKey?: string): void {
+export function setEditorDocument(
+  content: string,
+  cacheKey?: string,
+  focus = true,
+): void {
   if (!view || !options) return;
   if (cacheKey && cacheKey === currentKey) {
     // 同一篇重新加载：磁盘内容已变，旧状态作废。
@@ -138,7 +143,7 @@ export function setEditorDocument(content: string, cacheKey?: string): void {
   }
   guardedHandlers.onStats();
   guardedHandlers.onFormatState(readFormatState(view.state));
-  view.focus();
+  if (focus) view.focus();
 }
 
 /**

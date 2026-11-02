@@ -147,7 +147,7 @@ function resetDocument(): void {
   pendingOpenPath = null;
   resetAutoSave();
   captureActiveCursor();
-  setEditorDocument("");
+  setEditorDocument("", undefined, false);
   useDocumentStore.getState().clearDocument();
   useOutlineStore.getState().clear();
   clearPreview();
