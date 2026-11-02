@@ -41,12 +41,15 @@ function allowSilentCheck(): Promise<boolean> {
 /**
  * GitHub Release 的正文是 Markdown；这里只留前几行能直接读的文字，
  * 不为了几十个字把整条 Markdown 管线带进启动路径。
+ * 行内链接压成「文字（URL）」，弹窗里再把 URL 渲染成可点链接。
  */
 function summarizeNotes(body: string | null | undefined): string | null {
   if (!body) return null;
   const kept: string[] = [];
   for (const raw of body.split("\n")) {
-    const line = raw.trim();
+    const line = raw
+      .trim()
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, "$1（$2）");
     if (!line || line.startsWith("#")) continue;
     kept.push(line.replace(/^[-*]\s*/, "· "));
     if (kept.length >= 8) break;

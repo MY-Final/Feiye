@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { useEffect, useRef, type ReactNode } from "react";
 
 import { trapTab } from "../../components/Dialog";
 import { useUpdateStore } from "../../stores/updates";
@@ -8,6 +9,41 @@ import {
   restartForUpdate,
   skipUpdateVersion,
 } from "./update-service";
+
+const URL_PATTERN = /https?:\/\/[^\s<>()（）]+/g;
+
+/**
+ * 发布说明里的链接交给系统浏览器打开：在弹窗里直接跳转会离开应用，
+ * 而纯文本又让用户只能手动复制。只认 http(s)，其余一律按文字显示。
+ */
+function NoteText({ text }: { text: string }) {
+  const nodes: ReactNode[] = [];
+  let last = 0;
+  for (const match of text.matchAll(URL_PATTERN)) {
+    const start = match.index ?? 0;
+    const trailing = match[0].match(/[.,;:!?]+$/)?.[0] ?? "";
+    const url = trailing ? match[0].slice(0, -trailing.length) : match[0];
+    if (start > last) nodes.push(text.slice(last, start));
+    nodes.push(
+      <a
+        key={start}
+        href={url}
+        className="update-note-link"
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          void openUrl(url).catch(() => {});
+        }}
+      >
+        {url}
+      </a>,
+    );
+    if (trailing) nodes.push(trailing);
+    last = start + match[0].length;
+  }
+  if (last < text.length) nodes.push(text.slice(last));
+  return <>{nodes}</>;
+}
 
 /**
  * 发现新版本时的提示框。和确认框共用一套遮罩 / 卡片样式，
@@ -73,7 +109,11 @@ export function UpdateDialog() {
         onKeyDown={trapTab}
       >
         <h2 className="modal-title">发现新版本 v{version}</h2>
-        {notes ? <p className="modal-message update-notes">{notes}</p> : null}
+        {notes ? (
+          <p className="modal-message update-notes">
+            <NoteText text={notes} />
+          </p>
+        ) : null}
         {busy || ready ? (
           <div
             className="update-progress"

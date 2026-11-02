@@ -19,6 +19,25 @@
 
 <!-- 从这里开始追加 -->
 
+## 第 310 轮 · 2026-11-02 10:22
+**用户需求**：场景：更新弹窗里写着「修复了崩溃，详见 https://github.com/…/issues/42」。现在的问题：发布说明被压成纯文本，链接看得见却点不动，想读细节只能自己选中、复制、再去浏览器粘贴。期望：说明里的链接可以直接点，交给系统浏览器打开，弹窗本身不跳走。
+**产品经理**：做。契合「本地优先、安静」——不引入 Markdown 渲染管线、不新增依赖，只把已有的说明文字里的 http(s) 链接变成可点链接；不新增控件、不改下载与重启流程，不碰「暂不做」。
+**前端**：`src/features/updates/update-service.ts` 的 `summarizeNotes` 先把 Markdown 行内链接压成「文字（URL）」，其余行照旧保留 ≤8 行；`src/features/updates/UpdateDialog.tsx` 新增 `NoteText`，按 http(s) 切分说明并把 URL 渲染成 `<a>`，点击 `preventDefault` 后交 `plugin-opener` 的系统浏览器打开，句末标点留在链接外；`src/app/App.css` 补链接的强调色 / 下划线与 `:focus-visible` 描边。风险：只影响发布说明的呈现；无链接时保持纯文本，弹层 Tab 顺序把链接排在按钮前（共用 `trapTab` 的 `a[href]`）。工作量 S。
+**后端**：无（未改 `src-tauri/`）。工作量无。
+**裁决**：做。
+**改动**：`src/features/updates/update-service.ts`（+4/−1 行）、`src/features/updates/UpdateDialog.tsx`（+44/−2 行）、`src/app/App.css`（+11 行）。
+**构建**：`bun run build` 通过（含 tsc，vite 1.13s，仅既有的 chunk 体积与动态导入提示）；未改 `src-tauri/`，未跑 cargo test。
+**CDP 实测（整页重载后，工作区 `D:\clawWorkSpeace\新建文件夹`；当前没有真实待更新版本，且 `__TAURI_INTERNALS__.invoke` 不可写、无法桩掉 IPC，因此用 Vite dev 的 `/src/stores/updates.ts` 直接置入弹层状态，notes 采用 `summarizeNotes` 处理后的形态）**：
+- 置 `open:true / phase:available / version:9.9.9`，notes 为「· 修复了崩溃，详见 #42（https://example.com/issues/42）」+「· 详情 https://example.com/notes.」：出现 1 个 `role=dialog`，标题「发现新版本 v9.9.9」，说明文字原样保留换行（`white-space: pre-line`），生成 2 个 `.update-note-link`。
+- 两个链接 `href` 分别为 `https://example.com/issues/42`、`https://example.com/notes`（句末 `.` 未被吞进 URL），`text` 与 href 一致；计算样式为强调色 `rgb(47, 85, 97)` + `underline`。
+- 焦点在 `.modal` 时按 Tab：第一个链接（`outline: solid 2px` 强调色）→ 第二个链接 → 「跳过此版本」按钮，说明链接进入了弹层原有的 Tab 环，且键盘聚焦有可见描边。
+- 把 notes 换成无 URL 的「· 修复了崩溃 / · 没有链接的说明」：链接数为 0、文字完整；关闭后弹层归 0。
+- `summarizeNotes` 的两种 Markdown 写法另在 Bun 里按同一表达式核对：`[#42](https://…)` → `#42（https://…）`、`[发布说明](https://…)` → `发布说明（https://…）`、裸链接原样保留、`#` 标题行跳过，与置入弹层的文本一致。
+- 全程 `Runtime.exceptionThrown` / `Log.entryAdded` 无 error / warning。
+**人工复现**：发布一个带链接的 GitHub Release（例如正文写 `- 修复 [#42](https://github.com/…)`），启动应用或手动「检查更新」→ 弹窗说明里应显示「修复 #42（https://…）」，其中 URL 为强调色下划线；用键盘 Tab 可聚焦并看到描边；点击后应交给系统默认浏览器打开，弹窗仍留在应用内；句子末尾的句号不应变蓝或进入 URL。
+**清理**：更新 store 已复位 `open:false / phase:idle`，临时 CDP 脚本 `C:\Users\EDY\AppData\Local\Temp\cdp310.mjs` 已删除；未打开 / 修改笔记，无标签、偏好、工作区与设置改动。
+**检验计数**：3（下一轮 311 按正常需求轮）。
+
 ## 第 309 轮 · 2026-11-02 10:18
 **用户需求**：场景：一个版本在 GitHub 上挂了几天还没升，我每天开合几次扉页。现在的问题：每次自动检查到同一个新版本都会弹窗，昨天已经点过「稍后」也一样，只能反复关掉。期望：弹窗里给一个「跳过此版本」，点过之后自动检查不再为它弹窗；我主动点「检查更新」时仍能看到并安装；等发布更新的版本时再提醒。
 **产品经理**：做。契合「安静」——只是记住一个被跳过的版本号，不新增常驻控件、不改下载与重启流程；手动检查保持完全可见，不扩大产品边界，不碰「暂不做」。
