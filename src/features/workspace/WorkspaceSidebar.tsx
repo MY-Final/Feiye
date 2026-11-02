@@ -431,6 +431,9 @@ const SIDEBAR_WIDTH_KEY = "sidebarWidth";
 const SIDEBAR_TAB_KEY = "sidebarTab";
 const SIDEBAR_WIDTH = { min: 180, max: 420, default: 240 } as const;
 
+/** 每个库最近聚焦的文件树行。切库时侧栏会卸载，所以放在组件外。 */
+const treeStopByRoot = new Map<string, string>();
+
 function clampSidebarWidth(value: number): number {
   return Math.min(
     SIDEBAR_WIDTH.max,
@@ -462,19 +465,19 @@ export function WorkspaceSidebar() {
   const [refreshing, setRefreshing] = useState(false);
   // 拖动时高亮当前可放下的目录，松手前就知道会落到哪。
   const [dropTarget, setDropTarget] = useState<string | null>(null);
-  // 文件树只保留一个 Tab 停靠点：最近聚焦的那一行；记下所属的库，
-  // 换库后上一库的相对路径不再适用，自动回到新库的当前笔记。
-  const [treeStop, setTreeStop] = useState<{
-    root: string | null;
-    path: string;
-  } | null>(null);
+  // 文件树只保留一个 Tab 停靠点：最近聚焦的那一行。每个库各记一份，
+  // 切走再切回来仍停在离开前的那一行；没去过的库回落到当前笔记。
+  const [treeStop, setTreeStop] = useState<string | null>(() =>
+    root ? treeStopByRoot.get(root) ?? null : null,
+  );
+  const stopRoot = useRef(root);
   const treeRef = useRef<HTMLDivElement>(null);
-  const focusEntry = (path: string) => setTreeStop({ root, path });
-  const stopPath =
-    (treeStop && treeStop.root === root ? treeStop.path : null) ??
-    activePath ??
-    children?.[0]?.relPath ??
-    null;
+  const focusEntry = (path: string) => {
+    if (!root) return;
+    treeStopByRoot.set(root, path);
+    setTreeStop(path);
+  };
+  const stopPath = treeStop ?? activePath ?? children?.[0]?.relPath ?? null;
   const [moveTarget, setMoveTarget] = useState<Entry | null>(null);
   const [width, setWidth] = useState<number>(SIDEBAR_WIDTH.default);
   const widthRef = useRef<number>(SIDEBAR_WIDTH.default);
@@ -505,6 +508,13 @@ export function WorkspaceSidebar() {
     });
   }, [searchRequest]);
 
+  // 侧栏没卸载、直接换了库时，也要换成那一库记下的停靠点。
+  useEffect(() => {
+    if (stopRoot.current === root) return;
+    stopRoot.current = root;
+    setTreeStop(root ? treeStopByRoot.get(root) ?? null : null);
+  }, [root]);
+
   // 停靠点所在的行被折叠 / 删除后，树里会一个可 Tab 的行都不剩，挪到第一行。
   useEffect(() => {
     const tree = treeRef.current;
@@ -513,7 +523,9 @@ export function WorkspaceSidebar() {
     if (rows.length === 0) return;
     if (rows.some((row) => row.tabIndex === 0)) return;
     const first = rows[0].dataset.path;
-    if (first) setTreeStop({ root, path: first });
+    if (!first || !root) return;
+    treeStopByRoot.set(root, first);
+    setTreeStop(first);
   }, [stopPath, childrenByPath, expandedByPath, children, root]);
 
   useEffect(() => {
