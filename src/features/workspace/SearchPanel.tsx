@@ -40,6 +40,18 @@ function hitOffset(text: string, line: number, query: string): number {
   return index < 0 ? start : start + index;
 }
 
+/**
+ * 命中行很长时结果只显示两行，从行首截取会把命中词挤到裁掉的部分里，
+ * 用户看不出这一条为什么命中。命中位置靠后时从它前面一小段开始显示。
+ */
+function contextAround(text: string, query: string, before = 16): string {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return text;
+  const index = text.toLowerCase().indexOf(needle);
+  if (index <= before) return text;
+  return `…${text.slice(index - before)}`;
+}
+
 /** 把每处命中包成 <mark>，大小写不敏感。 */
 function highlight(text: string, query: string): ReactNode {
   const needle = query.trim().toLowerCase();
@@ -257,7 +269,7 @@ export function SearchPanel({ autoFocus = true }: { autoFocus?: boolean }) {
                   <span className="search-result-line">:{hit.line}</span>
                 </span>
                 <span className="search-result-text">
-                  {highlight(hit.text, needle)}
+                  {highlight(contextAround(hit.text, needle), needle)}
                 </span>
               </button>
             </li>
