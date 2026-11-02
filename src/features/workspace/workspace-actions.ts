@@ -905,6 +905,17 @@ export async function revealEntry(entry: Entry | null): Promise<void> {
   }
 }
 
+/**
+ * 分屏对照的路径跟着改名 / 移动走：否则右侧仍拿着旧路径，
+ * 找不到就自动换一篇甚至变成空态，用户得重新在下拉里挑。
+ */
+function remapSplitPath(from: string, to: string): void {
+  const ui = useUiStore.getState();
+  const split = ui.splitPath;
+  if (!split || !isWithin(split, from)) return;
+  ui.setSplitPath(`${to}${split.slice(from.length)}`);
+}
+
 /** 返回改名后的相对路径，供调用方把焦点交回那一行；取消 / 失败返回 null。 */
 export async function renameEntry(entry: Entry): Promise<string | null> {
   const nextName = await useUiStore.getState().askInput({
@@ -948,6 +959,7 @@ export async function renameEntry(entry: Entry): Promise<string | null> {
     useTabsStore.getState().remap(entry.relPath, renamed.relPath);
     // 改名后路径变了，光标记录也换到新路径，重新打开时才能接着上次的位置写。
     migrateCursor(entry.relPath, renamed.relPath);
+    remapSplitPath(entry.relPath, renamed.relPath);
 
     const doc = useDocumentStore.getState();
     if (doc.path === entry.relPath) {
@@ -1029,6 +1041,7 @@ export async function moveEntry(
     useWorkspaceStore.getState().remapHistory(entry.relPath, moved.relPath);
     useTabsStore.getState().remap(entry.relPath, moved.relPath);
     migrateCursor(entry.relPath, moved.relPath);
+    remapSplitPath(entry.relPath, moved.relPath);
 
     const doc = useDocumentStore.getState();
     if (doc.path === entry.relPath) {
