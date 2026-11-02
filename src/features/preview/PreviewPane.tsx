@@ -455,7 +455,15 @@ export function PreviewPane() {
       )
       .forEach((input) => {
         input.disabled = false;
-        input.setAttribute("aria-label", "切换任务完成状态");
+        // 一条列表里往往有好几个待办，读屏若都念同一句「切换任务完成状态」，
+        // 就分不清正在勾的是哪一项。把本条的任务文字带进名称里。
+        const task = (input.closest("li")?.textContent ?? "")
+          .replace(/\s+/g, " ")
+          .trim();
+        const suffix = task
+          ? `：${task.length > 40 ? `${task.slice(0, 40)}…` : task}`
+          : "";
+        input.setAttribute("aria-label", `切换任务完成状态${suffix}`);
       });
 
     // 悬停时显示链接目标，点之前就知道会去哪；用户自己写了 title 的不覆盖。

@@ -251,8 +251,13 @@ export function buildDecorations(
           const checked = /^\[[xX]\]$/.test(
             state.doc.sliceString(marker.from, marker.to),
           );
+          // 复选框后面这一项的文字，勾选时读屏能说出是哪条待办。
+          const taskText = state.doc
+            .sliceString(marker.to, state.doc.lineAt(node.from).to)
+            .replace(/\s+/g, " ")
+            .trim();
           replaceWith(
-            new TaskWidget(marker.from, marker.to, checked),
+            new TaskWidget(marker.from, marker.to, checked, taskText),
             marker.from,
             marker.to,
           );

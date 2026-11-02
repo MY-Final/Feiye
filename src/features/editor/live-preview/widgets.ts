@@ -604,6 +604,8 @@ export class TaskWidget extends WidgetType {
     readonly from: number,
     readonly to: number,
     readonly checked: boolean,
+    /** 本条任务的文字，用来让读屏知道勾的是哪一项。 */
+    readonly text = "",
   ) {
     super();
   }
@@ -613,7 +615,8 @@ export class TaskWidget extends WidgetType {
       other instanceof TaskWidget &&
       other.from === this.from &&
       other.to === this.to &&
-      other.checked === this.checked
+      other.checked === this.checked &&
+      other.text === this.text
     );
   }
 
@@ -622,7 +625,13 @@ export class TaskWidget extends WidgetType {
     input.type = "checkbox";
     input.className = "cm-wysiwyg-task";
     input.checked = this.checked;
-    input.setAttribute("aria-label", this.checked ? "标记为未完成" : "标记为完成");
+    const suffix = this.text
+      ? `：${this.text.length > 40 ? `${this.text.slice(0, 40)}…` : this.text}`
+      : "";
+    input.setAttribute(
+      "aria-label",
+      `${this.checked ? "标记为未完成" : "标记为完成"}${suffix}`,
+    );
 
     input.addEventListener("mousedown", (event) => event.stopPropagation());
     input.addEventListener("click", (event) => event.stopPropagation());
