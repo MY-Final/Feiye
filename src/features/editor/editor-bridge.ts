@@ -88,6 +88,11 @@ function cacheCurrentState(): void {
   }
 }
 
+/** 磁盘上的文件可能是 CRLF，CodeMirror 的 Text 统一按 LF 存；比较前先归一化。 */
+function normalizeLineEndings(content: string): string {
+  return content.includes("\r") ? content.replace(/\r\n?/g, "\n") : content;
+}
+
 /**
  * 用新内容替换编辑器文档（切换文件、重新加载时使用）。
  * 传入 cacheKey 后，切走时缓存当前 EditorState，切回同一篇且内容没变时恢复，
@@ -105,7 +110,7 @@ export function setEditorDocument(content: string, cacheKey?: string): void {
   let cached: EditorState | null = null;
   if (cacheKey) {
     const candidate = stateCache.get(cacheKey);
-    if (candidate && candidate.doc.toString() === content) {
+    if (candidate && candidate.doc.toString() === normalizeLineEndings(content)) {
       cached = candidate;
       stateCache.delete(cacheKey);
     } else {
