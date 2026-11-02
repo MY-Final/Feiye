@@ -27,6 +27,8 @@ export function ContextMenu({ x, y, actions, onClose }: ContextMenuProps) {
   const previousFocus = useRef<HTMLElement | null>(null);
   // Tab 主动把焦点送到触发元素之后时，不必再让卸载逻辑抢回触发元素。
   const skipRestore = useRef(false);
+  // 删除一行后焦点会跟着按钮一起消失；记住刚才在第几行，落回相邻项。
+  const focusedRow = useRef(0);
 
   // 打开后焦点进到第一项，键盘用户可以直接上下选；关闭时还回去。
   // 单独空依赖，避免父组件重渲染时反复抢焦点。
@@ -39,6 +41,15 @@ export function ContextMenu({ x, y, actions, onClose }: ContextMenuProps) {
       if (!skipRestore.current) previousFocus.current?.focus?.();
     };
   }, []);
+
+  // 行尾 × 被移除（例如按 Delete）后，焦点会掉到 body，菜单还开着却收不到
+  // 方向键；把焦点落回原位置或最后一行，键盘可以接着整理。
+  useEffect(() => {
+    const menu = menuRef.current;
+    if (!menu || menu.contains(document.activeElement)) return;
+    const items = menu.querySelectorAll<HTMLButtonElement>(".context-menu-item");
+    items[Math.min(focusedRow.current, items.length - 1)]?.focus();
+  }, [actions.length]);
 
   useEffect(() => {
     const close = () => onClose();
@@ -90,6 +101,23 @@ export function ContextMenu({ x, y, actions, onClose }: ContextMenuProps) {
       target?.focus();
       return;
     }
+    const rows = Array.from(
+      event.currentTarget.querySelectorAll<HTMLElement>(".context-menu-row"),
+    );
+    const focused = (event.target as HTMLElement).closest<HTMLElement>(
+      ".context-menu-row",
+    );
+    const rowIndex = focused ? rows.indexOf(focused) : -1;
+    // Tab 会关闭菜单，行尾 × 用键盘够不到；在对应行按 Delete 与点 × 等价。
+    if (event.key === "Delete" && rowIndex >= 0) {
+      const action = actions[rowIndex];
+      if (action?.onRemove) {
+        event.preventDefault();
+        focusedRow.current = rowIndex;
+        action.onRemove();
+        return;
+      }
+    }
     const items = Array.from(
       event.currentTarget.querySelectorAll<HTMLButtonElement>(
         ".context-menu-item",
@@ -120,6 +148,18 @@ export function ContextMenu({ x, y, actions, onClose }: ContextMenuProps) {
       role="menu"
       style={{ left, top, width }}
       onMouseDown={(event) => event.stopPropagation()}
+      onFocusCapture={(event) => {
+        const row = (event.target as HTMLElement).closest<HTMLElement>(
+          ".context-menu-row",
+        );
+        if (!row) return;
+        const index = Array.from(
+          event.currentTarget.querySelectorAll<HTMLElement>(
+            ".context-menu-row",
+          ),
+        ).indexOf(row);
+        if (index >= 0) focusedRow.current = index;
+      }}
       onKeyDown={onKeyDown}
     >
       {actions.map((action) => (
@@ -127,7 +167,12 @@ export function ContextMenu({ x, y, actions, onClose }: ContextMenuProps) {
           <button
             type="button"
             role="menuitem"
-            title={action.title}
+            title={
+              action.onRemove
+                ? `${action.title ?? action.label} · 按 Delete 移除`
+                : action.title
+            }
+            aria-keyshortcuts={action.onRemove ? "Delete" : undefined}
             className={`context-menu-item ${action.danger ? "danger" : ""}`}
             onClick={() => {
               onClose();

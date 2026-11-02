@@ -19,6 +19,24 @@
 
 <!-- 从这里开始追加 -->
 
+## 第 326 轮 · 2026-11-02 11:37
+**用户需求**：场景：只用键盘整理标题栏「最近工作区」里的旧库。现在的问题：每行右边的 × 键盘够不到——Tab 会直接关闭菜单，↑↓ 只在主按钮间移动，只有鼠标能点；想清掉几条记录就得去拿鼠标。期望：在某一行上按 Delete 就能移除这条记录（与点 × 一样），焦点留在菜单里相邻的一项；删到最后一条时菜单收起、焦点回到库名按钮。
+**产品经理**：做。第 164 轮加入行尾 × 时明确留了「键盘上下仍只在主按钮间移动」；同一能力鼠标可用、键盘不可用，是本窗口无障碍补漏里真实剩下的一处。只补键位与焦点交接，不改菜单结构、移除逻辑与撤销提示，不新增依赖，不碰「暂不做」。
+**前端**：`src/components/Menu.tsx` 在菜单的 `onKeyDown` 里识别当前行与 Delete（仅对带 `onRemove` 的行动作，普通右键菜单无变化），触发同一 `onRemove`；`onFocusCapture` 记住当前行，`actions.length` 变化后若焦点已掉出菜单就落回原位置或最后一行；带移除动作的菜单项补 `aria-keyshortcuts="Delete"`，悬停提示追加「按 Delete 移除」。风险：只影响带行尾 × 的菜单（当前仅「最近工作区」）；方向键、Home/End、Tab 关闭菜单、主按钮切换与鼠标点 × 均不变。工作量 S。
+**后端**：无（未改 `src-tauri/`）。工作量无。
+**裁决**：做。
+**改动**：`src/components/Menu.tsx`（+46/−1 行）。
+**构建**：`bun run build` 通过（含 tsc，vite 1.30s，仅既有的 chunk 体积与动态导入提示）；未改 `src-tauri/`，未跑 cargo test。
+**CDP 实测（整页重载后，工作区 `D:\clawWorkSpeace\新建文件夹`，活动文档 `CaseTest.md`；经 Vite 动态导入临时把 `Feiye` 与 `clawWorkSpeace` 记入最近工作区，按键用 CDP `Input.dispatchKeyEvent` 真实派发）**：
+- 改前基线：菜单列出 2 条，首项自动聚焦；↓ 到第二项后按 Delete，`recentWorkspaces` 不变、菜单仍是 2 行、无提示——键盘移不掉。
+- 改后：两个菜单项均带 `aria-keyshortcuts="Delete"` 与「… · 按 Delete 移除」提示；↓ 到「切换到 Feiye」按 Delete，设置变为 `[clawWorkSpeace, 新建文件夹]`、菜单剩 1 行且保持展开、提示「已从最近工作区移除：Feiye · 点击撤销」，焦点落在剩下的「切换到 clawWorkSpeace」。
+- 再按 Delete 删最后一条：设置只剩当前库 `[新建文件夹]`、菜单收起、焦点回到标题栏库名按钮（`.workspace-switch`，文本「新建文件夹」），提示第二条正确。
+- 鼠标路径无回归：重新种子后点第一行的 ×，该行消失、菜单保持展开、焦点落到相邻「切换到 Feiye」，与其既有行为一致。
+- 整页重载收集 `Runtime.exceptionThrown` / `Log.entryAdded`：0 error / warning；标签仍仅 `CaseTest.md`，无多余弹层。
+**人工复现**：打开过两个及以上库后，点标题栏库名打开「最近工作区」；用 ↓ 选到某一项按 Delete：该条应从列表消失并提示已移除（与点行尾 × 相同），焦点停在相邻项；继续删除到最后一条时菜单收起、焦点回到库名按钮。普通右键菜单（文件树 / 标签）里按 Delete 行为不变。
+**清理**：`recentWorkspaces` 已还原为 `[D:\clawWorkSpeace\新建文件夹]`；菜单与提示均已关闭，标签仅 `CaseTest.md`、所见、侧栏「文件」；未修改笔记内容；临时 CDP 脚本 `C:\Users\EDY\AppData\Local\Temp\cdp326.mjs`、`cdp326-check.mjs` 已删除。
+**检验计数**：1（下一轮 327 按正常需求轮）。
+
 ## 第 325 轮 · 2026-11-02 11:31（检验轮）
 **回归范围**：第 320–324 轮（切回文档还原阅读位置、更新弹窗纳入弹层互斥、Toast 只播报新增提示、搜索改词期间不误开旧结果、菜单命令计入最近使用）。
 **构建**：`bun run build` 通过（含 tsc，vite 1.50s，仅既有的 chunk 体积与动态导入提示）；本轮未改 `src-tauri/`，未跑 cargo test。
