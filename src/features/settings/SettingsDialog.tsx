@@ -162,6 +162,8 @@ const SHORTCUT_GROUPS: { title: string; items: [string, string][] }[] = [
       ["Delete", "删除文件树里选中的项（进回收站，需确认）"],
       ["Shift + F10", "在文件树里打开右键菜单"],
       ["Ctrl + O", "打开文件夹"],
+      ["Ctrl + Alt + H", "文档历史：查看并恢复保存过的版本"],
+      ["Ctrl + P", "导出 PDF（在系统打印对话框里另存为 PDF）"],
     ],
   },
   {
@@ -207,6 +209,15 @@ const SHORTCUT_GROUPS: { title: string; items: [string, string][] }[] = [
       ["Ctrl + B（光标不在正文）", "收起 / 展开侧栏；专注模式下退出专注"],
       ["Esc", "关闭对话框、查看大图"],
       ["Ctrl + 点击链接", "在应用内打开笔记"],
+    ],
+  },
+  {
+    // 多标签与分屏是常用动作，但原先不在帮助页里，用户查不到就以为没做。
+    title: "标签与分屏",
+    items: [
+      ["Ctrl + Tab / Ctrl + Shift + Tab", "切换到下一个 / 上一个标签"],
+      ["Ctrl + W", "关闭当前标签"],
+      ["Ctrl + \\", "打开 / 关闭右侧分屏对照"],
     ],
   },
 ];
