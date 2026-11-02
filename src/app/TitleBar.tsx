@@ -171,8 +171,8 @@ export function TitleBar() {
             <button
               type="button"
               className="workspace-switch"
-              title={`${root ?? workspaceName} · 切换最近工作区`}
-              aria-label={`当前工作区：${workspaceName}，切换最近工作区`}
+              title={`${root ?? workspaceName} · 切换或打开工作区`}
+              aria-label={`当前工作区：${workspaceName}，切换或打开工作区`}
               aria-haspopup="menu"
               aria-expanded={Boolean(recentMenu)}
               onClick={(event) => void openRecentMenu(event)}
@@ -250,21 +250,30 @@ export function TitleBar() {
           x={recentMenu.x}
           y={recentMenu.y}
           onClose={() => setRecentMenu(null)}
-          actions={recentMenu.paths.map((path) => {
-            // 两个都叫「笔记」的库只显示文件夹名分不清，重名时补上上一级目录。
-            const name = folderName(path);
-            const duplicated =
-              recentMenu.paths.filter((item) => folderName(item) === name)
-                .length > 1;
-            const parent = parentName(path);
-            return {
-              label: `切换到 ${name}${duplicated && parent ? `（${parent}）` : ""}`,
-              title: path,
-              onSelect: () => void openWorkspaceAt(path, true),
-              onRemove: () => void removeRecent(path),
-              removeTitle: "从最近工作区移除",
-            };
-          })}
+          actions={[
+            ...recentMenu.paths.map((path) => {
+              // 两个都叫「笔记」的库只显示文件夹名分不清，重名时补上上一级目录。
+              const name = folderName(path);
+              const duplicated =
+                recentMenu.paths.filter((item) => folderName(item) === name)
+                  .length > 1;
+              const parent = parentName(path);
+              return {
+                label: `切换到 ${name}${duplicated && parent ? `（${parent}）` : ""}`,
+                title: path,
+                onSelect: () => void openWorkspaceAt(path, true),
+                onRemove: () => void removeRecent(path),
+                removeTitle: "从最近工作区移除",
+              };
+            }),
+            // 有历史时点击库名只会列出最近库；再给一个直接选新文件夹的出口，
+            // 不必先想起 Ctrl+O 或「文件 → 打开文件夹」。
+            {
+              label: "打开其他文件夹…",
+              title: "选择文件夹作为工作区（Ctrl+O）",
+              onSelect: () => void chooseWorkspace(),
+            },
+          ]}
         />
       ) : null}
     </header>
