@@ -56,6 +56,9 @@ async function collectFolders(entry: Entry): Promise<FolderOption[]> {
 export function MoveDialog({ entry, onClose }: MoveDialogProps) {
   const [folders, setFolders] = useState<FolderOption[] | null>(null);
   const [busy, setBusy] = useState(false);
+  // 目标文件夹可能多达 200 个；整列只留一个 Tab 停靠点，方向键在列内移动，
+  // 与大纲 / 文件树 / 菜单栏等列表一致，Tab 不必逐个穿过每一条。
+  const [stop, setStop] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const restoreRef = useRef<HTMLElement | null>(null);
 
@@ -143,17 +146,22 @@ export function MoveDialog({ entry, onClose }: MoveDialogProps) {
             aria-label="目标文件夹"
             onKeyDown={onListKeyDown}
           >
-            {folders.map((folder) => (
-              <button
-                key={folder.relPath || "root"}
-                type="button"
-                className="move-option"
-                disabled={busy}
-                onClick={() => choose(folder.relPath)}
-              >
-                {folder.label}
-              </button>
-            ))}
+            {folders.map((folder, index) => {
+              const key = folder.relPath || "root";
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  className="move-option"
+                  disabled={busy}
+                  tabIndex={(stop === null ? index === 0 : stop === key) ? 0 : -1}
+                  onFocus={() => setStop(key)}
+                  onClick={() => choose(folder.relPath)}
+                >
+                  {folder.label}
+                </button>
+              );
+            })}
           </div>
         )}
         <div className="modal-actions">
