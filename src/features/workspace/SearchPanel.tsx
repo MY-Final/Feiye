@@ -171,6 +171,17 @@ export function SearchPanel({ autoFocus = true }: { autoFocus?: boolean }) {
   }, [active, hits]);
 
   const needle = query.trim();
+  // 读屏播报：查询期间保持安静，结果落地后只念一次条数 / 无结果，
+  // 否则每敲一个字都会先念「搜索中」再念条数。
+  const statusText = loading
+    ? ""
+    : searched
+      ? hits.length === 0
+        ? "没有匹配的内容"
+        : hits.length >= MAX_HITS
+          ? `找到 ${MAX_HITS}+ 条结果，仅显示前 ${MAX_HITS} 条`
+          : `找到 ${hits.length} 条结果`
+      : "";
 
   return (
     <div className="search-panel">
@@ -197,10 +208,22 @@ export function SearchPanel({ autoFocus = true }: { autoFocus?: boolean }) {
         onKeyDown={onKeyDown}
       />
 
+      {/* 常驻播报区：与视觉状态分开，避免「搜索中」随每次敲字刷屏。 */}
+      <div
+        className="sr-only"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {statusText}
+      </div>
+
       {loading ? (
-        <div className="search-status">搜索中…</div>
+        <div className="search-status" aria-hidden="true">
+          搜索中…
+        </div>
       ) : searched ? (
-        <div className="search-status">
+        <div className="search-status" aria-hidden="true">
           {hits.length === 0
             ? "没有匹配的内容"
             : `${hits.length}${hits.length >= MAX_HITS ? "+" : ""} 条结果`}
