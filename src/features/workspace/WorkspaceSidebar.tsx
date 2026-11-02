@@ -340,6 +340,10 @@ function TreeNode({
                   const lost =
                     !active ||
                     active === document.body ||
+                    // 输入框关闭时若树恰好被外部刷新，焦点会落到正文而不是旧行；
+                    // 这通常就发生在改名完成的同一瞬间，仍应把焦点交回新行。
+                    // 只在刚开始补焦的几拍内认正文，之后用户自己点进编辑器就不抢。
+                    (tries < 5 && active.classList.contains("cm-content")) ||
                     (active.classList.contains("tree-row") &&
                       active.dataset.path === entry.relPath);
                   // 焦点已移到别的行 / 控件时视为用户主动换位，不再补。
