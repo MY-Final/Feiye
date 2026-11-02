@@ -326,6 +326,7 @@ export function SettingsDialog() {
 
   const [category, setCategory] = useState<Category>("appearance");
   const dialogRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   // 到达上限后连续按键 / 粘贴只提示一次，删回上限内再重新提示。
   const cssLimitWarned = useRef(false);
 
@@ -352,6 +353,12 @@ export function SettingsDialog() {
       }
     };
   }, [open]);
+
+  // 切换分类时回到顶部：从很长的「快捷键」切到「外观排版」，
+  // 内容区会沿用上一页的滚动位置，把第一个分组顶出可视区。
+  useEffect(() => {
+    contentRef.current?.scrollTo({ top: 0 });
+  }, [category]);
 
   if (!open) return null;
 
@@ -473,7 +480,7 @@ export function SettingsDialog() {
             ))}
           </nav>
 
-          <div className="settings-content" role="tabpanel">
+          <div className="settings-content" role="tabpanel" ref={contentRef}>
             {category === "appearance" ? (
               <section className="settings-section">
                 <h3 className="settings-section-title">排版</h3>
