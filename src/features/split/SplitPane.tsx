@@ -77,6 +77,9 @@ export function SplitPane() {
   const [loading, setLoading] = useState(false);
   const [tick, setTick] = useState(0);
   const bodyRef = useRef<HTMLElement>(null);
+  // 关掉对照时触发关闭的 × / 下拉已随面板卸载，焦点会掉回 body，
+  // 下一次 Tab 从窗口最左边重走；关掉后把焦点接回正文。
+  const wasOpen = useRef(false);
 
   const available = tabs.filter((tab) => tab.path !== docPath);
   const labels = distinguishLabels(tabs);
@@ -87,6 +90,21 @@ export function SplitPane() {
     if (splitPath && available.some((tab) => tab.path === splitPath)) return;
     setSplitPath(available[0]?.path ?? null);
   }, [open, splitPath, available, setSplitPath]);
+
+  useEffect(() => {
+    if (open) {
+      wasOpen.current = true;
+      return;
+    }
+    if (!wasOpen.current) return;
+    wasOpen.current = false;
+    requestAnimationFrame(() => {
+      // 只在焦点确实无处可去时接手；用户若已把焦点移到别处就不抢。
+      if (document.activeElement === document.body) {
+        document.querySelector<HTMLElement>(".cm-content")?.focus();
+      }
+    });
+  }, [open]);
 
   // 磁盘上的对照文件被外部改过时，稍后重新读一遍。
   useEffect(() => {
