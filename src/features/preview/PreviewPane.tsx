@@ -362,6 +362,27 @@ export function PreviewPane() {
         setZoom((current) => Math.min(4, Math.max(0.5, current + zoomStep)));
         return;
       }
+      // 放大后图片可能超出可视区：没有触控板 / 鼠标的键盘用户只能用
+      // Shift + 方向键平移，否则放大后永远停在图片中间，看不到四角。
+      if (event.shiftKey && zoom > 1 && event.key.startsWith("Arrow")) {
+        event.preventDefault();
+        if (!canPan) return;
+        const step = 40;
+        const dx =
+          event.key === "ArrowRight"
+            ? step
+            : event.key === "ArrowLeft"
+              ? -step
+              : 0;
+        const dy =
+          event.key === "ArrowDown"
+            ? step
+            : event.key === "ArrowUp"
+              ? -step
+              : 0;
+        setPan((current) => clampPan(current.x + dx, current.y + dy));
+        return;
+      }
       if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
       if (lightbox.images.length < 2) return;
       event.preventDefault();
@@ -369,7 +390,7 @@ export function PreviewPane() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [lightbox?.images.length]);
+  }, [lightbox?.images.length, zoom, canPan]);
 
   useEffect(() => {
     setLightbox(null);
@@ -935,7 +956,7 @@ export function PreviewPane() {
               {zoom === 1
                 ? "滚轮或 + / − 缩放 · Esc 关闭"
                 : canPan
-                  ? "拖动平移 · 双击复位 · 滚轮或 + / − 缩放 · Esc 关闭"
+                  ? "拖动或 Shift + 方向键平移 · 双击复位 · 滚轮或 + / − 缩放 · Esc 关闭"
                   : "双击复位 · 滚轮或 + / − 缩放 · Esc 关闭"}
             </span>
             {/* 键盘缩放后读屏也能听到当前倍率。 */}
