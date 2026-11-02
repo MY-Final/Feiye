@@ -19,6 +19,25 @@
 
 <!-- 从这里开始追加 -->
 
+## 第 336 轮 · 2026-11-02 12:29
+**用户需求**：场景：只用键盘 / 读屏在命令面板里找动作，按 `Ctrl+Shift+P` 后连按 ↓ 挑命令。现在的问题：焦点一直在输入框，只有视觉高亮跟着走，读屏听不出当前选中了哪一条，只能靠记忆数按了几下；期望：像搜索面板一样，选中项被读成「第几条 / 命令名」，方向键移动时跟着报。
+**产品经理**：做。第 285 轮已给侧栏搜索结果补上 `aria-activedescendant`，命令面板是同一类「焦点留在输入框、方向键换高亮」的交互，却一直没告诉读屏选中项；只补无障碍语义，不改搜索、排序、↑↓ 与回车执行，符合「安静、快」，不碰「暂不做」。
+**前端**：`features/commands/CommandPalette.tsx` 的输入框改为组合框语义（`role="combobox"` / `aria-autocomplete="list"` / `aria-expanded` / `aria-controls="palette-list"` / `aria-activedescendant`），结果列表加 `id`，每个选项加 `palette-opt-<命令 id>`；当前高亮项由既有 `index` 推出，无结果时移除引用，避免指向不存在的节点。风险：仅影响无障碍树与 DOM id；键盘执行、鼠标悬停、最近使用分组与空结果提示不变。工作量 S。
+**后端**：无（未改 `src-tauri/`）。工作量无。
+**裁决**：做。
+**改动**：`src/features/commands/CommandPalette.tsx`（+16/−1 行）。
+**构建**：`bun run build` 通过（含 tsc，vite 1.29s，仅既有的 chunk 体积与动态导入提示）；未改 `src-tauri/`，未跑 cargo test。
+**CDP 实测（整页重载后，工作区 `D:\clawWorkSpeace\新建文件夹`，当前 `CaseTest.md`）**：
+- 改前代码中输入框只有 `aria-label`，没有 `role` / `aria-controls` / `aria-activedescendant`，选项也没有 id。
+- 改后 `Ctrl+Shift+P`：输入框 `role="combobox"`、`aria-autocomplete="list"`、`aria-expanded="true"`、`aria-controls="palette-list"`，`aria-activedescendant="palette-opt-new"`，对应选项「新建笔记」为 `aria-selected="true"`，焦点仍在输入框，列表 43 条。
+- 按 ↓ 一次指向 `palette-opt-open-workspace`（「打开文件夹…」）、两次指向 `palette-opt-save`（「保存」），每步仅该选项 `aria-selected="true"`，高亮与引用同步。
+- 输入不存在的 `zzzqqq`：选项 0 条、`aria-expanded="false"`、`aria-activedescendant` 移除，视觉仍是「没有匹配的命令」。
+- Esc 关闭后命令面板移除，焦点回到正文 `.cm-content`；全程收集 `Runtime.exceptionThrown` / `Log.entryAdded`：0 error / warning。
+**人工复现**：开读屏 → `Ctrl+Shift+P` → 连按 ↓：读屏应念出当前高亮的命令名，而不是一直停在输入框；输入无结果关键词时不应再报旧命令；Esc 后焦点回正文。
+**清理**：命令面板已关闭，标签仅 `CaseTest.md`、所见、侧栏「文件」；未打开或修改任何笔记；临时 CDP 脚本 `C:\Users\EDY\AppData\Local\Temp\cdp336.mjs` 已删除。
+**检验计数**：5（下一轮 337 做检验轮，回归 332–336）。
+
+
 ## 第 335 轮 · 2026-11-02 12:27
 **用户需求**：场景：同时开着根目录和子目录下的两篇 `README.md`，打开右侧「对照」想选其中一篇。现在的问题：下拉里两行都只写 `README.md`，完全分不清谁是谁，只能猜一个再关掉重开。期望：重名时像标签栏一样带上一段所在目录。
 **产品经理**：做。第 274 轮只解决了标签栏同名笔记的区分，分屏对照的选择下拉仍只显示文件名，是同一批多标签使用流里的真实粗糙处；只补选项文案，不改对照渲染、切换或分屏布局，符合「安静、快」，不碰「暂不做」。

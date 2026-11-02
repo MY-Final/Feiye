@@ -114,6 +114,10 @@ export function CommandPalette() {
 
   if (!open) return null;
 
+  // 焦点始终留在输入框，用组合框语义把当前高亮项报给读屏；
+  // 没有结果时移除引用，免得指向不存在的选项。
+  const activeId = visible[index]?.id ?? null;
+
   const close = () => {
     closePalette();
     const previous = restoreFocus.current;
@@ -174,10 +178,20 @@ export function CommandPalette() {
           value={query}
           placeholder="输入命令，↑↓ 选择，回车执行"
           aria-label="搜索命令"
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={visible.length > 0}
+          aria-controls="palette-list"
+          aria-activedescendant={activeId ? `palette-opt-${activeId}` : undefined}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={onKeyDown}
         />
-        <ul className="palette-list" role="listbox" aria-label="命令列表">
+        <ul
+          id="palette-list"
+          className="palette-list"
+          role="listbox"
+          aria-label="命令列表"
+        >
           {visible.map((command, position) => (
             <Fragment key={command.id}>
               {groupHeaders[position] ? (
@@ -187,6 +201,7 @@ export function CommandPalette() {
               ) : null}
               <li>
                 <button
+                  id={`palette-opt-${command.id}`}
                   type="button"
                   role="option"
                   aria-selected={position === index}
