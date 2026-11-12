@@ -22,14 +22,14 @@
 ## 第 372 轮 · 2026-11-12 11:45
 **用户需求**：场景：同时参考十几篇笔记。现在的问题：`MAX_TABS = 12` 是硬编码，超出时挤掉最久未用的标签，用户无法调整。期望：设置里提供 8 / 12 / 20 三档，默认 12；调低后不立刻关闭已开的标签，只在下一次打开新标签时按新上限收敛（沿用现有「已关闭最久未用的标签…」提示）；偏好持久化，重启保留。
 **产品经理**：做。上限开放是「安静但可控」的偏好细化，不改变挤占策略、不引入依赖，契合本地优先边界；三档穷举避免用户设成 0 / 1 导致编辑器不可用。
-**前端**：`stores/settings.ts` 的 `Preferences` 新增 `maxTabs`（默认 12），`normalizePreferences` 仅接受 8 / 12 / 20、其它值回落 12，`reset()` 随 `DEFAULT_PREFERENCES` 回 12；导出 `MAX_TABS_OPTIONS`。`stores/tabs.ts` 的 `addTab` 用当前上限判断，超出时先挤掉最久未用的一个，若上限被调低则 `while` 一次收敛到新上限，仍只返回最早被挤掉的标签；`MAX_TABS` 由 `const` 改为 `export let`，订阅 settings store 同步当前值，供 `workspace-actions.ts` 的挤占提示显示真实上限（不新增文件改动）。`SettingsDialog.tsx`「视图与预览」新增「最多同时打开」分段控件，8 / 12 / 20 即时写入偏好。风险：上限调低后一次打开可能连关多个标签，提示只点名最早的一个；`export let` 依赖 ESM 活绑定（Rollup / 同 chunk 内成立）。工作量 S。
+**前端**：`stores/settings.ts` 的 `Preferences` 新增 `maxTabs`（默认 12），`normalizePreferences` 仅接受 8 / 12 / 20、其它值回落 12，`reset()` 随 `DEFAULT_PREFERENCES` 回 12；导出 `MAX_TABS_OPTIONS`。`stores/tabs.ts` 的 `addTab` 用当前上限判断，超出时仍只挤掉最久未用的一个；上限被调低时不一次清掉一批，之后每次打开最多挤掉一个、逐步收敛，避免一次关闭多篇（可能含未保存内容）。`MAX_TABS` 由 `const` 改为 `export let`，初始值取 settings store 当前偏好并订阅后续变化，供 `workspace-actions.ts` 的挤占提示显示真实上限（不新增文件改动）。`SettingsDialog.tsx`「视图与预览」新增「最多同时打开」分段控件，8 / 12 / 20 即时写入偏好。风险：上限调低后不会立刻收敛，需要再打开几次才逐步降到新上限；`export let` 依赖 ESM 活绑定（Rollup / 同 chunk 内成立）。工作量 S。
 **后端**：无（未改 `src-tauri/`）。工作量无。
 **裁决**：做。
 **改动**：`src/stores/settings.ts`（+11 行）、`src/stores/tabs.ts`（+21/−5 行）、`src/features/settings/SettingsDialog.tsx`（+18 行），共 3 个源码文件；另更新 `README.md`（多标签一句）、`docs/loop/state.md`、`docs/loop/backlog.md`、`docs/loop/requirements.md`。
 **构建**：`bun run build` 通过（含 tsc，vite 1.29s，仅既有的 chunk 体积与动态导入提示）；未改 `src-tauri/`，未跑 cargo test。
 **用例（`$HOME/.bun/bin/bun -e` 直调，全部符合预期）**：
 - `normalizePreferences`：缺省 / `null` / `{maxTabs:7}` / `{maxTabs:"8"}` / `{maxTabs:Infinity}` → 12；`{maxTabs:8}` → 8；`{maxTabs:12}` → 12；`{maxTabs:20}` → 20；`DEFAULT_PREFERENCES.maxTabs` = 12。
-- 标签收敛（stub `window.setTimeout`）：默认上限 12 时打开第 13 篇挤掉 `n1`、仍 12 个；上限改 8 后已开的 12 个不立即关闭，下一次打开挤掉 `n2` 并一次收敛到 8 个（最旧为 `n7`）；上限改 20 后再开两篇不挤占（10 个）。
+- 标签收敛（stub `window.setTimeout`）：默认上限 12 时打开第 13 篇挤掉 `n1`、仍 12 个；上限改 8 后已开的 12 个不立即关闭，下一次打开只挤掉最旧的一个、变为 12 个，继续打开才逐步降到 8 个；上限改 20 后再开两篇不挤占。
 - 活绑定：namespace 导入下 `MAX_TABS` 随设置从 12 → 8 → 20 同步。
 **测试步骤（CDP 不可用，9222 未运行，未做 CDP 实测；以下为人工复现）**：
 - 打开「设置 → 视图与预览」，应看到「最多同时打开」三档分段控件，默认停在「12 个」；键盘 ←/→ 移动焦点、回车切换。

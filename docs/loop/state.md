@@ -26,7 +26,7 @@
 
 ## 本窗口进展（2026-11-12 10:45– ）
 
-- 第 372 轮：标签上限可在设置中调整——`MAX_TABS = 12` 原先硬编码，用户无从调整。`stores/settings.ts` 新增 `maxTabs` 偏好（默认 12，加载时只接受 8 / 12 / 20，其它值回落 12，随偏好持久化，恢复默认回 12），并导出 `MAX_TABS_OPTIONS`；`stores/tabs.ts` 的 `addTab` 改用当前上限，上限调低时在下一次打开一次收敛（仍返回最早被挤掉的标签），`MAX_TABS` 改为随偏好同步的导出（订阅 settings store），挤占提示据此显示当前上限；`SettingsDialog.tsx`「视图与预览」新增「最多同时打开」8 / 12 / 20 三档分段控件（复用 `SlidingSegmented`），说明「超出时关闭最久未用的标签，下次打开时生效」，修改即时生效。构建通过（含 tsc，vite 1.29s，仅既有的 chunk 体积与动态导入提示）；bun 直调 `normalizePreferences` 8 组用例与切换上限后的标签收敛模拟均符合预期；未改 `src-tauri/`。CDP 不可用（9222 未运行），人工验证步骤见 backlog。
+- 第 372 轮：标签上限可在设置中调整——`MAX_TABS = 12` 原先硬编码，用户无从调整。`stores/settings.ts` 新增 `maxTabs` 偏好（默认 12，加载时只接受 8 / 12 / 20，其它值回落 12，随偏好持久化，恢复默认回 12），并导出 `MAX_TABS_OPTIONS`；`stores/tabs.ts` 的 `addTab` 改用当前上限，超出时仍只挤掉最久未用的一个；上限调低时不立即关闭已开标签，之后每次打开最多挤掉一个、逐步收敛（避免一次关闭多篇未保存内容），`MAX_TABS` 改为随偏好同步的导出（初始取当前偏好并订阅 settings store），挤占提示据此显示当前上限；`SettingsDialog.tsx`「视图与预览」新增「最多同时打开」8 / 12 / 20 三档分段控件（复用 `SlidingSegmented`），说明「超出时关闭最久未用的标签，下次打开时生效」，修改即时生效。构建通过（含 tsc，vite 1.29s，仅既有的 chunk 体积与动态导入提示）；bun 直调 `normalizePreferences` 8 组用例符合预期；上限调低的逐步收敛未做自动化模拟；未改 `src-tauri/`。CDP 不可用（9222 未运行），人工验证步骤见 backlog。
 
 - 第 371 轮：导出 HTML 跟随当前主题——`EXPORT_STYLE` 原先写死浅色，深色主题下导出的文件与当前观感完全脱节。`Toolbar.tsx` 改为按主题生成样式：`EXPORT_PALETTE` 提供亮 / 暗两套配色（背景 / 文字、标题、链接、引用、行内代码与代码块、表格边框、分隔线；暗色取 `global.css` 的 `--bg` / `--text` / `--code-bg` / `--line` 等令牌值），`exportStyle(theme)` 拼出 CSS，`standaloneHtml` 新增 `theme` 参数；导出时用 `resolveTheme(设置 store 的 theme 偏好)` 解析亮暗（跟随系统按系统主题），不读瞬时 `data-theme`。`PRINT_STYLE` 补 `color:#22211d`，`buildPrintableHtml` 固定传 `"light"`，`Ctrl+P` / 导出 PDF 仍白底深字。另补 Shiki 双主题切换与 `pre.shiki` 底色，避免暗色导出里代码块深底深字。构建通过（含 tsc，vite 1.56s，仅既有的 chunk 体积与动态导入提示）；未改 `src-tauri/`。CDP 不可用（9222 未运行），人工验证步骤见 backlog。
 
