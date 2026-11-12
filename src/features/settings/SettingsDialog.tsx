@@ -4,11 +4,20 @@ import { getVersion } from "@tauri-apps/api/app";
 import { trapTab } from "../../components/Dialog";
 import { SlidingSegmented } from "../../components/SlidingSegmented";
 import { APP_NAME, APP_NAME_EN, APP_TAGLINE } from "../../lib/app-info";
-import { getSetting, setSetting } from "../../lib/tauri";
+import { checkCssBalance } from "../../lib/css-check";
+import {
+  clearHistory,
+  clearRecoveries,
+  getSetting,
+  setSetting,
+  storageStats,
+  type StorageStats,
+} from "../../lib/tauri";
 import { CUSTOM_CSS_LIMIT } from "../../lib/theme";
 import { VIEW_MODES } from "../../lib/view-modes";
 import {
   flushPreferences,
+  MAX_TABS_OPTIONS,
   PREFERENCE_LIMITS,
   useSettingsStore,
   type DefaultView,
@@ -24,12 +33,19 @@ import {
 import { changeViewMode } from "../workspace/workspace-actions";
 import "./settings.css";
 
-type Category = "appearance" | "editing" | "view" | "shortcuts" | "about";
+type Category =
+  | "appearance"
+  | "editing"
+  | "view"
+  | "storage"
+  | "shortcuts"
+  | "about";
 
 const CATEGORIES: { id: Category; label: string }[] = [
   { id: "appearance", label: "外观排版" },
   { id: "editing", label: "编辑行为" },
   { id: "view", label: "视图与预览" },
+  { id: "storage", label: "存储" },
   { id: "shortcuts", label: "快捷键" },
   { id: "about", label: "关于" },
 ];
@@ -65,6 +81,11 @@ const RECOVERY_OPTIONS = [
   { value: 4000, label: "4 秒（默认）" },
   { value: 8000, label: "8 秒" },
 ];
+
+const MAX_TAB_COUNT_OPTIONS = MAX_TABS_OPTIONS.map((count) => ({
+  value: String(count),
+  label: `${count} 个`,
+}));
 
 const DEFAULT_VIEW_OPTIONS: { value: DefaultView; label: string }[] = [
   { value: "last", label: "上次使用的视图" },
@@ -317,6 +338,163 @@ function AboutPanel() {
   );
 }
 
+/** 字节数按 KB / MB / GB 显示，保留一位小数。 */
+function formatBytes(bytes: number): string {
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  return `${Math.max(bytes / 1024, 0.1).toFixed(1)} KB`;
+}
+
+function StoragePanel() {
+  const [stats, setStats] = useState<StorageStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const sectionRef = useRef<HTMLElement>(null);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      setStats(await storageStats());
+    } catch {
+      // 读不到时保留上一次的数字，只把当前状态说清楚。
+      useUiStore.getState().toast("无法读取存储统计", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  const summary = (files?: number, bytes?: number) => {
+    if (loading) return "统计中…";
+    if (!stats || files === undefined || bytes === undefined) {
+      return "无法读取存储统计";
+    }
+    return files === 0 ? "0 份" : `${files} 份 · ${formatBytes(bytes)}`;
+  };
+
+  const run = async (
+    action: () => Promise<number>,
+    done: (removed: number) => string,
+  ) => {
+    setBusy(true);
+    try {
+      useUiStore.getState().toast(done(await action()));
+    } catch {
+      useUiStore.getState().toast("清理失败，存储统计未变", "error");
+    } finally {
+      await load();
+      setBusy(false);
+      // 清理期间三个按钮都禁用：确认框关闭时焦点被还给触发按钮，
+      // 随即因禁用被浏览器丢回页面。落定后把焦点交回存储区，
+      // 键盘用户不必从设置顶部重走；用户已移到别处就不抢。
+      requestAnimationFrame(() => {
+        if (document.activeElement !== document.body) return;
+        const next = sectionRef.current?.querySelector<HTMLButtonElement>(
+          "button:not(:disabled)",
+        );
+        (next ?? sectionRef.current)?.focus();
+      });
+    }
+  };
+
+  const confirmThen = async (
+    title: string,
+    message: string,
+    action: () => Promise<number>,
+    done: (removed: number) => string,
+  ) => {
+    const choice = await useUiStore.getState().ask({
+      title,
+      message,
+      buttons: [
+        { label: "清理", value: "clear", tone: "danger" },
+        { label: "取消", value: "cancel" },
+      ],
+    });
+    if (choice === "clear") void run(action, done);
+  };
+
+  const emptyHistory = !stats || stats.historyFiles === 0;
+  const emptyRecovery = !stats || stats.recoveryFiles === 0;
+
+  return (
+    <section
+      ref={sectionRef}
+      tabIndex={-1}
+      aria-label="存储"
+      className="settings-section"
+    >
+      <h3 className="settings-section-title">存储</h3>
+
+      <Row label="文档快照" hint="每篇笔记最多保留 20 份，删除后不可恢复">
+        <span className="settings-storage-count">
+          {summary(stats?.historyFiles, stats?.historyBytes)}
+        </span>
+      </Row>
+
+      <Row
+        label="崩溃恢复副本"
+        hint="未保存内容的恢复副本，清空不影响已保存的正文"
+      >
+        <span className="settings-storage-count">
+          {summary(stats?.recoveryFiles, stats?.recoveryBytes)}
+        </span>
+      </Row>
+
+      <div className="settings-storage-actions" role="group" aria-label="清理存储">
+        <button
+          type="button"
+          className="btn ghost"
+          disabled={busy || emptyHistory}
+          onClick={() =>
+            void confirmThen(
+              "清理 30 天前的快照？",
+              "将删除 30 天前的历史快照，不可恢复。",
+              () => clearHistory(30),
+              (removed) => `已清理 ${removed} 份快照`,
+            )
+          }
+        >
+          清理 30 天前的快照
+        </button>
+        <button
+          type="button"
+          className="btn danger"
+          disabled={busy || emptyHistory}
+          onClick={() =>
+            void confirmThen(
+              "清空全部历史快照？",
+              "全部笔记的历史快照都会被删除，不可恢复。",
+              () => clearHistory(),
+              (removed) => `已清理 ${removed} 份快照`,
+            )
+          }
+        >
+          清空全部快照
+        </button>
+        <button
+          type="button"
+          className="btn ghost"
+          disabled={busy || emptyRecovery}
+          onClick={() =>
+            void confirmThen(
+              "清空全部恢复副本？",
+              "仅删除崩溃恢复副本，不影响已保存的笔记正文。",
+              () => clearRecoveries(),
+              (removed) => `已清理 ${removed} 份恢复副本`,
+            )
+          }
+        >
+          清空全部恢复副本
+        </button>
+      </div>
+    </section>
+  );
+}
+
 export function SettingsDialog() {
   const open = useUiStore((state) => state.settingsOpen);
   const closeSettings = useUiStore((state) => state.closeSettings);
@@ -361,6 +539,9 @@ export function SettingsDialog() {
   }, [category]);
 
   if (!open) return null;
+
+  // 只提示、不拦保存：浏览器对不配平的 CSS 会静默丢弃，先让用户看见。
+  const cssError = checkCssBalance(preferences.customCss);
 
   const close = () => {
     void flushPreferences();
@@ -612,8 +793,20 @@ export function SettingsDialog() {
                     spellCheck={false}
                     value={preferences.customCss}
                     placeholder="/* 在这里写自定义样式 */"
+                    aria-invalid={cssError ? true : undefined}
+                    aria-describedby={cssError ? "settings-custom-css-error" : undefined}
                     onChange={(event) => changeCustomCss(event.target.value)}
                   />
+                  {cssError ? (
+                    <p
+                      id="settings-custom-css-error"
+                      className="settings-custom-css-error"
+                      role="alert"
+                    >
+                      第 {cssError.line} 行第 {cssError.column} 列：
+                      {cssError.message}
+                    </p>
+                  ) : null}
                   <p className="settings-custom-css-count">
                     {preferences.customCss.length} / {CUSTOM_CSS_LIMIT} 字符
                     {preferences.customCss.length >= CUSTOM_CSS_LIMIT
@@ -739,10 +932,24 @@ export function SettingsDialog() {
                     <span aria-hidden="true" />
                   </button>
                 </Row>
+
+                <Row
+                  label="最多同时打开"
+                  hint="超出时关闭最久未用的标签，下次打开时生效"
+                >
+                  <SlidingSegmented
+                    options={MAX_TAB_COUNT_OPTIONS}
+                    value={String(preferences.maxTabs)}
+                    ariaLabel="最多同时打开的标签数"
+                    onChange={(value) => update({ maxTabs: Number(value) })}
+                  />
+                </Row>
               </section>
             ) : null}
 
             {category === "shortcuts" ? <ShortcutPanel /> : null}
+
+            {category === "storage" ? <StoragePanel /> : null}
 
             {category === "about" ? <AboutPanel /> : null}
           </div>

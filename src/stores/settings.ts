@@ -37,6 +37,8 @@ export interface Preferences {
   lineNumbers: boolean;
   hideFileExtensions: boolean;
   defaultView: DefaultView;
+  /** 同时打开的标签上限；只接受 8 / 12 / 20，默认 12。 */
+  maxTabs: number;
   /** 用户自定义 CSS，作用于编辑器与预览；空字符串表示关闭。 */
   customCss: string;
   /** 命令面板里最近用过的命令 id，最近的在最前；最多 8 条。 */
@@ -55,9 +57,13 @@ export const DEFAULT_PREFERENCES: Preferences = {
   lineNumbers: true,
   hideFileExtensions: false,
   defaultView: "last",
+  maxTabs: 12,
   customCss: "",
   recentCommands: [],
 };
+
+/** 标签上限的可选档位；其它值在加载时回落到默认值。 */
+export const MAX_TABS_OPTIONS = [8, 12, 20] as const;
 
 export const PREFERENCE_LIMITS = {
   fontSize: { min: 13, max: 20, step: 1 },
@@ -148,6 +154,11 @@ export function normalizePreferences(value: unknown): Preferences {
     defaultView: isDefaultView(source.defaultView)
       ? source.defaultView
       : DEFAULT_PREFERENCES.defaultView,
+    maxTabs:
+      typeof source.maxTabs === "number" &&
+      (MAX_TABS_OPTIONS as readonly number[]).includes(source.maxTabs)
+        ? source.maxTabs
+        : DEFAULT_PREFERENCES.maxTabs,
     customCss:
       typeof source.customCss === "string"
         ? source.customCss.slice(0, CUSTOM_CSS_LIMIT)

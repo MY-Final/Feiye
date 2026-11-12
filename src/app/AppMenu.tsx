@@ -10,6 +10,7 @@ import { useUiStore } from "../stores/ui";
 import { useWorkspaceStore } from "../stores/workspace";
 import {
   APP_COMMANDS,
+  COMMAND_GROUPS,
   disabledReason,
   rememberCommand,
   type AppCommand,
@@ -17,17 +18,6 @@ import {
   type CommandGroup,
 } from "../features/commands/commands";
 import "./AppMenu.css";
-
-const GROUPS: { id: CommandGroup; label: string }[] = [
-  { id: "file", label: "文件" },
-  { id: "edit", label: "编辑" },
-  { id: "paragraph", label: "段落" },
-  { id: "format", label: "格式" },
-  { id: "nav", label: "导航" },
-  { id: "view", label: "视图" },
-  { id: "find", label: "查找" },
-  { id: "app", label: "应用" },
-];
 
 const MENU_WIDTH = 236;
 
@@ -82,7 +72,7 @@ export function AppMenu({
     sidebarVisible,
   };
 
-  const groups = GROUPS.filter(
+  const groups = COMMAND_GROUPS.filter(
     (group) => !onlyGroups || onlyGroups.includes(group.id),
   )
     .map((group) => ({

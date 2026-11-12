@@ -19,6 +19,8 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .manage(WorkspaceState::default())
         .manage(watcher::WatchState::default())
+        // 查询代号：新查询让上一次全量扫描尽快退出。
+        .manage(commands::search::SearchState::default())
         // 工作区作用域的本地图片：只能读取当前工作区内白名单格式的图片。
         .register_uri_scheme_protocol("feiyeimg", |ctx, request| {
             let root = ctx.app_handle().state::<WorkspaceState>().root().ok();
@@ -30,7 +32,10 @@ pub fn run() {
             commands::workspace::current_workspace,
             commands::workspace::close_workspace,
             commands::workspace::list_dir,
+            commands::workspace::list_markdown_files,
+            commands::search::next_search_generation,
             commands::search::search_workspace,
+            commands::search::replace_in_files,
             watcher::watch_workspace,
             watcher::unwatch_workspace,
             commands::file::read_file,
@@ -50,6 +55,10 @@ pub fn run() {
             commands::history::save_history,
             commands::history::list_history,
             commands::history::read_history,
+            commands::history::storage_stats,
+            commands::history::delete_history,
+            commands::history::clear_history,
+            commands::history::clear_recoveries,
             commands::image_asset::save_image_asset,
             commands::image_asset::read_image_data_url,
         ])

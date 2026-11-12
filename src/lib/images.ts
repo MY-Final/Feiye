@@ -73,16 +73,32 @@ export function resolveMarkdownImageSrc(
   return { kind: "local", url: localUrl(root, relative) };
 }
 
-/** 统计 HTML 里指向本地文件的图片：这类地址离开应用后通常无法显示。 */
-export function countLocalImages(html: string): number {
+export interface ContentRisks {
+  /** 指向 http(s) 的外链图片：收件人网络受限时可能失效。 */
+  external: number;
+  /** 仍是代码块的 Mermaid 图表：导出 / 粘贴后不会被画成图。 */
+  mermaid: number;
+  /** 未成功内联的本地图片（含读取失败与越界路径）：离开应用无法显示。 */
+  local: number;
+}
+
+/**
+ * 导出 / 复制前的内容体检：只做一次 DOM 扫描，不引入额外解析器。
+ * Mermaid 代码块经 Shiki 高亮后 class 已不再是 `language-mermaid`，
+ * 数量由 Worker 的渲染结果给出（见 `renderMarkdownForExport`）。
+ */
+export function scanContentRisks(html: string, mermaid = 0): ContentRisks {
   const template = document.createElement("template");
   template.innerHTML = html;
-  let count = 0;
+  let external = 0;
+  let local = 0;
   template.content.querySelectorAll("img[src]").forEach((img) => {
     const src = img.getAttribute("src")?.trim() ?? "";
-    if (src && !/^(?:https?:|data:|blob:|\/\/)/i.test(src)) count += 1;
+    if (!src) return;
+    if (/^https?:\/\//i.test(src)) external += 1;
+    else if (!/^(?:data:|blob:|\/\/)/i.test(src)) local += 1;
   });
-  return count;
+  return { external, mermaid, local };
 }
 
 /** 把预览 HTML 中的相对图片改成受工作区限制的协议地址。 */
@@ -110,6 +126,8 @@ export function rewritePreviewImages(
       return;
     }
 
+    // 预览里拖动改宽度时要按 Markdown 原文的地址回写，先把它留在节点上。
+    img.setAttribute("data-md-src", src);
     img.setAttribute("src", resolved.url);
     img.setAttribute("loading", "lazy");
     img.setAttribute("decoding", "async");

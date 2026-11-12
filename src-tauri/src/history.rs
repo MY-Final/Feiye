@@ -43,7 +43,7 @@ fn fnv1a64(value: &str) -> u64 {
     hash
 }
 
-fn now_ms() -> u64 {
+pub(crate) fn now_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis() as u64)
@@ -215,6 +215,71 @@ pub fn read_history(
     })
 }
 
+/// 递归统计历史目录下的快照文件数与总字节数（只计 `.md`）。
+pub fn storage_stats(dir: &Path) -> (u64, u64) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return (0, 0);
+    };
+    let mut files = 0;
+    let mut bytes = 0;
+    for entry in entries.filter_map(Result::ok) {
+        let path = entry.path();
+        if path.is_dir() {
+            let (inner_files, inner_bytes) = storage_stats(&path);
+            files += inner_files;
+            bytes += inner_bytes;
+        } else if path.extension().and_then(|ext| ext.to_str()) == Some("md") {
+            if let Ok(meta) = entry.metadata() {
+                files += 1;
+                bytes += meta.len();
+            }
+        }
+    }
+    (files, bytes)
+}
+
+/// 删除单条历史快照；文件已不存在视为成功。
+pub fn delete_history(dir: &Path, root: &Path, rel_path: &str, id: &str) -> Result<(), AppError> {
+    let doc_dir = document_dir(dir, root, rel_path)?;
+    let path = snapshot_path(&doc_dir, id)?;
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(AppError::from(error)),
+    }
+}
+
+/// 删除早于 `before_ms` 的快照；`None` 清空全部。返回成功删除数。
+/// 文件名无法解析时间戳的文件保持不变，删除失败（占用、权限）跳过。
+pub fn clear_history(dir: &Path, before_ms: Option<u64>) -> usize {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return 0;
+    };
+    let mut removed = 0;
+    for entry in entries.filter_map(Result::ok) {
+        let path = entry.path();
+        if path.is_dir() {
+            removed += clear_history(&path, before_ms);
+            continue;
+        }
+        if path.extension().and_then(|ext| ext.to_str()) != Some("md") {
+            continue;
+        }
+        let remove = match before_ms {
+            None => true,
+            Some(cutoff) => path
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .and_then(parse_id)
+                .is_some_and(|saved_at| saved_at < cutoff),
+        };
+        if remove && fs::remove_file(&path).is_ok() {
+            removed += 1;
+        }
+    }
+    removed
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -318,6 +383,49 @@ mod tests {
         // 无关文档不动，重复迁移是空操作。
         assert_eq!(latest("c.md").as_deref(), Some("c"));
         assert_eq!(move_documents(&data, &root, &pair), 0);
+    }
+
+    #[test]
+    fn reports_storage_and_deletes_single_snapshot() {
+        let (_root_dir, root, _data_dir, data) = workspace();
+        push_snapshot(&data, &root, "a.md", "first").unwrap();
+        push_snapshot(&data, &root, "notes/b.md", "second").unwrap();
+
+        let (files, bytes) = storage_stats(&data);
+        assert_eq!(files, 2);
+        assert!(bytes > 0);
+
+        let list = list_history(&data, &root, "a.md").unwrap();
+        delete_history(&data, &root, "a.md", &list[0].id).unwrap();
+        assert!(list_history(&data, &root, "a.md").unwrap().is_empty());
+        assert_eq!(list_history(&data, &root, "notes/b.md").unwrap().len(), 1);
+        // 文件已不存在仍视为成功；非法编号与路径仍报错。
+        delete_history(&data, &root, "a.md", &list[0].id).unwrap();
+        assert!(delete_history(&data, &root, "a.md", "../a").is_err());
+        assert!(delete_history(&data, &root, "../a.md", &list[0].id).is_err());
+    }
+
+    #[test]
+    fn clears_history_by_cutoff() {
+        let (_root_dir, root, _data_dir, data) = workspace();
+        for (rel, text) in [("a.md", "a1"), ("notes/b.md", "b1")] {
+            push_snapshot(&data, &root, rel, text).unwrap();
+        }
+
+        // 截止点在所有快照之前：一份都不删。
+        assert_eq!(clear_history(&data, Some(1)), 0);
+        assert_eq!(storage_stats(&data).0, 2);
+
+        // 未来截止点：全部删除。
+        assert_eq!(clear_history(&data, Some(now_ms() + 60_000)), 2);
+        assert_eq!(storage_stats(&data).0, 0);
+
+        // Some(0) 只删早于 1970 的快照（一份都不删）；None 才清空全部。
+        push_snapshot(&data, &root, "a.md", "a2").unwrap();
+        assert_eq!(clear_history(&data, Some(0)), 0);
+        assert_eq!(storage_stats(&data).0, 1);
+        assert_eq!(clear_history(&data, None), 1);
+        assert_eq!(storage_stats(&data).0, 0);
     }
 
     #[test]

@@ -83,6 +83,11 @@ export function listDir(relPath: string): Promise<Entry[]> {
   return invoke<Entry[]>("list_dir", { relPath });
 }
 
+/** 递归列出当前工作区的 Markdown 文件（只读目录，不读内容）。 */
+export function listMarkdownFiles(): Promise<Entry[]> {
+  return invoke<Entry[]>("list_markdown_files");
+}
+
 export function readFile(relPath: string): Promise<FileContent> {
   return invoke<FileContent>("read_file", { relPath });
 }
@@ -229,12 +234,56 @@ export interface SearchHit {
   text: string;
 }
 
+/** 一次搜索的结果；`cancelled` 为真表示结果返回前已发起新查询，应直接丢弃。 */
+export interface SearchResponse {
+  hits: SearchHit[];
+  cancelled: boolean;
+}
+
+/** 推进搜索代号：新查询会让上一次全量扫描在下一个文件前退出。 */
+export function nextSearchGeneration(): Promise<number> {
+  return invoke<number>("next_search_generation");
+}
+
 /** 在工作区所有 Markdown 里按行搜索，大小写不敏感。 */
 export function searchWorkspace(
   query: string,
-  limit?: number,
-): Promise<SearchHit[]> {
-  return invoke<SearchHit[]>("search_workspace", { query, limit });
+  limit: number,
+  generation: number,
+): Promise<SearchResponse> {
+  return invoke<SearchResponse>("search_workspace", { query, limit, generation });
+}
+
+export interface FileReplaceResult {
+  relPath: string;
+  /** 这篇里实际替换的处数。 */
+  replaced: number;
+  /** 有值表示这篇失败，其它文件不受影响。 */
+  error?: string;
+}
+
+/** 批量替换汇总，供确认后的 Toast 与失败列表使用。 */
+export interface ReplaceReport {
+  files: FileReplaceResult[];
+  changedFiles: number;
+  totalReplaced: number;
+  failedFiles: number;
+}
+
+/**
+ * 在工作区里按字面量批量替换（大小写不敏感）。
+ * 只处理传入的 Markdown 相对路径，写入走原子替换，逐文件报告结果。
+ */
+export function replaceInFiles(
+  relPaths: string[],
+  query: string,
+  replacement: string,
+): Promise<ReplaceReport> {
+  return invoke<ReplaceReport>("replace_in_files", {
+    relPaths,
+    query,
+    replacement,
+  });
 }
 
 export interface HistoryEntry {
@@ -263,4 +312,30 @@ export function readHistory(
   id: string,
 ): Promise<HistoryRevision> {
   return invoke<HistoryRevision>("read_history", { relPath, id });
+}
+
+export function deleteHistory(relPath: string, id: string): Promise<void> {
+  return invoke<void>("delete_history", { relPath, id });
+}
+
+export interface StorageStats {
+  historyFiles: number;
+  historyBytes: number;
+  recoveryFiles: number;
+  recoveryBytes: number;
+}
+
+/** 历史快照与恢复副本占用的文件数与字节数。 */
+export function storageStats(): Promise<StorageStats> {
+  return invoke<StorageStats>("storage_stats");
+}
+
+/** 删除早于 days 天的历史快照；不传则清空全部，返回删除数量。 */
+export function clearHistory(beforeDays?: number): Promise<number> {
+  return invoke<number>("clear_history", { beforeDays });
+}
+
+/** 清空全部崩溃恢复副本，返回删除数量。 */
+export function clearRecoveries(): Promise<number> {
+  return invoke<number>("clear_recoveries");
 }

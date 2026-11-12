@@ -38,6 +38,15 @@ import {
   saveDocumentAs,
 } from "../workspace/workspace-actions";
 
+/**
+ * 打开「快捷键速查」浮层的事件名。注册表与浮层互相需要对方的导出，
+ * 用事件解耦，避免模块循环引用。
+ */
+export const SHORTCUT_SHEET_EVENT = "feiye:shortcut-sheet";
+
+/** 打开「快速打开笔记」浮层的事件名，理由同上。 */
+export const QUICK_OPEN_EVENT = "feiye:quick-open";
+
 /** 命令是否可用只取决于这几项状态，菜单和命令面板共用同一份判断。 */
 export interface CommandContext {
   hasDoc: boolean;
@@ -59,6 +68,26 @@ export type CommandGroup =
   | "view"
   | "find"
   | "app";
+
+/**
+ * 分组文案与顺序的唯一来源：命令面板直接按它显示标题，
+ * 标题栏菜单按顶层菜单取子集。新增分组只改这一处。
+ */
+export const COMMAND_GROUPS: readonly { id: CommandGroup; label: string }[] = [
+  { id: "file", label: "文件" },
+  { id: "edit", label: "编辑" },
+  { id: "paragraph", label: "段落" },
+  { id: "format", label: "格式" },
+  { id: "nav", label: "导航" },
+  { id: "view", label: "视图" },
+  { id: "find", label: "查找" },
+  { id: "app", label: "应用" },
+];
+
+/** 按 id 查分组文案，顺序仍以 COMMAND_GROUPS 为准。 */
+export const COMMAND_GROUP_LABELS = Object.fromEntries(
+  COMMAND_GROUPS.map((group) => [group.id, group.label]),
+) as Record<CommandGroup, string>;
 
 /** 不可用时用来解释原因，菜单项的 title 直接取这里的描述。 */
 type CommandNeed = "workspace" | "doc" | "editable" | "back" | "forward";
@@ -356,6 +385,17 @@ const formatCommands: AppCommand[] = [
 /** 应用内动作的单一来源：命令面板按 available 过滤，标题栏菜单按分组展示。 */
 export const APP_COMMANDS: AppCommand[] = [
   {
+    id: "quick-open",
+    title: "快速打开笔记…",
+    hint: "按文件名跳转到当前工作区的笔记",
+    shortcut: "Ctrl+Shift+O",
+    keywords: "quick open file 快速打开 文件名 跳转",
+    group: "file",
+    need: "workspace",
+    enabled: hasWorkspace,
+    run: () => void window.dispatchEvent(new Event(QUICK_OPEN_EVENT)),
+  },
+  {
     id: "new",
     title: "新建笔记",
     hint: "在当前笔记旁",
@@ -632,6 +672,16 @@ export const APP_COMMANDS: AppCommand[] = [
     enabled: () => true,
     palette: false,
     run: () => useUiStore.getState().openPalette(),
+  },
+  {
+    id: "shortcut-sheet",
+    title: "快捷键速查",
+    hint: "按动作或按键查找快捷键",
+    shortcut: "Ctrl+/",
+    keywords: "shortcut key 快捷键 速查",
+    group: "app",
+    enabled: () => true,
+    run: () => void window.dispatchEvent(new Event(SHORTCUT_SHEET_EVENT)),
   },
   {
     id: "settings",

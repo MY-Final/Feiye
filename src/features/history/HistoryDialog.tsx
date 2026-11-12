@@ -7,13 +7,14 @@ import {
 
 import { trapTab } from "../../components/Dialog";
 import {
+  deleteHistory,
   listHistory,
   readHistory,
   type HistoryEntry,
 } from "../../lib/tauri";
 import { useDocumentStore } from "../../stores/document";
 import { useUiStore } from "../../stores/ui";
-import { setEditorDocument } from "../editor/editor-bridge";
+import { getEditorText, setEditorDocument } from "../editor/editor-bridge";
 import { requestPreview } from "../preview/preview-controller";
 import { changeViewMode } from "../workspace/workspace-actions";
 import "./history.css";
@@ -36,6 +37,34 @@ function formatSize(bytes: number): string {
   return `${(bytes / 1024).toFixed(1)} KB`;
 }
 
+export interface DiffLine {
+  type: "same" | "add" | "del";
+  text: string;
+}
+
+/**
+ * 轻量行级 diff：去掉公共前后缀，中间变化块先列删除行、再列新增行。
+ * 不做逐行配对，超长文档也只是同一路径，不会有平方级开销。
+ */
+export function diffLines(oldText: string, newText: string): DiffLine[] {
+  const before = oldText === "" ? [] : oldText.split("\n");
+  const after = newText === "" ? [] : newText.split("\n");
+  let head = 0;
+  while (head < before.length && head < after.length && before[head] === after[head]) head++;
+  let tailOld = before.length - 1;
+  let tailNew = after.length - 1;
+  while (tailOld >= head && tailNew >= head && before[tailOld] === after[tailNew]) {
+    tailOld--;
+    tailNew--;
+  }
+  const out: DiffLine[] = [];
+  for (let i = 0; i < head; i++) out.push({ type: "same", text: before[i] });
+  for (let i = head; i <= tailOld; i++) out.push({ type: "del", text: before[i] });
+  for (let i = head; i <= tailNew; i++) out.push({ type: "add", text: after[i] });
+  for (let i = tailOld + 1; i < before.length; i++) out.push({ type: "same", text: before[i] });
+  return out;
+}
+
 /**
  * 文档历史：列出每次保存留下的快照，右侧预览内容；
  * 「恢复此版本」把旧内容载入编辑器并标记未保存，由用户再按保存写盘。
@@ -50,9 +79,16 @@ export function HistoryDialog() {
   const [selected, setSelected] = useState<string | null>(null);
   const [content, setContent] = useState<string | null>(null);
   const [reading, setReading] = useState(false);
+  const [mode, setMode] = useState<"content" | "diff">("content");
+  /** 切到对比时给编辑器正文拍个快照；弹层开着时正文不会再变。 */
+  const [currentText, setCurrentText] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const restoreFocus = useRef<HTMLElement | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  /** 删除成功后要把焦点交给哪一项；-1 表示列表已空、交给「关闭」。 */
+  const pendingFocus = useRef<number | null>(null);
 
   useEffect(() => {
     if (!open || !docPath) return;
@@ -65,6 +101,9 @@ export function HistoryDialog() {
     setEntries([]);
     setSelected(null);
     setContent(null);
+    setMode("content");
+    setCurrentText(null);
+    setDeleting(false);
     listHistory(docPath)
       .then((list) => {
         if (cancelled) return;
@@ -88,6 +127,21 @@ export function HistoryDialog() {
   useEffect(() => {
     if (open) dialogRef.current?.focus();
   }, [open]);
+
+  // 删除后列表重建，按删前位置把焦点交给新的相邻项；
+  // 删空则落到「关闭」，不让焦点掉回后面的正文。
+  useEffect(() => {
+    const target = pendingFocus.current;
+    if (target === null) return;
+    pendingFocus.current = null;
+    if (target < 0) {
+      closeRef.current?.focus();
+      return;
+    }
+    listRef.current
+      ?.querySelector<HTMLElement>(`[data-history-index="${target}"]`)
+      ?.focus();
+  }, [entries, selected]);
 
   // 选中哪一版就读哪一版，避免一次把所有正文都塞进内存。
   useEffect(() => {
@@ -137,6 +191,18 @@ export function HistoryDialog() {
     if (previous?.isConnected) previous.focus();
   };
 
+  const showDiff = () => {
+    setCurrentText(getEditorText());
+    setMode("diff");
+  };
+
+  const diff =
+    mode === "diff" && content !== null && currentText !== null
+      ? diffLines(content, currentText)
+      : null;
+  const identical =
+    diff !== null && diff.every((line) => line.type === "same");
+
   const restore = async () => {
     if (!docPath || content === null) return;
     const choice = await useUiStore.getState().ask({
@@ -160,6 +226,42 @@ export function HistoryDialog() {
     useUiStore
       .getState()
       .toast("已载入历史版本，按 Ctrl+S 保存后写入磁盘");
+  };
+
+  const selectedEntry = entries.find((entry) => entry.id === selected) ?? null;
+  const selectedPosition = selectedEntry
+    ? entries.findIndex((entry) => entry.id === selectedEntry.id)
+    : -1;
+
+  const removeSelected = async () => {
+    if (!docPath || !selectedEntry || deleting) return;
+    const index = selectedPosition;
+    const choice = await useUiStore.getState().ask({
+      title: "删除这个历史版本？",
+      message: `${formatTime(selectedEntry.savedAt)} 的快照会被永久删除，删除后不可恢复。`,
+      buttons: [
+        { label: "删除", value: "delete", tone: "danger" },
+        { label: "取消", value: "cancel" },
+      ],
+    });
+    if (choice !== "delete") return;
+
+    setDeleting(true);
+    try {
+      await deleteHistory(docPath, selectedEntry.id);
+      const next = entries.filter((entry) => entry.id !== selectedEntry.id);
+      // 优先选中原位置的下一条；已是最后一条则退到上一条。
+      const nextIndex = Math.min(index, next.length - 1);
+      const neighbor = nextIndex >= 0 ? next[nextIndex] : null;
+      pendingFocus.current = neighbor ? nextIndex : -1;
+      setEntries(next);
+      setSelected(neighbor?.id ?? null);
+      useUiStore.getState().toast("已删除该历史版本");
+    } catch {
+      useUiStore.getState().toast("删除历史版本失败，请稍后再试");
+    } finally {
+      setDeleting(false);
+    }
   };
 
   // 历史最多 20 个版本，逐个 Tab 太慢：像大纲一样用方向键换版本，
@@ -205,7 +307,7 @@ export function HistoryDialog() {
       >
         <h2 className="modal-title">文档历史</h2>
         <p className="modal-message history-subtitle">
-          {docName ?? "当前文档"} · 每次保存自动留档，最多保留最近 20 份
+          {docName ?? "当前文档"} · 每次保存自动留档，最多保留最近 20 份，删除后不可恢复
         </p>
 
         {loading ? (
@@ -249,20 +351,80 @@ export function HistoryDialog() {
               ))}
             </ul>
             <div className="history-preview" aria-label="版本内容预览">
-              {reading ? (
-                <div className="history-empty">读取中…</div>
-              ) : content !== null ? (
-                <pre className="history-text">{content}</pre>
-              ) : (
-                <div className="history-empty">选择左侧版本查看内容</div>
-              )}
+              <div className="segmented history-mode" role="group" aria-label="版本视图">
+                <button
+                  type="button"
+                  className={mode === "content" ? "active" : ""}
+                  aria-pressed={mode === "content"}
+                  onClick={() => setMode("content")}
+                >
+                  内容
+                </button>
+                <button
+                  type="button"
+                  className={mode === "diff" ? "active" : ""}
+                  aria-pressed={mode === "diff"}
+                  onClick={showDiff}
+                >
+                  对比当前
+                </button>
+              </div>
+              <div className="history-preview-body">
+                {reading ? (
+                  <div className="history-empty">读取中…</div>
+                ) : mode === "diff" ? (
+                  currentText === null || currentText.trim() === "" ? (
+                    <div className="history-empty">
+                      编辑器里还没有内容，无法对比。
+                    </div>
+                  ) : identical ? (
+                    <div className="history-empty">与当前内容一致。</div>
+                  ) : (
+                    <>
+                      <p className="history-diff-note">
+                        与编辑器当前内容对比 · <span className="is-add">+ 新增</span>{" "}
+                        / <span className="is-del">- 删除</span>
+                      </p>
+                      <pre
+                        className="history-text history-diff"
+                        role="region"
+                        aria-label="与编辑器当前内容对比"
+                      >
+                        {(diff ?? []).map((line, index) => (
+                          <span key={index} className={`history-diff-line is-${line.type}`}>
+                            {line.type === "add" ? "+ " : line.type === "del" ? "- " : "  "}
+                            {line.text}
+                          </span>
+                        ))}
+                      </pre>
+                    </>
+                  )
+                ) : content !== null ? (
+                  <pre className="history-text">{content}</pre>
+                ) : (
+                  <div className="history-empty">选择左侧版本查看内容</div>
+                )}
+              </div>
             </div>
           </div>
         )}
 
         <div className="modal-actions">
-          <button type="button" className="btn" onClick={close}>
+          <button type="button" className="btn" ref={closeRef} onClick={close}>
             关闭
+          </button>
+          <button
+            type="button"
+            className="btn danger"
+            disabled={!selectedEntry || deleting}
+            aria-label={
+              selectedEntry
+                ? `删除 ${formatTime(selectedEntry.savedAt)} 的版本`
+                : "删除此版本"
+            }
+            onClick={() => void removeSelected()}
+          >
+            {deleting ? "删除中…" : "删除此版本"}
           </button>
           <button
             type="button"

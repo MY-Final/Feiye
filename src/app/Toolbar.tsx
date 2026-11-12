@@ -31,15 +31,20 @@ import {
   existingNameError,
   nameCharError,
 } from "../features/workspace/workspace-actions";
-import { renderMarkdownToHtml } from "../features/preview/preview-controller";
+import {
+  renderMarkdownForExport,
+  renderMarkdownToHtml,
+} from "../features/preview/preview-controller";
 import { useDocumentStore } from "../stores/document";
 import { useEditorStore } from "../stores/editor";
+import { useSettingsStore } from "../stores/settings";
 import { useUiStore } from "../stores/ui";
 import { useWorkspaceStore } from "../stores/workspace";
 import { copyHtml } from "../lib/clipboard";
-import { countLocalImages, normalizeImagePath } from "../lib/images";
+import { normalizeImagePath, scanContentRisks } from "../lib/images";
 import { baseName, parentRel } from "../lib/paths";
 import { describeError } from "../lib/tauri";
+import { resolveTheme } from "../lib/theme";
 import { VIEW_MODES } from "../lib/view-modes";
 
 /** 把预览 HTML 中的工作区图片换成 data URL，超过上限或读取失败时保留原地址。 */
@@ -149,15 +154,25 @@ export async function copyActiveAsHtml(): Promise<void> {
   if (!usePreviewSelection && text === null) return;
 
   try {
-    const rendered = usePreviewSelection
-      ? (previewHtml ?? "")
-      : await renderMarkdownToHtml(text!);
+    let rendered: string;
+    let mermaid = 0;
+    if (usePreviewSelection) {
+      rendered = previewHtml ?? "";
+    } else {
+      const result = await renderMarkdownForExport(text!);
+      rendered = result.html;
+      mermaid = result.mermaid;
+    }
     const { html, inlined } = await inlineLocalImages(rendered, root, docPath);
     const copied = await copyHtml(html);
-    const localImages = countLocalImages(html);
+    const risks = scanContentRisks(html, mermaid);
     const notes: string[] = [];
     if (inlined > 0) notes.push(`${inlined} 张本地图片已内联`);
-    if (localImages > 0) notes.push(`${localImages} 张本地图片在应用外可能无法显示`);
+    if (risks.external > 0) notes.push(`${risks.external} 张外链图片可能失效`);
+    if (risks.mermaid > 0) notes.push(`${risks.mermaid} 个 Mermaid 未渲染`);
+    if (risks.local > 0) {
+      notes.push(`${risks.local} 张本地图片未内联，应用外可能无法显示`);
+    }
     const warning = notes.length > 0 ? `（${notes.join("；")}）` : "";
     const fromSelection = useSelection || usePreviewSelection;
     const plain = useSelection
@@ -195,26 +210,86 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
+type ExportTheme = "light" | "dark";
+
+// 导出用的两套配色，取值与应用的设计令牌一致（见 src/styles/global.css）。
+const EXPORT_PALETTE: Record<
+  ExportTheme,
+  {
+    bg: string;
+    text: string;
+    link: string;
+    quoteLine: string;
+    quoteText: string;
+    preBg: string;
+    codeBg: string;
+    line: string;
+  }
+> = {
+  light: {
+    bg: "#fdfdfb",
+    text: "#22211d",
+    link: "#3455a8",
+    quoteLine: "#c9c4b8",
+    quoteText: "#555",
+    preBg: "#f5f4ef",
+    codeBg: "#f0efe8",
+    line: "#ddd8cc",
+  },
+  dark: {
+    bg: "#151817",
+    text: "#e7e8e2",
+    link: "#b0cdd3",
+    quoteLine: "#3b433f",
+    quoteText: "#a0a69e",
+    preBg: "#1b201e",
+    codeBg: "#232a27",
+    line: "#2b312e",
+  },
+};
+
+/** 以设置 store 的偏好解析亮暗；跟随系统时按系统主题，不读瞬时 data-theme。 */
+function currentExportTheme(): ExportTheme {
+  return resolveTheme(useSettingsStore.getState().preferences.theme);
+}
+
 // 渲染结果是片段，直接落盘用浏览器打开会没有标题、中文可能乱码、排版全塌；
 // 这里补上完整文档与一份自足的排版样式，让导出的文件离开应用也像预览。
-const EXPORT_STYLE = `
-body{margin:0;background:#fdfdfb;color:#22211d;font:16px/1.75 "Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+function exportStyle(theme: ExportTheme): string {
+  const p = EXPORT_PALETTE[theme];
+  return `
+body{margin:0;background:${p.bg};color:${p.text};font:16px/1.75 "Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
 main{max-width:760px;margin:0 auto;padding:48px 24px 72px}
-h1,h2,h3,h4,h5,h6{font-family:Georgia,"Songti SC","SimSun",serif;line-height:1.35;margin:1.8em 0 .6em;font-weight:600}
+h1,h2,h3,h4,h5,h6{font-family:Georgia,"Songti SC","SimSun",serif;line-height:1.35;margin:1.8em 0 .6em;font-weight:600;color:${p.text}}
 h1{font-size:2em}h2{font-size:1.5em}h3{font-size:1.25em}
 p,ul,ol{margin:0 0 1em}li>p{margin:0}
-a{color:#3455a8}
+a{color:${p.link}}
 img{max-width:100%;height:auto}
-blockquote{margin:0 0 1em;padding:.2em 1em;border-left:3px solid #c9c4b8;color:#555}
-pre{overflow:auto;padding:14px 16px;border-radius:8px;background:#f5f4ef;font-size:13px;line-height:1.55}
+blockquote{margin:0 0 1em;padding:.2em 1em;border-left:3px solid ${p.quoteLine};color:${p.quoteText}}
+pre{overflow:auto;padding:14px 16px;border-radius:8px;background:${p.preBg};font-size:13px;line-height:1.55}
 code{font-family:Consolas,"SFMono-Regular",Menlo,monospace;font-size:.9em}
-:not(pre)>code{padding:.15em .35em;border-radius:4px;background:#f0efe8}
+:not(pre)>code{padding:.15em .35em;border-radius:4px;background:${p.codeBg}}
 table{border-collapse:collapse;margin:0 0 1em}
-th,td{border:1px solid #ddd8cc;padding:6px 10px}
-hr{border:0;border-top:1px solid #ddd8cc;margin:2em 0}
+th,td{border:1px solid ${p.line};padding:6px 10px}
+hr{border:0;border-top:1px solid ${p.line};margin:2em 0}
+details.frontmatter{margin:0 0 1.4em;padding:6px 12px;border:1px solid ${p.line};border-radius:6px;background:${p.preBg};color:${p.quoteText};font-size:12.5px}
+details.frontmatter>summary{cursor:pointer}
+details.frontmatter>pre{margin:8px 0 2px;padding:0;border:0;background:transparent;font-size:12px;white-space:pre-wrap}
+pre.shiki{background:${p.preBg}!important}
+${
+  theme === "dark"
+    ? `.shiki,.shiki span{color:var(--shiki-dark)!important;background-color:var(--shiki-dark-bg)!important;font-style:var(--shiki-dark-font-style)!important;font-weight:var(--shiki-dark-font-weight)!important;text-decoration:var(--shiki-dark-text-decoration)!important}`
+    : ""
+}
 `;
+}
 
-function standaloneHtml(title: string, body: string, extraStyle = ""): string {
+function standaloneHtml(
+  title: string,
+  body: string,
+  theme: ExportTheme,
+  extraStyle = "",
+): string {
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -222,7 +297,7 @@ function standaloneHtml(title: string, body: string, extraStyle = ""): string {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="generator" content="扉页">
 <title>${escapeHtml(title)}</title>
-<style>${EXPORT_STYLE}${extraStyle}</style>
+<style>${exportStyle(theme)}${extraStyle}</style>
 </head>
 <body>
 <main class="markdown-body">
@@ -233,10 +308,10 @@ ${body}
 `;
 }
 
-/** 打印版式：A4、白底、去掉应用里的页面边距，避免代码块与图片跨页断开。 */
+/** 打印版式：A4、白底深字，不受暗色主题影响，避免代码块与图片跨页断开。 */
 const PRINT_STYLE = `
 @page{size:A4;margin:18mm 16mm}
-body{background:#fff}
+body{background:#fff;color:#22211d}
 main{max-width:none;padding:0}
 a{color:inherit;text-decoration:none}
 pre{white-space:pre-wrap;word-break:break-word;break-inside:avoid}
@@ -272,7 +347,8 @@ export async function buildPrintableHtml(): Promise<string | null> {
     docPath,
   );
   const title = baseName(docPath).replace(/\.[^./\\]+$/, "") || "笔记";
-  return standaloneHtml(title, html, `${katexCss}
+  // 打印永远用浅色底，不跟随应用当前主题。
+  return standaloneHtml(title, html, "light", `${katexCss}
 ${PRINT_STYLE}`);
 }
 
@@ -326,6 +402,39 @@ export async function exportActiveAsHtml(): Promise<void> {
   const text = getEditorText();
   if (text === null) return;
 
+  // 渲染 / 内联可能因文档过大或读图失败而抛错，先兜住，别让导出静默失败。
+  let body = "";
+  let inlined = 0;
+  try {
+    const exported = await renderMarkdownForExport(text);
+    const result = await inlineLocalImages(exported.html, root, docPath);
+    body = result.html;
+    inlined = result.inlined;
+    // 导出前先体检：有风险才打扰，全部正常时保持原流程。
+    const risks = scanContentRisks(body, exported.mermaid);
+    const risky: string[] = [];
+    if (risks.external > 0) risky.push(`${risks.external} 张外链图片可能失效`);
+    if (risks.mermaid > 0) risky.push(`${risks.mermaid} 个 Mermaid 图表未渲染`);
+    if (risks.local > 0) {
+      risky.push(`${risks.local} 张本地图片未内联，收件人可能看不到`);
+    }
+    if (risky.length > 0) {
+      const inlinedNote = inlined > 0 ? `已内联 ${inlined} 张本地图片。` : "";
+      const choice = await ui.ask({
+        title: "导出内容有风险",
+        message: `${inlinedNote}${risky.join("；")}。仍然导出？`,
+        buttons: [
+          { label: "仍然导出", value: "export", tone: "primary" },
+          { label: "取消", value: "cancel" },
+        ],
+      });
+      if (choice !== "export") return;
+    }
+  } catch (error) {
+    ui.toast(`导出 HTML 失败：${describeError(error)}`, "error");
+    return;
+  }
+
   const parent = parentRel(docPath);
   const baseLeaf = `${baseName(docPath).replace(/\.[^./\\]+$/, "") || "笔记"}.html`;
   // 对话框里一打开就给出真正可用的名字，不让用户确认后再被悄悄改名。
@@ -350,12 +459,14 @@ export async function exportActiveAsHtml(): Promise<void> {
   if (!name) return;
 
   const leaf = ensureHtmlName(name.trim());
-  const rendered = await renderMarkdownToHtml(text);
-  const { html: body } = await inlineLocalImages(rendered, root, docPath);
   const write = async (candidate: string) => {
     const candidateRel = parent ? `${parent}/${candidate}` : candidate;
     // 用最终落盘的文件名做 `<title>`，撞名顺延后标签页仍与文件名一致。
-    const content = standaloneHtml(candidate.replace(/\.html$/i, ""), body);
+    const content = standaloneHtml(
+      candidate.replace(/\.html$/i, ""),
+      body,
+      currentExportTheme(),
+    );
     await invoke("export_html", { relPath: candidateRel, content });
     // 文件树只列 Markdown，导出的 `.html` 不会出现在树里；
     // 提示里给一个直达入口，点一下就打开所在文件夹并选中文件。

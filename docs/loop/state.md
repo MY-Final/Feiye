@@ -1,12 +1,12 @@
 # 循环状态
 
-- 轮次：368（手动单轮）
+- 轮次：391
 - 起始时间：2026-11-12 10:45
 - 窗口终点：手动单轮（本轮完成后结束）
-- 最后更新：2026-11-12 10:46
-- 当前分支：loop/ui-4
-- 状态：已结束（手动单轮完成）
-- 自上次检验轮：0（第 367 轮已检验 362–366；下一批从第 368 轮重新累计）
+- 最后更新：2026-11-12 13:30
+- 当前分支：loop/pool-2026-11-12
+- 状态：已结束（需求池本轮窗口执行完毕，只提交未合并）
+- 自上次检验轮：1（第 389 轮已检验 385–388；第 391 轮为针对批量替换的定向复核，不计入常规检验计数；下一轮 394 做下一次常规检验）
 
 ## 上一窗口小结（2026-11-01 23:40–2026-11-02 15:45）
 
@@ -21,10 +21,57 @@
 
 ## 本窗口方向（2026-11-12 10:45，手动单轮）
 
-- 从 requirements.md 取候选，先做 S 级便宜项；本轮取 R-05「搜索结果自动保鲜」。
+- 从 requirements.md 取候选，先做 S 级便宜项；368–372 已完成 R-05 / R-14 / R-17 / R-16 / R-22，373 做检验轮。
 - 单轮仍限 S 级（≤ 约 80 行、≤ 3 个文件），构建通过才提交；只提交不推送。
 
-## 本窗口进展（2026-11-12 10:45– ）
+## 本窗口小结（2026-11-12 10:45–13:30，第 368–391 轮）
+
+- 共 24 轮：19 条需求落地 + 5 个检验 / 复核轮（373、379、384、389，以及 391 针对批量替换的定向复核）；每轮构建通过，涉及后端的轮次 `cargo test` 全过（最终 67 项）；只提交到 `loop/pool-2026-11-12`，未 push、未建 PR。
+- 存储与历史：历史版本「对比当前」与单条删除、后端统计 / 清理命令、设置「存储」区（快照与恢复副本份数体积、清理 30 天前 / 全部快照 / 全部恢复副本，均二次确认）；修掉超大天数饱和导致误清空的边界。
+- 搜索：结果随保存 / 目录刷新自动保鲜，全文搜索跳过 YAML frontmatter，新查询可取消旧扫描，未变化文件复用有界缓存（64 MB、LRU）。
+- 导航与编辑：`Ctrl+Shift+O` 按文件名快速打开；预览拖动 / 键盘调整图片宽度并写回 `{width=NN%}`（唯一匹配才改源码）；搜索面板工作区批量替换（原子写、逐文件报错、跳过 frontmatter）。
+- 一致性：分栏恢复阅读位置期间抑制程序化滚动互推；命令分组单一来源；标签上限可配；导出跟随主题并修暗色 Shiki；导出 / 复制前内容体检；自定义 CSS 配平校验；快捷键速查浮层。
+- 检验轮修掉的真实缺陷：暗色导出代码深底深字、标签上限调低一次关多标签、存储清理后焦点掉回 body、图片拖宽地址编码 / 属性换行 / 定时器泄漏、批量替换确认数字与加载态误替换、重复路径二次展开。
+- 已知未完成：R-01 真实更新端到端（需发布真实 release，未获授权）；R-09 脚注（需新增依赖，与循环约束冲突，需批准）；R-03 / R-11 / R-20 为 L 级架构改造，只立了里程碑；R-19 / R-21 需要可运行的应用与压测环境，CDP 9222 全程不可用；R-04、R-08、R-12、R-13 的首批已落地但缺真机交互复核；R-07 的进度反馈、R-02 的图片资源统计、R-13 的逐条勾选 / 撤销留作后续小步。
+
+
+- 第 391 轮（定向检验轮）：复核第 390 轮「工作区批量替换」的写入安全。构建通过（含 tsc，vite 1.10s，仅既有提示）；`cargo test` 67 项全过（原 61 + 新增 6）。修 2 个真实缺陷 + 1 处后端加固：确认框的「M 处」实为命中行数，与替换的实际处数不符，改为「M 行」并注明同一行多次都会替换、重载会清撤销历史；搜索去抖 / 加载期间列表仍是旧结果而按钮只判 `!hits.length`，会把新词替换到旧文件，改为 `loading` 时禁用并提前返回；`replace_in_files` 抽出 `replace_paths`，按规范化路径（Windows 转小写）去重，避免重复路径二次展开替换词。逐项核对字面量语义、空查询、BOM / CRLF、只读写失败、范围与符号链接、frontmatter 计数一致性，均无新问题。计数保持 1，下一轮 392 按正常需求轮。
+- 第 390 轮：工作区批量替换（R-13 第一小步）——侧栏全文搜索原先只能看不能改，改一个术语要逐篇打开。后端 `commands/search.rs` 新增 `replace_in_files`：路径经 `normalize_rel` / `resolve_in_workspace` 校验，只接受工作区内 `.md`、拒绝符号链接；逐文件读取后做大小写不敏感的字面量替换（比较时两边小写，替换文本原样），跳过开头 frontmatter 与搜索一致；写入复用 `file.rs` 的 `write_path` 原子替换并带读时 mtime 防覆盖，单篇失败不影响其它；成功后显式移除 387 轮搜索缓存条目（等长替换时 mtime / size 可能都不变）。前端 `SearchPanel.tsx` 新增「替换」开关与替换词输入（Esc 收起回焦点），「全部替换」经 `ask` 确认（篇数 / 处数、上限时「至少」、空替换提示删除），执行中禁用，完成后 Toast 报「已修改 X 篇 / Y 处，Z 篇失败」并最多列 5 条失败；替换后推进代号重跑当前关键词，当前打开的笔记若被改过则从磁盘重载，脏文档先自动落盘、仍脏就跳过。构建通过（含 tsc，vite 1.07s，仅既有提示）；`cargo test` 61 项全过（原 57 + 新增 4：命中替换 / 失败隔离 / 跳过 frontmatter / 缓存失效）。CDP 不可用，人工复现见 backlog。计数 1，下一轮 391 按正常需求轮。
+- 第 389 轮（检验轮）：回归 385–388，构建通过（含 tsc，vite 1.15s，仅既有提示）；`cargo test` 57 项全过。修复第 388 轮 3 个真实缺陷：预览 `<img src>` 经渲染器做 URI 编码后与 Markdown 原文地址对不上（中文文件名 / 尖括号空格），拖动改宽一律提示「未找到唯一对应的图片源码」——`image-width.ts` 比较前用 `decodeURI` 还原两边；属性块写在图片下一行时回写会另插一组 `{width=…}`，把 width 与 align 一起弄坏——允许至多一个换行；300ms 待写回定时器与拖动状态在 effect 清理时未清，预览重绘 / 切到源码后仍可能写回旧节点——`PreviewPane.tsx` 补清理。bun 直调 `setImageWidth` 13 组用例全 PASS；385 快速打开、386/387 搜索取消与缓存锁范围逐项核对无新问题。R-12 仍待真机复核，保持未勾。计数清零，下一轮 390 按正常需求轮。
+- 第 388 轮：预览里拖动图片改宽度（R-12 第一小步）——图片宽度只能手写 `{width=50%}`，预览没有任何拖拽手柄。`PreviewPane.tsx` 给独立成段的图片包一层定位框，悬停 / 聚焦时左右露出圆形手柄（右把手进 Tab 序）；指针拖动按容器宽度百分比实时调 `img.style.width`（10%–100%），←/→ 每次 ±5%、Home 回 100%，停手 300ms 把百分比写回正文；写入用最短差异段事务，脏标记与自动保存沿用既有流程，预览随既有渲染管线更新，重绘后按图片地址把焦点交还手柄。新增纯函数 `image-width.ts` 的 `setImageWidth`：按 `![alt](src)` 地址唯一定位，更新或追加 `{width=NN%}` 并保留 align 等属性；0 处或多处同址时返回 null，界面只 Toast「未找到唯一对应的图片源码，请手动调整」不猜。`lib/images.ts` 改写地址时保留原始 Markdown 地址到 `data-md-src` 供回写；`preview.css` 用手柄与定位框样式，取既有令牌，亮暗主题均可读。已有 `px` 宽度按实际渲染宽度换算成百分比，拖动即以百分比覆盖。构建通过（含 tsc，vite 1.10s / 1.19s，仅既有提示）；bun 直调 `setImageWidth` 14 组用例全 PASS。CDP 不可用，人工复现见 backlog。计数 4，下一轮 389 做检验轮。
+- 第 387 轮：大库搜索「未变文件不重复读盘」（R-07 第二小步）——反复搜同一批关键词时每次仍全库读盘 + 逐行小写。`commands/search.rs` 的 `SearchState` 扩展为「原子代号 + `Mutex<CacheInner>`」：以绝对路径为键缓存 mtime / size / 原文行 / 小写行（各存 `Arc`，命中只复制引用），查表与插入短暂持锁、读盘在锁外；mtime 或 size 变化即重读；总占用按内容长度估算、上限 64 MB，超出按最久未使用淘汰，单篇超上限不缓存；完整扫描后清掉本工作区已删除文件与不存在的路径（命中上限提前结束时跳过清理）。结果结构、行号、预览原文大小写与 `cancelled` 语义不变。构建通过（含 tsc，vite 1.13s，仅既有提示）；`cargo test` 57 项全过（原 53 + 新增 4：缓存命中不重读 / mtime 变重读、删除后移除、超上限淘汰最旧、命中保留原文大小写）。CDP 不可用，人工复现见 backlog。计数 3，下一轮 388 按正常需求轮。
+- 第 386 轮：大库搜索「查询可取消」（R-07 第一小步）——关键词一变，上一次全量递归扫描原先仍要跑完，大库下持续占用磁盘与 CPU。`commands/search.rs` 新增进程内 `SearchState(AtomicU64)` 与 `next_search_generation` 命令（每次新查询前推进代号，只原子读写、不持锁读盘）；`search_workspace` 新增 `generation` 参数，`walk` 在每个文件 / 子目录前比较代号，不符立刻返回 `SearchResponse { hits: [], cancelled: true }`，未取消时 `SearchHit` 结构不变；`lib.rs` 注册状态与命令。前端 `SearchPanel.tsx` 每次关键词变化 / 面板隐藏 / 组件卸载先推进代号，去抖后以最新代号查询，`cancelled` 结果直接丢弃；`tauri.ts` 补 `nextSearchGeneration` 与 `SearchResponse`。构建通过（含 tsc，vite 1.12s，仅既有提示）；`cargo test` 53 项全过（原 50 + 新增 3：取消提前返回、代号推进后旧查询失效、检查频率按文件而非按行）。CDP 不可用，人工复现见 backlog。计数 2，下一轮 387 按正常需求轮。
+- 第 385 轮：新增 `Ctrl+Shift+O`「快速打开笔记」（R-08 第一小步）——记得文件名时不必在文件树里逐层找，也不用先做全文搜索。`commands/workspace.rs` 新增 `list_markdown_files`：递归列出工作区 Markdown，跳过隐藏项 / 符号链接 / `IGNORED_DIRS`，按相对路径排序，上限 20,000，只读目录项不读正文；`lib.rs` 注册，`tauri.ts` 补封装。前端新增 `features/commands/QuickOpen.tsx`，复用命令面板的 `.palette` / `trapTab` / combobox + listbox 语义与焦点归还，输入做大小写不敏感的子序列过滤（`fuzzyMatch`），结果按工作区既有「最近打开」优先、其余按相对路径排序，↑↓ / 回车 / Esc / 点遮罩，打开复用 `openFile`（标签、历史、阅读位置一致）；`commands.ts` 新增「快速打开笔记…」（带快捷键显示），`App.tsx` 挂载浮层并把 `Ctrl+Shift+O` 纳入弹层互斥与全局守卫（未打开工作区给提示）。构建通过（含 tsc，vite 1.11s，仅既有提示）；`cargo test` 50 项全过（+1 递归列文件测试）；bun 直调 `fuzzyMatch` 10/10 PASS。CDP 不可用，人工复现见 backlog。计数 1，下一轮 386 按正常需求轮。
+
+- 第 384 轮（检验轮）：回归 380–383。构建通过（含 tsc，vite 1.13s / 修复后 1.31s）；`cargo test` 49 项全过。逐项核对 380 单条删除的参数顺序、邻项选中与焦点交接、取消 / 失败 / 重复点击路径；381 分类顺序、失败态禁用、取消不调命令、返回数量与 Toast 一致，并从已安装 tauri 2.12.5 的 IPC 序列化确认 `clearHistory()` 不传参得到 `None`；382 的 `restoringScroll` 成对增减与 `shouldIgnoreProgrammaticScroll` 12 组边界用例（bun 从源码原样抽取）全部符合预期；383 的 `frontmatter_end` 边界、行号与大小写不敏感匹配未回退。发现并修复 1 个真实缺陷：存储清理期间按钮禁用，确认框把焦点还给触发按钮后按钮随即禁用，焦点掉回 `body`，键盘用户要从设置顶部重走（`b9f2d73`，清理落定后把焦点交回存储区首个可用按钮，用户已移开不抢）。CDP 不可用（9222 未运行）。计数清零，下一轮 385 按正常需求轮。
+
+- 第 383 轮：全文搜索跳过 YAML frontmatter（R-10 收尾）——搜索此前把 `title:` / `tags:` / 注释里的 `#` 当正文命中。`commands/search.rs` 新增 `is_fence` / `frontmatter_end`：首行（允许 BOM）与闭合行去行尾空白后都是 `---`，闭合须在前 500 行内，否则当没有；`walk` 仍 `enumerate()` 按原文计行，只跳过前 N 行参与匹配，点击行号不变。构建通过（含 tsc，vite 1.05s，仅既有提示）；`cargo test` 49 项全过（原 47 + 新增 2）。CDP 不可用，人工复现见 backlog。计数 4，第 384 轮做检验轮。
+- 第 382 轮：分栏恢复阅读位置期间暂停滚动同步（R-04）——切回笔记时编辑器被预览经锚点反向映射推走约 205px。`editor-bridge.ts` 新增 `restoringScroll` 计数与 `isEditorScrollRestoring()`，`restoreEditorScroll` 写入位置后再放一帧才解除；`scroll-sync.ts` 在恢复期间只记 `restorePending` 不互推、结束后以编辑器为准补对齐一次，并用 `shouldIgnoreProgrammaticScroll` 把程序化写入后 120ms 内位置对不上的 scroll（布局钳制 / 滚动锚定）视为回声而非用户滚动。构建通过（含 tsc，vite 1.24s，仅既有提示）；bun 直调该判定函数 7 组用例全部符合预期；未改 `src-tauri/`。CDP 不可用，R-04 未勾选，人工复现见 backlog。
+- 第 381 轮：设置新增「存储」区（R-02 UI 收尾）——历史快照与崩溃恢复副本原先在设置里既看不到占用也清不掉。`SettingsDialog.tsx` 在「视图与预览」与「快捷键」之间新增「存储」分类，同文件 `StoragePanel` 打开时读 `storageStats()`，两行分别显示「N 份 · X MB」（`formatBytes` 输出 KB / MB / GB、一位小数，0 份只显示「0 份」），读取中「统计中…」、失败显示「无法读取存储统计」并保留原数字；「清理 30 天前的快照」调 `clearHistory(30)`、「清空全部快照」调 `clearHistory()`、「清空全部恢复副本」调 `clearRecoveries()`，均经 `useUiStore.ask` 二次确认（写明不可恢复 / 不影响已保存正文），操作期间禁用按钮，完成后重读统计并用 Toast 报清理数量，失败只报错不动数字；统计为 0 时对应按钮禁用。`settings.css` 补计数与按钮行样式。构建通过（含 tsc，vite 1.11s，仅既有的 chunk 体积与 ineffective dynamic import 提示）；`cargo test` 47 项全过（未改 Rust）。CDP 不可用（9222 未运行），人工验证步骤见 backlog。
+
+- 第 380 轮：历史版本支持单条删除（R-06 收尾）——`HistoryDialog.tsx` 的 `modal-actions` 新增「删除此版本」（`btn danger`，无选中项或删除中禁用，`aria-label` 含所选版本时间），点击经 `useUiStore.ask` 二次确认并写明「删除后不可恢复」；确认后调用第 378 轮的 `deleteHistory`，成功后从列表移除并优先选中原位置的下一条（否则上一条），全删光进入空态；失败只 Toast 报错、列表不变；删除完成用 `pendingFocus` 把焦点交给新选中项（删空交给「关闭」），确认框取消时焦点回按钮；副标题补「删除后不可恢复」。构建通过（含 tsc，vite 1.14s，仅既有的 chunk 体积与 ineffective dynamic import 提示）；未改 `src-tauri/`，未重跑 `cargo test`（第 379 轮 47 项全过）。CDP 不可用（9222 未运行），人工验证步骤见 backlog。
+
+- 第 379 轮（检验轮）：回归 374–378。构建通过（含 tsc，vite 1.04s）；`cargo test` 47 项全过。静态核对 374 分组单一来源（三处一致）、375 复制 / 导出两条路径都做风险体检且 Worker 抛错有 try/catch 接住、376 frontmatter 识别与大纲跳过（bun 直调 6 组用例符合预期）、377 diffLines 与对比模式重置（bun 直调 6 组用例符合预期）、378 四个命令均已注册且前后端参数一致；从 Tauri 2.12.5 源码确认 `Option<u64>` 参数在键缺失时 `visit_none()`，`clearHistory()` 不传参即得到 `None`，与「不传则清空全部」一致。未发现需要改源码的缺陷，本轮仅文档改动；CDP 不可用（9222 未运行）。R-02 UI 与搜索跳过 frontmatter 记入下一轮候选，计数清零，下一轮 380 按正常需求轮。
+
+- 第 378 轮：存储管理后端与 API 层（R-02 第一批）——历史快照与崩溃恢复副本原先只在数据目录里堆积，既看不到占用也没有清理入口。`history.rs` 新增 `storage_stats`（递归统计 `history/` 下 `.md` 的文件数与字节）、`delete_history`（复用 `document_dir` / `snapshot_path` 校验，文件不存在视为成功）、`clear_history`（`None` 清空全部，`Some(cutoff)` 按文件名前缀时间戳只删除更早的；只有 `None` 表示清空，避免超大天数饱和到 0 时误删，删除失败跳过并返回数量）；`recovery.rs` 新增 `storage_stats` 与 `clear_all`（只删 `.json`）。`commands/history.rs` 新增 `StorageStats`（camelCase：`historyFiles` / `historyBytes` / `recoveryFiles` / `recoveryBytes`）与 `storage_stats` / `delete_history` / `clear_history` / `clear_recoveries` 四个命令并注册到 `lib.rs`；`src/lib/tauri.ts` 补 `StorageStats` 类型与四个 `invoke` 封装。`commands/recovery.rs` 的 `recovery_dir` 放宽为 `pub(crate)` 供复用。构建通过（含 tsc，vite 1.26s，仅既有的 chunk 体积与 ineffective dynamic import 提示）；`cargo test` 47 项全过（新增 3 项覆盖统计、单条删除、按截止点 / 全部清理、只删 `.json`）。本轮未接 UI，设置页「存储」区与 HistoryDialog 单条删除留给 379；CDP 不可用（9222 未运行），未启动应用。
+
+- 第 377 轮：历史版本可与当前内容对比——恢复前只有纯文本预览，得靠记忆比对；`HistoryDialog.tsx` 新增「内容 / 对比当前」分段按钮（原生按钮 + `aria-pressed`，Tab / 回车可用），切到对比时用 `getEditorText()` 给编辑器正文拍快照，`diffLines` 按行去公共前后缀、中间变化块先列删除行再列新增行，不做逐行配对（超长文档也是线性开销），`+` / `-` / 空格前缀配 `role="region"` 对比区；无差异显示「与当前内容一致」，编辑器为空时给出说明；恢复按钮仍基于所选版本内容，行为不变。`history.css` 复用 `.segmented`，对比行用 `--syn-string` / `--danger` 文字色与浅底，亮暗主题可读。构建通过（含 tsc，vite 1.09s，仅既有的 chunk 体积与 ineffective dynamic import 提示）；bun 直调 `diffLines`（从源码切出同一份实现，组件模块依赖 DOM 不能直接 import）6 组用例符合预期；未改 `src-tauri/`。CDP 不可用（9222 未运行），人工验证步骤见 backlog。
+
+- 第 376 轮：折叠 YAML frontmatter 并跳过大纲——笔记开头的 `---` 元数据此前被当成正文，两个 `---` 触发分隔线 / Setext 标题，预览出现横线和大标题，大纲混入 YAML 注释里的 `#`。`markdown.worker.ts` 在交给 remark 前用锚定文件开头的正则取出 frontmatter（允许 BOM、CRLF），正文从闭合处截断，Mermaid 收集也只看正文；`String(file)` 之后把已转义的 `<details class="frontmatter"><summary>元信息</summary><pre>…</pre></details>` 前置到 HTML（不走 remark，避免 sanitize 剥掉 details / summary）；`outline.ts` 计算开头 frontmatter 结束偏移（首行必须是 `---`，500 行内找闭合，找不到当没有），跳过该偏移之前的标题；`preview.css` 给折叠块加低调样式（细边框、`--bg-sunken` 浅底、12–13px、pre 透明底），亮暗主题随令牌切换。构建通过（含 tsc，vite 1.42s，仅既有的 chunk 体积与 ineffective dynamic import 提示）；正则 6 组用例符合预期；未改 `src-tauri/`。所见模式本轮仍按源码显示；CDP 不可用（9222 未运行），人工验证步骤见 backlog。
+
+- 第 375 轮：导出 / 复制前的内容体检——此前外链图片、未内联的本地图与 Mermaid 代码块要到收件人那里才发现。`lib/images.ts` 用一次 DOM 扫描统计外链图片与未内联本地图（`scanContentRisks`，取代原先只数本地图的 `countLocalImages`）；Mermaid 数量改由 Worker 渲染结果给出（Shiki 高亮后 class 已变 `language-text`，按 class 查会漏），`preview-controller.ts` 新增 `renderMarkdownForExport` 一并返回，`renderMarkdownToHtml` 保持原签名。`Toolbar.tsx` 导出 HTML 时先体检，有风险才用既有确认框列出「已内联 N 张 / 外链 M 张可能失效 / Mermaid K 个未渲染 / 本地图 X 张未内联」，选「仍然导出」才写盘，取消不写文件、不刷新目录；复制 HTML 沿用成功 Toast，把同类风险拼进括号摘要，无风险时文案不变。构建通过（含 tsc，vite 1.21s，仅既有的 chunk 体积与 ineffective dynamic import 提示）；渲染与风险统计已移入 `try/catch`，文档过大 / Worker 或读图失败时仍弹「导出 HTML 失败」；未改 `src-tauri/`。CDP 不可用（9222 未运行），人工验证步骤见 backlog。
+
+- 第 374 轮：命令分组单一来源——命令面板的 `GROUP_LABELS` 与标题栏菜单的 `GROUPS` 各存一份分组文案 / 顺序，新增分组要两处同步。`commands.ts` 新增 `COMMAND_GROUPS`（8 个分组的 id、文案、顺序）与按 id 查文案的 `COMMAND_GROUP_LABELS`；`CommandPalette.tsx` 删除本地 `GROUP_LABELS`，改用导出的映射；`AppMenu.tsx` 删除本地 `GROUPS`，改为过滤 `COMMAND_GROUPS`。菜单结构（文件 / 编辑 / 段落 / 格式 / 视图 / 应用）、菜单项顺序、分隔线、快捷键显示、禁用态、面板「最近使用」段与过滤顺序均不变。构建通过（含 tsc，vite 1.44s，仅既有的 chunk 体积与 ineffective dynamic import 提示）；未改 `src-tauri/`。顶层菜单到分组的归属仍在 `MenuBar.tsx` 的 `MENUS`（本轮 3 文件上限未触及），新增顶层菜单仍需改那里，已记入 backlog 遗留。CDP 不可用（9222 未运行），人工验证步骤见 backlog。
+
+- 第 373 轮（检验轮）：回归 368–372。构建通过；静态检查确认 368 的搜索保鲜依赖、369 的快捷键浮层接线、370 的 CSS 校验、371 的主题导出、372 的标签上限都到位，`checkCssBalance` 4 组用例 PASS。发现并修复 2 个真实缺陷：暗色导出的 Shiki 代码块未切到 `--shiki-dark`，深底深字（`a0b7b9c`）；标签上限调低后会一次关闭多篇标签，可能丢多篇未保存内容（`03faf7e`，改为逐步收敛）。CDP 9222 未运行，未做真机交互回归；计数清零，下一轮 374 正常需求轮。
+
+- 第 372 轮：标签上限可在设置中调整——`MAX_TABS = 12` 原先硬编码，用户无从调整。`stores/settings.ts` 新增 `maxTabs` 偏好（默认 12，加载时只接受 8 / 12 / 20，其它值回落 12，随偏好持久化，恢复默认回 12），并导出 `MAX_TABS_OPTIONS`；`stores/tabs.ts` 的 `addTab` 改用当前上限，超出时仍只挤掉最久未用的一个；上限调低时不立即关闭已开标签，之后每次打开最多挤掉一个、逐步收敛（避免一次关闭多篇未保存内容），`MAX_TABS` 改为随偏好同步的导出（初始取当前偏好并订阅 settings store），挤占提示据此显示当前上限；`SettingsDialog.tsx`「视图与预览」新增「最多同时打开」8 / 12 / 20 三档分段控件（复用 `SlidingSegmented`），说明「超出时关闭最久未用的标签，下次打开时生效」，修改即时生效。构建通过（含 tsc，vite 1.29s，仅既有的 chunk 体积与动态导入提示）；bun 直调 `normalizePreferences` 8 组用例符合预期；上限调低的逐步收敛未做自动化模拟；未改 `src-tauri/`。CDP 不可用（9222 未运行），人工验证步骤见 backlog。
+
+- 第 371 轮：导出 HTML 跟随当前主题——`EXPORT_STYLE` 原先写死浅色，深色主题下导出的文件与当前观感完全脱节。`Toolbar.tsx` 改为按主题生成样式：`EXPORT_PALETTE` 提供亮 / 暗两套配色（背景 / 文字、标题、链接、引用、行内代码与代码块、表格边框、分隔线；暗色取 `global.css` 的 `--bg` / `--text` / `--code-bg` / `--line` 等令牌值），`exportStyle(theme)` 拼出 CSS，`standaloneHtml` 新增 `theme` 参数；导出时用 `resolveTheme(设置 store 的 theme 偏好)` 解析亮暗（跟随系统按系统主题），不读瞬时 `data-theme`。`PRINT_STYLE` 补 `color:#22211d`，`buildPrintableHtml` 固定传 `"light"`，`Ctrl+P` / 导出 PDF 仍白底深字。另补 Shiki 双主题切换与 `pre.shiki` 底色，避免暗色导出里代码块深底深字。构建通过（含 tsc，vite 1.56s，仅既有的 chunk 体积与动态导入提示）；未改 `src-tauri/`。CDP 不可用（9222 未运行），人工验证步骤见 backlog。
+
+- 第 370 轮：自定义 CSS 输入时校验括号与引号——此前只校验长度上限，括号不配平、引号未闭合时浏览器静默丢弃整段样式，用户以为已生效。新增 `src/lib/css-check.ts` 的纯函数 `checkCssBalance`（单遍扫描，忽略注释与字符串内部的括号，只报第一处：多余的 `}` / `]` / `)`、括号错配、缺少闭合、字符串缺少结束引号，行列从 1 开始）；`SettingsDialog.tsx` 在自定义 CSS 文本域下方显示「第 N 行第 M 列：原因」的错误行，文本域补 `aria-invalid` / `aria-describedby`，错误行 `role="alert"`，合法或留空时属性与提示一并移除，不阻止保存、不改长度截断逻辑、不抢焦点；`settings.css` 补错误行样式（`--danger`）。构建通过（含 tsc，vite 1.12s，仅既有的 chunk 体积与动态导入提示）；bun 直调函数 11 组用例全部符合预期；未改 `src-tauri/`。CDP 不可用（9222 未运行），人工验证步骤见 backlog。
+
+- 第 369 轮：新增全局快捷键速查浮层——快捷键原先只在「设置 → 快捷键」里，命令面板只显示单条，想查某个动作得逐页翻。`features/shortcuts/ShortcutSheet.tsx` 新增 `Ctrl+/` 可搜索浮层，复用 `.palette` / `.palette-input` / `.palette-list` 等既有样式，按「文件 / 编辑 / 视图 / 标签与分屏」分组，每行「动作名 + 来源 + `<kbd>` 按键」；行数据由 `APP_COMMANDS` 里带 `shortcut` 的命令自动生成（用 `menuLabel` 显示短名），编辑区专有按键（Tab 缩进、Ctrl+Shift+L、Ctrl+Enter、Ctrl+Tab、Ctrl+W）用一份 5 行静态表补上并标注来源，不复制设置页整张表格；搜索框按动作名或按键过滤，无结果给空态，打开即聚焦搜索框、Tab 经既有 `trapTab` 收在浮层内、Esc 关闭并把焦点还给打开前的控件（已卸载则回正文）。`commands.ts` 新增「快捷键速查」命令（`Ctrl+/`，面板可见）经 `SHORTCUT_SHEET_EVENT` 事件打开浮层，避免与浮层的数据依赖形成循环引用。`App.tsx` 挂载浮层，把 `Ctrl+/` 纳入全局守卫：输入框 / 文本域内不抢键，确认、设置、命令面板、历史、更新弹层开着时不叠开，速查自己开着时再按一次关闭；`Ctrl+,` / `Ctrl+Shift+P` / `Ctrl+Alt+H` 的互斥判断也把速查算进去。构建通过（含 tsc，vite 1.27s，仅既有的 chunk 体积与动态导入提示）；未改 `src-tauri/`。CDP 不可用（9222 未运行），人工验证步骤见 backlog。
 
 - 第 368 轮：搜索结果随保存与目录刷新自动更新——搜索面板的查询 effect 原先只依赖 `[query, root]`，在正文保存成功、或在应用外改 / 删 / 改名笔记后（目录监听经 `refreshTree` 重读目录）都不会重跑当前关键词，列表仍显示旧行号，甚至指向已删除的文件。`stores/workspace.ts` 新增 `dirRevision`，`refreshDir` 在成功读到目录后自增（失败不增）；`SearchPanel.tsx` 的查询 effect 增加 `dirRevision`、`savedModifiedMs`、`visible` 依赖：同一关键词的保鲜重跑去抖 400ms（新关键词仍 200ms），重跑前记下当前选中项的 `relPath + line`，结果回来后按它找回，找不到回第 0 条；面板隐藏时不查询，切回可见补跑一次；失效路径因重新读盘自然从结果里摘掉；输入框内容与焦点不受影响。构建通过（含 tsc，vite 1.55s，仅既有的 chunk 体积与动态导入提示）；未改 `src-tauri/`。CDP 不可用（9222 未运行），人工验证步骤见 backlog。
 

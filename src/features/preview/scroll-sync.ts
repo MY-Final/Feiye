@@ -1,5 +1,6 @@
 import {
   getEditorScrollMetrics,
+  isEditorScrollRestoring,
   setEditorScrollTop,
 } from "../editor/editor-bridge";
 import type { OutlineHeading } from "../editor/outline";
@@ -83,6 +84,26 @@ function ratioTarget(
   return (Math.min(value, sourceMax) / sourceMax) * targetMax;
 }
 
+/** 程序化写入后这段窗口内的 scroll 事件不当作「用户滚动」反推另一侧。 */
+const APPLIED_SCROLL_GRACE_MS = 120;
+
+/**
+ * 这次 scroll 事件是否只是我们自己刚写入的位置。
+ * 位置与写入值一致是正常的回声；写入后被布局钳制（图片未加载、
+ * 内容变短、滚动锚定修正）导致位置对不上，也在宽限窗口内继续忽略，
+ * 否则会用锚点映射反推另一侧，往返映射不精确会把编辑器推走。
+ */
+export function shouldIgnoreProgrammaticScroll(
+  applied: number | null,
+  appliedAt: number,
+  current: number,
+  now: number,
+): boolean {
+  if (applied === null) return false;
+  if (Math.abs(current - applied) <= 1) return true;
+  return now - appliedAt < APPLIED_SCROLL_GRACE_MS;
+}
+
 /**
  * 分栏模式的标题锚点滚动同步。
  * 先按标题建立映射，标题数量不一致时退回整篇比例映射。
@@ -97,7 +118,11 @@ export function attachSplitScrollSync(
   let frame: number | null = null;
   let source: "editor" | "preview" | null = null;
   let appliedEditor: number | null = null;
+  let appliedEditorAt = 0;
   let appliedPreview: number | null = null;
+  let appliedPreviewAt = 0;
+  /** 恢复阅读位置期间收到过同步请求：恢复结束后以编辑器为准补对齐一次。 */
+  let restorePending = false;
 
   // 锚点只在标题或布局变化时重建。滚动帧里标题几何不变，逐帧量几千个
   // 标题的 getBoundingClientRect / lineBlockAt 是长文档掉帧的主因。
@@ -121,6 +146,7 @@ export function attachSplitScrollSync(
     const target = Math.max(0, Math.min(top, previewMax()));
     if (Math.abs(pane.scrollTop - target) < 0.5) return;
     appliedPreview = target;
+    appliedPreviewAt = performance.now();
     pane.scrollTop = target;
   };
 
@@ -128,6 +154,7 @@ export function attachSplitScrollSync(
     const target = Math.max(0, Math.min(top, editorMax()));
     if (Math.abs(editor.scrollTop - target) < 0.5) return;
     appliedEditor = target;
+    appliedEditorAt = performance.now();
     setEditorScrollTop(target);
   };
 
@@ -155,6 +182,17 @@ export function attachSplitScrollSync(
 
   const run = () => {
     frame = null;
+    if (isEditorScrollRestoring()) {
+      // 阅读位置还在恢复：期间写入的滚动位置不反推另一侧，等它落定。
+      restorePending = true;
+      frame = window.requestAnimationFrame(run);
+      return;
+    }
+    if (restorePending) {
+      restorePending = false;
+      syncEditorToPreview();
+      return;
+    }
     const current = source;
     source = null;
     if (!current) return;
@@ -164,6 +202,11 @@ export function attachSplitScrollSync(
 
   const schedule = (next: "editor" | "preview") => {
     if (window.innerWidth <= 880) return;
+    if (isEditorScrollRestoring()) {
+      restorePending = true;
+      if (frame === null) frame = window.requestAnimationFrame(run);
+      return;
+    }
     source = next;
     if (frame === null) frame = window.requestAnimationFrame(run);
   };
@@ -171,8 +214,18 @@ export function attachSplitScrollSync(
   const onEditorScroll = () => {
     if (appliedEditor !== null) {
       const expected = appliedEditor;
+      const ignored = shouldIgnoreProgrammaticScroll(
+        expected,
+        appliedEditorAt,
+        editor.scrollTop,
+        performance.now(),
+      );
+      // 位置已对上或还在宽限窗口内：这是程序化滚动，不算用户操作。
+      if (ignored) {
+        if (Math.abs(editor.scrollTop - expected) <= 1) appliedEditor = null;
+        return;
+      }
       appliedEditor = null;
-      if (Math.abs(editor.scrollTop - expected) <= 1) return;
     }
     schedule("editor");
   };
@@ -180,8 +233,17 @@ export function attachSplitScrollSync(
   const onPreviewScroll = () => {
     if (appliedPreview !== null) {
       const expected = appliedPreview;
+      const ignored = shouldIgnoreProgrammaticScroll(
+        expected,
+        appliedPreviewAt,
+        pane.scrollTop,
+        performance.now(),
+      );
+      if (ignored) {
+        if (Math.abs(pane.scrollTop - expected) <= 1) appliedPreview = null;
+        return;
+      }
       appliedPreview = null;
-      if (Math.abs(pane.scrollTop - expected) <= 1) return;
     }
     schedule("preview");
   };
