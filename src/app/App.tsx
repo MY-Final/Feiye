@@ -24,6 +24,12 @@ import { CommandPalette } from "../features/commands/CommandPalette";
 import { HistoryDialog } from "../features/history/HistoryDialog";
 import { SplitPane } from "../features/split/SplitPane";
 import { SettingsDialog } from "../features/settings/SettingsDialog";
+import {
+  ShortcutSheet,
+  closeShortcutSheet,
+  isShortcutSheetOpen,
+  openShortcutSheet,
+} from "../features/shortcuts/ShortcutSheet";
 import { UpdateDialog } from "../features/updates/UpdateDialog";
 import { checkForUpdates } from "../features/updates/update-service";
 import { WorkspaceSidebar } from "../features/workspace/WorkspaceSidebar";
@@ -91,6 +97,7 @@ function dialogOpen(): boolean {
       ui.settingsOpen ||
       ui.paletteOpen ||
       ui.historyOpen ||
+      isShortcutSheetOpen() ||
       useUpdateStore.getState().open,
   );
 }
@@ -242,7 +249,14 @@ export default function App() {
       // 设置面板优先处理 Ctrl+, 与 Esc，避免被 dialogOpen 提前拦截。
       // 其它弹层（含更新弹窗）开着时不再叠一个设置面板；设置面板自己仍可再按一次关闭。
       if (mod && (event.key === "," || event.code === "Comma")) {
-        if (ui.confirm || ui.prompt || ui.paletteOpen || ui.historyOpen || updateOpen) {
+        if (
+          ui.confirm ||
+          ui.prompt ||
+          ui.paletteOpen ||
+          ui.historyOpen ||
+          updateOpen ||
+          isShortcutSheetOpen()
+        ) {
           event.preventDefault();
           return;
         }
@@ -265,7 +279,14 @@ export default function App() {
       // 命令面板：Ctrl+Shift+P 打开 / 关闭；面板内自己处理方向键与回车。
       // 设置 / 历史 / 更新弹窗开着时不叠命令面板，避免两个浮层同时抢键盘。
       if (mod && event.shiftKey && event.key.toLowerCase() === "p") {
-        if (ui.confirm || ui.prompt || ui.settingsOpen || ui.historyOpen || updateOpen) {
+        if (
+          ui.confirm ||
+          ui.prompt ||
+          ui.settingsOpen ||
+          ui.historyOpen ||
+          updateOpen ||
+          isShortcutSheetOpen()
+        ) {
           event.preventDefault();
           return;
         }
@@ -278,7 +299,14 @@ export default function App() {
       // 文档历史：Ctrl+Alt+H，随手回看并恢复某个保存过的版本。
       // 设置 / 命令面板 / 更新弹窗开着时不叠历史；历史自己仍可再按一次关闭。
       if (mod && event.altKey && event.key.toLowerCase() === "h") {
-        if (ui.confirm || ui.prompt || ui.settingsOpen || ui.paletteOpen || updateOpen) {
+        if (
+          ui.confirm ||
+          ui.prompt ||
+          ui.settingsOpen ||
+          ui.paletteOpen ||
+          updateOpen ||
+          isShortcutSheetOpen()
+        ) {
           event.preventDefault();
           return;
         }
@@ -290,6 +318,36 @@ export default function App() {
         event.preventDefault();
         if (ui.historyOpen) ui.closeHistory();
         else ui.openHistory();
+        return;
+      }
+
+      // 快捷键速查：Ctrl+/。输入框里不抢这个组合键；其它弹层开着时不叠开，
+      // 速查自己开着时再按一次关闭。
+      if (
+        mod &&
+        !event.shiftKey &&
+        (event.key === "/" || event.code === "Slash")
+      ) {
+        const target = event.target;
+        if (
+          target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement
+        ) {
+          return;
+        }
+        event.preventDefault();
+        if (
+          ui.confirm ||
+          ui.prompt ||
+          ui.settingsOpen ||
+          ui.paletteOpen ||
+          ui.historyOpen ||
+          updateOpen
+        ) {
+          return;
+        }
+        if (isShortcutSheetOpen()) closeShortcutSheet();
+        else openShortcutSheet();
         return;
       }
 
@@ -826,6 +884,7 @@ export default function App() {
       <StatusBar />
 
       <SettingsDialog />
+      <ShortcutSheet />
       <HistoryDialog />
       <CommandPalette />
       <DialogHost />

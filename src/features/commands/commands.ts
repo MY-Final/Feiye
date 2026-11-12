@@ -38,6 +38,12 @@ import {
   saveDocumentAs,
 } from "../workspace/workspace-actions";
 
+/**
+ * 打开「快捷键速查」浮层的事件名。注册表与浮层互相需要对方的导出，
+ * 用事件解耦，避免模块循环引用。
+ */
+export const SHORTCUT_SHEET_EVENT = "feiye:shortcut-sheet";
+
 /** 命令是否可用只取决于这几项状态，菜单和命令面板共用同一份判断。 */
 export interface CommandContext {
   hasDoc: boolean;
@@ -632,6 +638,16 @@ export const APP_COMMANDS: AppCommand[] = [
     enabled: () => true,
     palette: false,
     run: () => useUiStore.getState().openPalette(),
+  },
+  {
+    id: "shortcut-sheet",
+    title: "快捷键速查",
+    hint: "按动作或按键查找快捷键",
+    shortcut: "Ctrl+/",
+    keywords: "shortcut key 快捷键 速查",
+    group: "app",
+    enabled: () => true,
+    run: () => void window.dispatchEvent(new Event(SHORTCUT_SHEET_EVENT)),
   },
   {
     id: "settings",
