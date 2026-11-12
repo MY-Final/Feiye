@@ -7,6 +7,7 @@ import {
 
 import { trapTab } from "../../components/Dialog";
 import {
+  deleteHistory,
   listHistory,
   readHistory,
   type HistoryEntry,
@@ -81,9 +82,13 @@ export function HistoryDialog() {
   const [mode, setMode] = useState<"content" | "diff">("content");
   /** 切到对比时给编辑器正文拍个快照；弹层开着时正文不会再变。 */
   const [currentText, setCurrentText] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const restoreFocus = useRef<HTMLElement | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  /** 删除成功后要把焦点交给哪一项；-1 表示列表已空、交给「关闭」。 */
+  const pendingFocus = useRef<number | null>(null);
 
   useEffect(() => {
     if (!open || !docPath) return;
@@ -98,6 +103,7 @@ export function HistoryDialog() {
     setContent(null);
     setMode("content");
     setCurrentText(null);
+    setDeleting(false);
     listHistory(docPath)
       .then((list) => {
         if (cancelled) return;
@@ -121,6 +127,21 @@ export function HistoryDialog() {
   useEffect(() => {
     if (open) dialogRef.current?.focus();
   }, [open]);
+
+  // 删除后列表重建，按删前位置把焦点交给新的相邻项；
+  // 删空则落到「关闭」，不让焦点掉回后面的正文。
+  useEffect(() => {
+    const target = pendingFocus.current;
+    if (target === null) return;
+    pendingFocus.current = null;
+    if (target < 0) {
+      closeRef.current?.focus();
+      return;
+    }
+    listRef.current
+      ?.querySelector<HTMLElement>(`[data-history-index="${target}"]`)
+      ?.focus();
+  }, [entries, selected]);
 
   // 选中哪一版就读哪一版，避免一次把所有正文都塞进内存。
   useEffect(() => {
@@ -207,6 +228,42 @@ export function HistoryDialog() {
       .toast("已载入历史版本，按 Ctrl+S 保存后写入磁盘");
   };
 
+  const selectedEntry = entries.find((entry) => entry.id === selected) ?? null;
+  const selectedPosition = selectedEntry
+    ? entries.findIndex((entry) => entry.id === selectedEntry.id)
+    : -1;
+
+  const removeSelected = async () => {
+    if (!docPath || !selectedEntry || deleting) return;
+    const index = selectedPosition;
+    const choice = await useUiStore.getState().ask({
+      title: "删除这个历史版本？",
+      message: `${formatTime(selectedEntry.savedAt)} 的快照会被永久删除，删除后不可恢复。`,
+      buttons: [
+        { label: "删除", value: "delete", tone: "danger" },
+        { label: "取消", value: "cancel" },
+      ],
+    });
+    if (choice !== "delete") return;
+
+    setDeleting(true);
+    try {
+      await deleteHistory(docPath, selectedEntry.id);
+      const next = entries.filter((entry) => entry.id !== selectedEntry.id);
+      // 优先选中原位置的下一条；已是最后一条则退到上一条。
+      const nextIndex = Math.min(index, next.length - 1);
+      const neighbor = nextIndex >= 0 ? next[nextIndex] : null;
+      pendingFocus.current = neighbor ? nextIndex : -1;
+      setEntries(next);
+      setSelected(neighbor?.id ?? null);
+      useUiStore.getState().toast("已删除该历史版本");
+    } catch {
+      useUiStore.getState().toast("删除历史版本失败，请稍后再试");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   // 历史最多 20 个版本，逐个 Tab 太慢：像大纲一样用方向键换版本，
   // 选中即预览；只有当前版本留在 Tab 顺序里，Tab 一次就能到窗口按钮。
   const handleListKeys = (event: ReactKeyboardEvent<HTMLUListElement>) => {
@@ -250,7 +307,7 @@ export function HistoryDialog() {
       >
         <h2 className="modal-title">文档历史</h2>
         <p className="modal-message history-subtitle">
-          {docName ?? "当前文档"} · 每次保存自动留档，最多保留最近 20 份
+          {docName ?? "当前文档"} · 每次保存自动留档，最多保留最近 20 份，删除后不可恢复
         </p>
 
         {loading ? (
@@ -353,8 +410,21 @@ export function HistoryDialog() {
         )}
 
         <div className="modal-actions">
-          <button type="button" className="btn" onClick={close}>
+          <button type="button" className="btn" ref={closeRef} onClick={close}>
             关闭
+          </button>
+          <button
+            type="button"
+            className="btn danger"
+            disabled={!selectedEntry || deleting}
+            aria-label={
+              selectedEntry
+                ? `删除 ${formatTime(selectedEntry.savedAt)} 的版本`
+                : "删除此版本"
+            }
+            onClick={() => void removeSelected()}
+          >
+            {deleting ? "删除中…" : "删除此版本"}
           </button>
           <button
             type="button"
