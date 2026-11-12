@@ -19,6 +19,39 @@
 
 <!-- 从这里开始追加 -->
 
+## 第 384 轮 · 2026-11-12 14:05（检验轮：回归 380–383）
+**用户需求**：无新需求；按循环规则系统性回归上一批 4 条改动（380–383），确认构建、后端测试与关键路径没有回退，并重点复核第 381 轮存储清理这类不可逆操作。
+**产品经理**：检验轮不扩大产品边界，只核对 380–383 是否兑现承诺；发现真实缺陷才修，否则记录结论。
+**前端**：逐项静态核对 `HistoryDialog.tsx`、`SettingsDialog.tsx` / `settings.css`、`editor-bridge.ts` / `scroll-sync.ts`；用 bun 从源码切出 `shouldIgnoreProgrammaticScroll` 与 `APPLIED_SCROLL_GRACE_MS`（原样抽取，不复制实现）直调 12 组边界用例。
+**后端**：核对 `commands/search.rs`、`commands/history.rs`（`clear_history` / `clear_recoveries` 返回值）、`history.rs` / `recovery.rs` 的清理实现；从已安装的 tauri 2.12.5 源码（`scripts/process-ipc-message-fn.js`）确认 IPC 参数走 `JSON.stringify`，值为 `undefined` 的键被丢弃，`clearHistory()` 不传参在 Rust 侧得到 `None`（清空全部）而非 `Some(0)`。
+**裁决**：检验轮，无新功能；发现 1 个真实缺陷并本轮修复。
+
+**逐项结论**
+- **380 历史版本单条删除：通过。** `deleteHistory(relPath, id)` 与 Rust `delete_history(rel_path, id, …)` 参数顺序一致；确认框文案含时间与「删除后不可恢复」，`choice !== "delete"` 时直接返回、不发请求、不改列表；删除成功后 `nextIndex = min(原位置, 剩余数-1)`，删中间选中原位置的下一条、删末条退到上一条、删空进空态并把焦点交给「关闭」（`pendingFocus = -1`）；失败只 Toast、`entries` 不变；`deleting` 同时挡住重复点击与再次确认；Esc 在 `ui.confirm` 打开时放行给确认框，方向键 / Home / End / 对比 / 恢复路径未改。唯一的瞬态：`setSelected` 到读盘 effect 之间有一帧，恢复按钮尚未被 `reading` 禁用而 `content` 仍是旧版本，实际不可点中（<16ms，未处理）。
+- **381 设置「存储」区：发现并修复 1 个缺陷，其余通过。** 分类顺序为外观排版 / 编辑行为 / 视图与预览 / **存储** / 快捷键 / 关于，符合设计；统计读取失败时 `stats` 为 null，`summary` 显示「无法读取存储统计」且三个按钮全部禁用（`emptyHistory` / `emptyRecovery` 为 true），不会在失败态可点；0 份时对应按钮禁用；「取消」只返回、绝不调用命令（仅在 `choice === "clear"` 时 `run`）；完成后重读统计；三个按钮分别调 `clearHistory(30)` / `clearHistory()` / `clearRecoveries()`，返回值都是删除份数（`history::clear_history` → `usize`，`recovery::clear_all` → `usize`），Toast「已清理 N 份快照 / 恢复副本」与数量一致；「清空全部快照」不影响已保存正文，历史弹层每次打开都重新 `listHistory`，会话中已打开文档的历史列表在下次打开时自然一致。**缺陷**：清理期间三个按钮被 `busy` 禁用，确认框关闭时 `DialogHost` 把焦点还给触发按钮，该按钮随即禁用 → 浏览器把焦点丢回 `body`，键盘用户清理完要从设置顶部重走（三个按钮均受影响，全清空后更明显）。修复 `b9f2d73`：清理落定后若 `document.activeElement` 仍是 `body`，焦点交给存储区第一个可用按钮，全部清空时交给存储区容器（`tabIndex=-1`，`trapTab` 已排除 -1 不会多出 Tab 停靠点）；用户已移到别处则不抢。
+- **382 分栏恢复阅读位置抑制：通过。** `restoringScroll` 只在 `restoreEditorScroll` 里 +1，两层 rAF 里 `Math.max(0, …)` 减 1，计数器成对；`unmountEditor` 归零时残留回调再减也被钳在 0，异常路径不会永久 >0（唯一理论风险是窗口隐藏时 rAF 暂停、计数器短暂留着，恢复可见即解除）。bun 直调 12 组用例全部符合预期：未写入不忽略、±1 回声忽略、宽限内被钳制 205px 忽略、119ms 忽略、恰 120ms 视为用户滚动、宽限后同位置仍按回声、零值 ±1 边界。`restorePending` 在恢复结束后只做一次「编辑器 → 预览」对齐，方向固定，不会反向推挤；宽限窗口内极快的用户滚动最多被吞一次，下一次滚动事件即恢复。窄窗口（≤880px）仍跳过同步。
+- **383 搜索跳过 frontmatter：通过。** `frontmatter_end` 边界与测试一致（空 / 首行非 `---` 返回 0、BOM 与行尾空白、CRLF、未闭合、第 500 行闭合算、第 501 行不算）；`walk` 用 `enumerate().skip(skip)`，行号仍按原文计算；匹配仍 `line.to_lowercase().contains(&needle)`，大小写不敏感与查询 trim 未变；只影响文件开头，正文分隔线不受影响；其它搜索行为（忽略目录 / 隐藏项 / 2MB 上限 / 200 条上限）未动。
+
+**改动**：`src/features/settings/SettingsDialog.tsx`（+17/−1，修复）；另更新 `docs/loop/backlog.md`、`docs/loop/state.md`。未新增依赖、未改构建配置、未碰 README「暂不做」、未改 `src-tauri/`。
+**构建**：`$HOME/.bun/bin/bun run build` 通过（含 tsc，vite 1.13s / 修复后 1.31s，仅既有的 chunk 体积与 ineffective dynamic import 提示）；`(cd src-tauri && cargo test)` 49 passed、0 failed。
+**测试**：bun 直调 `shouldIgnoreProgrammaticScroll`（从源码原样抽取函数与常量）12 组用例 12/12 PASS；CDP 不可用（9222 未运行，`curl` 探一次失败），未启动应用。
+**测试步骤（人工复现）**：
+1. 启动应用，`Ctrl+,` →「存储」，确认两块统计正常显示、三个按钮按份数启用 / 禁用。
+2. 用键盘 Tab 到「清理 30 天前的快照」回车 → 确认框「清理 / 取消」：选「取消」，数字与列表不变。
+3. 再执行并选「清理」：完成后 Toast 显示「已清理 N 份快照」，数字减少；改动前焦点回到页面开头（`document.activeElement` 为 `BODY`），修复后焦点落在存储区第一个可用按钮。
+4. 依次清空全部快照与恢复副本：Toast 数量与减少量一致，两行变「0 份」、对应按钮禁用；修复后焦点停在存储区容器上（不会再丢到页面）。
+5. 历史弹层一致性：清空全部快照后打开「文档历史」，应为空态（弹层每次打开重新读盘）；恢复副本清空不影响已保存正文与文件树。
+6. 统计失败态：临时让 `storage_stats` 失败（如无数据目录权限），两行显示「无法读取存储统计」，三个按钮保持禁用。
+7. 历史单条删除回归：`Ctrl+Alt+H` → 方向键选中中间版本 → 删除并确认，选中并聚焦相邻版本；删到空显示空态、焦点在「关闭」；取消不改列表。
+8. 搜索回归：frontmatter 笔记搜「写作」只命中正文一行、行号对得上；搜「tags」无结果；正文中段的 `---` 分隔线不影响其后命中。
+9. 分栏回归：长文档滚到中段切走再切回，两侧 `scrollTop` 回到原处（偏差 <2px），随后手动滚两侧仍双向跟随。
+
+**遗留 / 下一轮候选**：
+- R-04 仍需真机按第 382 轮步骤复核后再勾 `[x]`；本轮只做了纯函数边界复核。
+- 380 的瞬态（删除后一帧内恢复按钮仍指旧内容）未修，实际不可点中；若后续给删除加动画再评估。
+- 存储清理后历史目录可能残留空哈希目录（第 379 轮已记录），不影响统计。
+- 计数清零，第 385 轮按正常需求轮，从 `requirements.md` 取候选。
+
 ## 第 383 轮 · 2026-11-12 13:42
 **用户需求**：场景：笔记开头用 frontmatter 记 `tags: [写作]` 和注释 → 现在的问题：全文搜索把 `title:` / `tags:` / 注释里的 `#` 也当正文命中，结果点开常落在元数据行 → 期望：搜索只命中正文，结果行号仍对应编辑器里的真实位置。
 **产品经理**：做。R-10 搜索侧收尾，与第 376 轮预览 / 大纲规则保持一致；只过滤文件开头的元数据区，不改搜索的匹配、排序与返回结构，属于「快、安静」边界内的修正。
