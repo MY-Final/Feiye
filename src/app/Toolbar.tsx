@@ -399,31 +399,37 @@ export async function exportActiveAsHtml(): Promise<void> {
   const text = getEditorText();
   if (text === null) return;
 
-  const exported = await renderMarkdownForExport(text);
-  const { html: body, inlined } = await inlineLocalImages(
-    exported.html,
-    root,
-    docPath,
-  );
-  // 导出前先体检：有风险才打扰，全部正常时保持原流程。
-  const risks = scanContentRisks(body, exported.mermaid);
-  const risky: string[] = [];
-  if (risks.external > 0) risky.push(`${risks.external} 张外链图片可能失效`);
-  if (risks.mermaid > 0) risky.push(`${risks.mermaid} 个 Mermaid 图表未渲染`);
-  if (risks.local > 0) {
-    risky.push(`${risks.local} 张本地图片未内联，收件人可能看不到`);
-  }
-  if (risky.length > 0) {
-    const inlinedNote = inlined > 0 ? `已内联 ${inlined} 张本地图片。` : "";
-    const choice = await ui.ask({
-      title: "导出内容有风险",
-      message: `${inlinedNote}${risky.join("；")}。仍然导出？`,
-      buttons: [
-        { label: "仍然导出", value: "export", tone: "primary" },
-        { label: "取消", value: "cancel" },
-      ],
-    });
-    if (choice !== "export") return;
+  // 渲染 / 内联可能因文档过大或读图失败而抛错，先兜住，别让导出静默失败。
+  let body = "";
+  let inlined = 0;
+  try {
+    const exported = await renderMarkdownForExport(text);
+    const result = await inlineLocalImages(exported.html, root, docPath);
+    body = result.html;
+    inlined = result.inlined;
+    // 导出前先体检：有风险才打扰，全部正常时保持原流程。
+    const risks = scanContentRisks(body, exported.mermaid);
+    const risky: string[] = [];
+    if (risks.external > 0) risky.push(`${risks.external} 张外链图片可能失效`);
+    if (risks.mermaid > 0) risky.push(`${risks.mermaid} 个 Mermaid 图表未渲染`);
+    if (risks.local > 0) {
+      risky.push(`${risks.local} 张本地图片未内联，收件人可能看不到`);
+    }
+    if (risky.length > 0) {
+      const inlinedNote = inlined > 0 ? `已内联 ${inlined} 张本地图片。` : "";
+      const choice = await ui.ask({
+        title: "导出内容有风险",
+        message: `${inlinedNote}${risky.join("；")}。仍然导出？`,
+        buttons: [
+          { label: "仍然导出", value: "export", tone: "primary" },
+          { label: "取消", value: "cancel" },
+        ],
+      });
+      if (choice !== "export") return;
+    }
+  } catch (error) {
+    ui.toast(`导出 HTML 失败：${describeError(error)}`, "error");
+    return;
   }
 
   const parent = parentRel(docPath);

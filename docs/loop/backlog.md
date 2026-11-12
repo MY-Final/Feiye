@@ -26,7 +26,8 @@
 **后端**：无（未改 `src-tauri/`）。工作量无。
 **裁决**：做。
 **改动**：`src/lib/images.ts`（+18/−9 行）、`src/features/preview/preview-controller.ts`（+26/−8 行）、`src/app/Toolbar.tsx`（+43/−10 行），共 3 个源码文件；另更新 `docs/loop/state.md`、`docs/loop/backlog.md`、`docs/loop/requirements.md`。
-**构建**：`bun run build` 通过（含 tsc，vite 1.11s，仅既有的 chunk 体积与 ineffective dynamic import 提示）；未改 `src-tauri/`，未跑 cargo test。
+**构建**：`bun run build` 通过（含 tsc，vite 1.21s，仅既有的 chunk 体积与 ineffective dynamic import 提示）；未改 `src-tauri/`，未跑 cargo test。
+**补充**：渲染与风险统计已移入 `try/catch`，文档超过 1 MB、Worker 报错或读图失败时仍会弹「导出 HTML 失败：…」，不会把未处理的 Promise 拒绝抛给全局。
 **测试步骤（CDP 不可用，9222 未运行，未做 CDP 实测；以下为人工复现）**：
 - 准备一篇笔记，含：1 张工作区内本地图、1 张 `https://` 外链图、1 个 ```mermaid 代码块、1 个指向不存在文件的本地图（如 `![](missing.png)`）。
 - 标题栏「导出 HTML」：应先弹出「导出内容有风险」，正文包含「已内联 1 张本地图片。」「1 张外链图片可能失效」「1 个 Mermaid 图表未渲染」「1 张本地图片未内联」四项（顺序为外链 → Mermaid → 本地）；点「取消」后不出现文件名输入框、目录里没有新 `.html`、文件树不刷新。
