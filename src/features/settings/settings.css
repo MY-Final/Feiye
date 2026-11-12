@@ -495,6 +495,13 @@
   outline: none;
 }
 
+.settings-custom-css-error {
+  margin: 6px 0 0;
+  color: var(--danger);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
 .settings-custom-css-count {
   margin: 6px 0 0;
   color: var(--text-faint);

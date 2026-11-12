@@ -4,6 +4,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { trapTab } from "../../components/Dialog";
 import { SlidingSegmented } from "../../components/SlidingSegmented";
 import { APP_NAME, APP_NAME_EN, APP_TAGLINE } from "../../lib/app-info";
+import { checkCssBalance } from "../../lib/css-check";
 import { getSetting, setSetting } from "../../lib/tauri";
 import { CUSTOM_CSS_LIMIT } from "../../lib/theme";
 import { VIEW_MODES } from "../../lib/view-modes";
@@ -362,6 +363,9 @@ export function SettingsDialog() {
 
   if (!open) return null;
 
+  // 只提示、不拦保存：浏览器对不配平的 CSS 会静默丢弃，先让用户看见。
+  const cssError = checkCssBalance(preferences.customCss);
+
   const close = () => {
     void flushPreferences();
     closeSettings();
@@ -612,8 +616,20 @@ export function SettingsDialog() {
                     spellCheck={false}
                     value={preferences.customCss}
                     placeholder="/* 在这里写自定义样式 */"
+                    aria-invalid={cssError ? true : undefined}
+                    aria-describedby={cssError ? "settings-custom-css-error" : undefined}
                     onChange={(event) => changeCustomCss(event.target.value)}
                   />
+                  {cssError ? (
+                    <p
+                      id="settings-custom-css-error"
+                      className="settings-custom-css-error"
+                      role="alert"
+                    >
+                      第 {cssError.line} 行第 {cssError.column} 列：
+                      {cssError.message}
+                    </p>
+                  ) : null}
                   <p className="settings-custom-css-count">
                     {preferences.customCss.length} / {CUSTOM_CSS_LIMIT} 字符
                     {preferences.customCss.length >= CUSTOM_CSS_LIMIT
