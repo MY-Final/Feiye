@@ -26,7 +26,7 @@
 
 ## 本窗口进展（2026-11-12 10:45– ）
 
-- 第 371 轮：导出 HTML 跟随当前主题——`EXPORT_STYLE` 原先写死浅色，深色主题下导出的文件与当前观感完全脱节。`Toolbar.tsx` 改为按主题生成样式：`EXPORT_PALETTE` 提供亮 / 暗两套配色（背景 / 文字、标题、链接、引用、行内代码与代码块、表格边框、分隔线；暗色取 `global.css` 的 `--bg` / `--text` / `--code-bg` / `--line` 等令牌值），`exportStyle(theme)` 拼出 CSS，`standaloneHtml` 新增 `theme` 参数；导出时用 `resolveTheme(设置 store 的 theme 偏好)` 解析亮暗（跟随系统按系统主题），不读瞬时 `data-theme`。`PRINT_STYLE` 补 `color:#22211d`，`buildPrintableHtml` 固定传 `"light"`，`Ctrl+P` / 导出 PDF 仍白底深字。构建通过（含 tsc，vite 1.56s，仅既有的 chunk 体积与动态导入提示）；未改 `src-tauri/`。CDP 不可用（9222 未运行），人工验证步骤见 backlog。
+- 第 371 轮：导出 HTML 跟随当前主题——`EXPORT_STYLE` 原先写死浅色，深色主题下导出的文件与当前观感完全脱节。`Toolbar.tsx` 改为按主题生成样式：`EXPORT_PALETTE` 提供亮 / 暗两套配色（背景 / 文字、标题、链接、引用、行内代码与代码块、表格边框、分隔线；暗色取 `global.css` 的 `--bg` / `--text` / `--code-bg` / `--line` 等令牌值），`exportStyle(theme)` 拼出 CSS，`standaloneHtml` 新增 `theme` 参数；导出时用 `resolveTheme(设置 store 的 theme 偏好)` 解析亮暗（跟随系统按系统主题），不读瞬时 `data-theme`。`PRINT_STYLE` 补 `color:#22211d`，`buildPrintableHtml` 固定传 `"light"`，`Ctrl+P` / 导出 PDF 仍白底深字。另补 Shiki 双主题切换与 `pre.shiki` 底色，避免暗色导出里代码块深底深字。构建通过（含 tsc，vite 1.56s，仅既有的 chunk 体积与动态导入提示）；未改 `src-tauri/`。CDP 不可用（9222 未运行），人工验证步骤见 backlog。
 
 - 第 370 轮：自定义 CSS 输入时校验括号与引号——此前只校验长度上限，括号不配平、引号未闭合时浏览器静默丢弃整段样式，用户以为已生效。新增 `src/lib/css-check.ts` 的纯函数 `checkCssBalance`（单遍扫描，忽略注释与字符串内部的括号，只报第一处：多余的 `}` / `]` / `)`、括号错配、缺少闭合、字符串缺少结束引号，行列从 1 开始）；`SettingsDialog.tsx` 在自定义 CSS 文本域下方显示「第 N 行第 M 列：原因」的错误行，文本域补 `aria-invalid` / `aria-describedby`，错误行 `role="alert"`，合法或留空时属性与提示一并移除，不阻止保存、不改长度截断逻辑、不抢焦点；`settings.css` 补错误行样式（`--danger`）。构建通过（含 tsc，vite 1.12s，仅既有的 chunk 体积与动态导入提示）；bun 直调函数 11 组用例全部符合预期；未改 `src-tauri/`。CDP 不可用（9222 未运行），人工验证步骤见 backlog。
 

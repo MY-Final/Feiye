@@ -259,6 +259,12 @@ code{font-family:Consolas,"SFMono-Regular",Menlo,monospace;font-size:.9em}
 table{border-collapse:collapse;margin:0 0 1em}
 th,td{border:1px solid ${p.line};padding:6px 10px}
 hr{border:0;border-top:1px solid ${p.line};margin:2em 0}
+pre.shiki{background:${p.preBg}!important}
+${
+  theme === "dark"
+    ? `.shiki,.shiki span{color:var(--shiki-dark)!important;background-color:var(--shiki-dark-bg)!important;font-style:var(--shiki-dark-font-style)!important;font-weight:var(--shiki-dark-font-weight)!important;text-decoration:var(--shiki-dark-text-decoration)!important}`
+    : ""
+}
 `;
 }
 
