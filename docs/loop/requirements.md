@@ -172,7 +172,7 @@
 **落点**：`src/features/settings/SettingsDialog.tsx`、`src/stores/settings.ts`、`src/lib/theme.ts`。
 **证据**：第 188 轮遗留「未对语法错误的 CSS 做校验」。
 
-### [ ] R-18 导出 / 复制前的内容体检 · S · P2
+### [x] R-18 导出 / 复制前的内容体检 · S · P2（第 375 轮）
 
 **场景**：把笔记复制到公众号、邮件或导出 HTML。
 **现在的问题**：Mermaid 在导出里仍是代码块；外链图片、未渲染的公式、坏图不会提前说明；用户到收件人那里才发现。

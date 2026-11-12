@@ -1,12 +1,12 @@
 # 循环状态
 
-- 轮次：374
+- 轮次：375
 - 起始时间：2026-11-12 10:45
 - 窗口终点：手动单轮（本轮完成后结束）
-- 最后更新：2026-11-12 12:10
+- 最后更新：2026-11-12 12:20
 - 当前分支：loop/pool-2026-11-12
 - 状态：进行中
-- 自上次检验轮：1（第 373 轮已检验 368–372；第 378 轮做下一次检验）
+- 自上次检验轮：2（第 373 轮已检验 368–372；第 378 轮做下一次检验）
 
 ## 上一窗口小结（2026-11-01 23:40–2026-11-02 15:45）
 
@@ -25,6 +25,8 @@
 - 单轮仍限 S 级（≤ 约 80 行、≤ 3 个文件），构建通过才提交；只提交不推送。
 
 ## 本窗口进展（2026-11-12 10:45– ）
+
+- 第 375 轮：导出 / 复制前的内容体检——此前外链图片、未内联的本地图与 Mermaid 代码块要到收件人那里才发现。`lib/images.ts` 用一次 DOM 扫描统计外链图片与未内联本地图（`scanContentRisks`，取代原先只数本地图的 `countLocalImages`）；Mermaid 数量改由 Worker 渲染结果给出（Shiki 高亮后 class 已变 `language-text`，按 class 查会漏），`preview-controller.ts` 新增 `renderMarkdownForExport` 一并返回，`renderMarkdownToHtml` 保持原签名。`Toolbar.tsx` 导出 HTML 时先体检，有风险才用既有确认框列出「已内联 N 张 / 外链 M 张可能失效 / Mermaid K 个未渲染 / 本地图 X 张未内联」，选「仍然导出」才写盘，取消不写文件、不刷新目录；复制 HTML 沿用成功 Toast，把同类风险拼进括号摘要，无风险时文案不变。构建通过（含 tsc，vite 1.11s，仅既有的 chunk 体积与 ineffective dynamic import 提示）；未改 `src-tauri/`。CDP 不可用（9222 未运行），人工验证步骤见 backlog。
 
 - 第 374 轮：命令分组单一来源——命令面板的 `GROUP_LABELS` 与标题栏菜单的 `GROUPS` 各存一份分组文案 / 顺序，新增分组要两处同步。`commands.ts` 新增 `COMMAND_GROUPS`（8 个分组的 id、文案、顺序）与按 id 查文案的 `COMMAND_GROUP_LABELS`；`CommandPalette.tsx` 删除本地 `GROUP_LABELS`，改用导出的映射；`AppMenu.tsx` 删除本地 `GROUPS`，改为过滤 `COMMAND_GROUPS`。菜单结构（文件 / 编辑 / 段落 / 格式 / 视图 / 应用）、菜单项顺序、分隔线、快捷键显示、禁用态、面板「最近使用」段与过滤顺序均不变。构建通过（含 tsc，vite 1.44s，仅既有的 chunk 体积与 ineffective dynamic import 提示）；未改 `src-tauri/`。顶层菜单到分组的归属仍在 `MenuBar.tsx` 的 `MENUS`（本轮 3 文件上限未触及），新增顶层菜单仍需改那里，已记入 backlog 遗留。CDP 不可用（9222 未运行），人工验证步骤见 backlog。
 

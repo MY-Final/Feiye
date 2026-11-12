@@ -31,14 +31,17 @@ import {
   existingNameError,
   nameCharError,
 } from "../features/workspace/workspace-actions";
-import { renderMarkdownToHtml } from "../features/preview/preview-controller";
+import {
+  renderMarkdownForExport,
+  renderMarkdownToHtml,
+} from "../features/preview/preview-controller";
 import { useDocumentStore } from "../stores/document";
 import { useEditorStore } from "../stores/editor";
 import { useSettingsStore } from "../stores/settings";
 import { useUiStore } from "../stores/ui";
 import { useWorkspaceStore } from "../stores/workspace";
 import { copyHtml } from "../lib/clipboard";
-import { countLocalImages, normalizeImagePath } from "../lib/images";
+import { normalizeImagePath, scanContentRisks } from "../lib/images";
 import { baseName, parentRel } from "../lib/paths";
 import { describeError } from "../lib/tauri";
 import { resolveTheme } from "../lib/theme";
@@ -151,15 +154,25 @@ export async function copyActiveAsHtml(): Promise<void> {
   if (!usePreviewSelection && text === null) return;
 
   try {
-    const rendered = usePreviewSelection
-      ? (previewHtml ?? "")
-      : await renderMarkdownToHtml(text!);
+    let rendered: string;
+    let mermaid = 0;
+    if (usePreviewSelection) {
+      rendered = previewHtml ?? "";
+    } else {
+      const result = await renderMarkdownForExport(text!);
+      rendered = result.html;
+      mermaid = result.mermaid;
+    }
     const { html, inlined } = await inlineLocalImages(rendered, root, docPath);
     const copied = await copyHtml(html);
-    const localImages = countLocalImages(html);
+    const risks = scanContentRisks(html, mermaid);
     const notes: string[] = [];
     if (inlined > 0) notes.push(`${inlined} 张本地图片已内联`);
-    if (localImages > 0) notes.push(`${localImages} 张本地图片在应用外可能无法显示`);
+    if (risks.external > 0) notes.push(`${risks.external} 张外链图片可能失效`);
+    if (risks.mermaid > 0) notes.push(`${risks.mermaid} 个 Mermaid 未渲染`);
+    if (risks.local > 0) {
+      notes.push(`${risks.local} 张本地图片未内联，应用外可能无法显示`);
+    }
     const warning = notes.length > 0 ? `（${notes.join("；")}）` : "";
     const fromSelection = useSelection || usePreviewSelection;
     const plain = useSelection
@@ -386,6 +399,33 @@ export async function exportActiveAsHtml(): Promise<void> {
   const text = getEditorText();
   if (text === null) return;
 
+  const exported = await renderMarkdownForExport(text);
+  const { html: body, inlined } = await inlineLocalImages(
+    exported.html,
+    root,
+    docPath,
+  );
+  // 导出前先体检：有风险才打扰，全部正常时保持原流程。
+  const risks = scanContentRisks(body, exported.mermaid);
+  const risky: string[] = [];
+  if (risks.external > 0) risky.push(`${risks.external} 张外链图片可能失效`);
+  if (risks.mermaid > 0) risky.push(`${risks.mermaid} 个 Mermaid 图表未渲染`);
+  if (risks.local > 0) {
+    risky.push(`${risks.local} 张本地图片未内联，收件人可能看不到`);
+  }
+  if (risky.length > 0) {
+    const inlinedNote = inlined > 0 ? `已内联 ${inlined} 张本地图片。` : "";
+    const choice = await ui.ask({
+      title: "导出内容有风险",
+      message: `${inlinedNote}${risky.join("；")}。仍然导出？`,
+      buttons: [
+        { label: "仍然导出", value: "export", tone: "primary" },
+        { label: "取消", value: "cancel" },
+      ],
+    });
+    if (choice !== "export") return;
+  }
+
   const parent = parentRel(docPath);
   const baseLeaf = `${baseName(docPath).replace(/\.[^./\\]+$/, "") || "笔记"}.html`;
   // 对话框里一打开就给出真正可用的名字，不让用户确认后再被悄悄改名。
@@ -410,8 +450,6 @@ export async function exportActiveAsHtml(): Promise<void> {
   if (!name) return;
 
   const leaf = ensureHtmlName(name.trim());
-  const rendered = await renderMarkdownToHtml(text);
-  const { html: body } = await inlineLocalImages(rendered, root, docPath);
   const write = async (candidate: string) => {
     const candidateRel = parent ? `${parent}/${candidate}` : candidate;
     // 用最终落盘的文件名做 `<title>`，撞名顺延后标签页仍与文件名一致。

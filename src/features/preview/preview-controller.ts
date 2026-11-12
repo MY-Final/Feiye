@@ -77,9 +77,15 @@ function cacheResult(
   }
 }
 
+export interface RenderedExport {
+  html: string;
+  /** 文档里仍是代码块的 Mermaid 图表数量：导出 HTML 不会画成图。 */
+  mermaid: number;
+}
+
 interface PendingExport {
   id: number;
-  resolve(html: string): void;
+  resolve(result: RenderedExport): void;
   reject(error: Error): void;
 }
 
@@ -100,7 +106,7 @@ function ensureWorker(): Worker | null {
         const { resolve, reject } = pendingExport;
         pendingExport = null;
         if (data.error) reject(new Error(data.error));
-        else resolve(data.html);
+        else resolve({ html: data.html, mermaid: data.mermaid?.length ?? 0 });
         return;
       }
       // 丢弃过期结果。
@@ -244,7 +250,7 @@ export function clearPreview(): void {
  * 用预览同一套管线把 Markdown 渲染成 HTML 片段。
  * 不改变预览状态；导出请求与预览共用 Worker，因此不需要再建一个解析器。
  */
-export function renderMarkdownToHtml(markdown: string): Promise<string> {
+function renderMarkdown(markdown: string): Promise<RenderedExport> {
   if (markdown.length > MAX_PREVIEW_BYTES) {
     return Promise.reject(new Error("文档超过 1 MB，无法生成 HTML。"));
   }
@@ -263,4 +269,15 @@ export function renderMarkdownToHtml(markdown: string): Promise<string> {
     pendingExport = { id, resolve, reject };
     current.postMessage({ id, markdown });
   });
+}
+
+export function renderMarkdownToHtml(markdown: string): Promise<string> {
+  return renderMarkdown(markdown).then((result) => result.html);
+}
+
+/** 导出 / 复制专用：同时拿到 Mermaid 代码块数量，供内容体检提示。 */
+export function renderMarkdownForExport(
+  markdown: string,
+): Promise<RenderedExport> {
+  return renderMarkdown(markdown);
 }
