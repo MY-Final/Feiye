@@ -255,16 +255,20 @@ export function SearchPanel({
   };
 
   const replaceAll = async () => {
-    if (replacing || !needle || !hits.length) return;
+    // 新关键词的结果还没回来时，列表里仍是上一次查询的命中，而 needle 已是新词：
+    // 此时替换会拿新词去改旧文件，确认文案里的篇数 / 行数也对不上。
+    if (replacing || loading || !needle || !hits.length) return;
     const paths = Array.from(new Set(hits.map((hit) => hit.relPath)));
     // 结果达到上限时只替换已列出的文件，实际处数可能更多。
     const truncated = hits.length >= MAX_HITS;
     const atLeast = truncated ? "至少 " : "";
     const deleteHint =
       replacement.length === 0 ? "（替换词为空：将删除匹配的文字）" : "";
+    // 搜索按行计数，替换按实际出现次数计数：同一行出现多次时两者不同，
+    // 所以确认文案说「行」，完成后 Toast 里的「处」才是实际写入数。
     const choice = await useUiStore.getState().ask({
       title: "全部替换",
-      message: `将修改${atLeast}${paths.length} 篇笔记中的${atLeast}${hits.length} 处${deleteHint}，写入后不可撤销。`,
+      message: `将修改${atLeast}${paths.length} 篇笔记中的${atLeast}${hits.length} 行${deleteHint}，同一行出现多次都会替换。写入后不可撤销，打开中的笔记会重新载入并清空撤销历史。`,
       buttons: [
         { label: "取消", value: "cancel", tone: "default" },
         { label: "全部替换", value: "replace", tone: "danger" },
@@ -423,7 +427,7 @@ export function SearchPanel({
             <button
               type="button"
               className="search-replace-run"
-              disabled={replacing || !needle || !hits.length}
+              disabled={replacing || loading || !needle || !hits.length}
               onClick={() => void replaceAll()}
             >
               {replacing ? "替换中…" : "全部替换"}

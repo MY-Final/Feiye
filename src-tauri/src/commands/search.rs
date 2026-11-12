@@ -558,29 +558,63 @@ pub fn replace_in_files(
     search: State<'_, SearchState>,
 ) -> Result<ReplaceReport, AppError> {
     let root = state.root()?;
-    let needle = query.trim();
+    Ok(replace_paths(
+        &root,
+        &rel_paths,
+        query.trim(),
+        &replacement,
+        &search,
+    ))
+}
+
+/// 批量替换的核心（命令只负责取工作区根目录，便于直接测试）。
+/// 同一路径只处理一次：重复路径会把刚写入的替换词再展开一遍，
+/// 处数也会重复累计。`normalize_rel` 能合并 `./a.md` 这类写法；
+/// Windows 文件系统大小写不敏感，键再按小写归一。
+pub(crate) fn replace_paths(
+    root: &Path,
+    rel_paths: &[String],
+    needle: &str,
+    replacement: &str,
+    search: &SearchState,
+) -> ReplaceReport {
     if needle.is_empty() || rel_paths.is_empty() {
-        return Ok(ReplaceReport {
+        return ReplaceReport {
             files: Vec::new(),
             changed_files: 0,
             total_replaced: 0,
             failed_files: 0,
-        });
+        };
     }
 
-    let files: Vec<FileReplace> = rel_paths
-        .iter()
-        .map(|rel| replace_in_file(&root, rel, needle, &replacement, &search))
-        .collect();
+    let mut seen = HashSet::new();
+    let mut files = Vec::new();
+    for rel in rel_paths {
+        let key = match fs_path::normalize_rel(rel) {
+            Ok(clean) if !clean.is_empty() => {
+                if cfg!(windows) {
+                    clean.to_lowercase()
+                } else {
+                    clean
+                }
+            }
+            // 非法路径保留原样，逐条报错而不是被当成重复项吞掉。
+            _ => rel.clone(),
+        };
+        if !seen.insert(key) {
+            continue;
+        }
+        files.push(replace_in_file(root, rel, needle, replacement, search));
+    }
     let changed_files = files.iter().filter(|file| file.replaced > 0).count();
     let total_replaced = files.iter().map(|file| file.replaced).sum();
     let failed_files = files.iter().filter(|file| file.error.is_some()).count();
-    Ok(ReplaceReport {
+    ReplaceReport {
         files,
         changed_files,
         total_replaced,
         failed_files,
-    })
+    }
 }
 
 #[cfg(test)]
@@ -592,7 +626,7 @@ mod tests {
 
     use super::{
         cached_doc, file_stamp, frontmatter_end, pick_evictions, preview, replace_in_file,
-        replace_literal, walk, CacheInner, Doc, SearchHit, SearchState,
+        replace_literal, replace_paths, walk, CacheInner, Doc, SearchHit, SearchState,
     };
 
     fn collect(dir: &std::path::Path, needle: &str) -> Vec<SearchHit> {
@@ -974,6 +1008,157 @@ mod tests {
             "---\ntags: [术语]\n---\n正文 新词\n"
         );
 
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn replace_is_literal_not_regex() {
+        // `.` / `*` / `(` / `[` / `$` 都按字面量处理，替换文本原样写入。
+        let (out, count) = replace_literal("a.b axb a*b (x) [$1]", "a.b", "Z$1");
+        assert_eq!(count, 1);
+        assert_eq!(out, "Z$1 axb a*b (x) [$1]");
+
+        let (out, count) = replace_literal("(x) [y] a*b", "a*b", "c");
+        assert_eq!(count, 1);
+        assert_eq!(out, "(x) [y] c");
+
+        // 带正则元字符的替换词不会被展开。
+        let (out, count) = replace_literal("term", "term", "$&$1\\n");
+        assert_eq!(count, 1);
+        assert_eq!(out, "$&$1\\n");
+    }
+
+    #[test]
+    fn replace_preserves_bom_and_crlf() {
+        let base = std::env::temp_dir().join(format!("feiye-replace-crlf-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        let mut bytes = vec![0xEF, 0xBB, 0xBF];
+        bytes.extend_from_slice("---\r\ntags: [term]\r\n---\r\nTerm 正文\r\nterm 第二处\r\n".as_bytes());
+        std::fs::write(base.join("a.md"), &bytes).unwrap();
+        let cache = SearchState::default();
+
+        let result = replace_in_file(&base, "a.md", "term", "新词", &cache);
+        assert_eq!(result.replaced, 2);
+        let after = std::fs::read_to_string(base.join("a.md")).unwrap();
+        // BOM 原样保留，frontmatter 不动，行尾仍是 CRLF。
+        assert_eq!(
+            after,
+            "\u{feff}---\r\ntags: [term]\r\n---\r\n新词 正文\r\n新词 第二处\r\n"
+        );
+        assert_eq!(after.matches("\r\n").count(), 5);
+        assert!(!after.replace("\r\n", "").contains('\n'));
+
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn empty_query_leaves_file_untouched() {
+        let base = std::env::temp_dir().join(format!("feiye-replace-empty-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        std::fs::write(base.join("a.md"), "term\n").unwrap();
+        let cache = SearchState::default();
+
+        // 查询为空：即使能命中「每两个字符之间」，也一处都不改。
+        let result = replace_in_file(&base, "a.md", "", "x", &cache);
+        assert_eq!(result.replaced, 0);
+        assert!(result.error.is_none());
+        assert_eq!(
+            std::fs::read_to_string(base.join("a.md")).unwrap(),
+            "term\n"
+        );
+
+        // 命令层对空列表 / 空查询直接返回空报告。
+        let report = replace_paths(&base, &["a.md".into()], "", "x", &cache);
+        assert_eq!(report.total_replaced, 0);
+        assert!(report.files.is_empty());
+        let report = replace_paths(&base, &[], "term", "x", &cache);
+        assert_eq!(report.changed_files, 0);
+
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn duplicate_paths_are_replaced_once() {
+        let base = std::env::temp_dir().join(format!("feiye-replace-dup-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        std::fs::write(base.join("a.md"), "term\n").unwrap();
+        let cache = SearchState::default();
+
+        // 同一篇以三种写法出现：只处理一次，替换词不会被二次展开。
+        let report = replace_paths(
+            &base,
+            &["a.md".into(), "./a.md".into(), "a.md".into()],
+            "term",
+            "term term",
+            &cache,
+        );
+        assert_eq!(report.files.len(), 1);
+        assert_eq!(report.changed_files, 1);
+        assert_eq!(report.total_replaced, 1);
+        assert_eq!(
+            std::fs::read_to_string(base.join("a.md")).unwrap(),
+            "term term\n"
+        );
+
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn search_and_replace_agree_on_skipped_frontmatter() {
+        let base = std::env::temp_dir().join(format!("feiye-replace-agree-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        std::fs::write(
+            base.join("a.md"),
+            "---\ntags: [term]\n---\nterm 第一行\nplain term\n",
+        )
+        .unwrap();
+        let cache = SearchState::default();
+
+        // 搜索只报正文的两行；替换也只改这两处，确认文案的行数不会多报。
+        assert_eq!(collect(&base, "term").len(), 2);
+        let result = replace_in_file(&base, "a.md", "term", "new", &cache);
+        assert_eq!(result.replaced, 2);
+        assert_eq!(
+            std::fs::read_to_string(base.join("a.md")).unwrap(),
+            "---\ntags: [term]\n---\nnew 第一行\nplain new\n"
+        );
+
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn failed_write_keeps_original_file() {
+        let base = std::env::temp_dir().join(format!("feiye-replace-ro-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        let path = base.join("a.md");
+        std::fs::write(&path, "term\n").unwrap();
+        let mut perms = std::fs::metadata(&path).unwrap().permissions();
+        perms.set_readonly(true);
+        std::fs::set_permissions(&path, perms).unwrap();
+        let cache = SearchState::default();
+
+        // 只读文件：临时文件写成功但 rename 失败，原文件保持原样，临时文件被清理。
+        let result = replace_in_file(&base, "a.md", "term", "new", &cache);
+        assert!(result.error.is_some());
+        assert_eq!(result.replaced, 0);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "term\n");
+        let leftovers: Vec<String> = std::fs::read_dir(&base)
+            .unwrap()
+            .flatten()
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .filter(|name| name.starts_with(".feiye-tmp-"))
+            .collect();
+        assert!(leftovers.is_empty(), "临时文件未清理：{leftovers:?}");
+
+        let mut perms = std::fs::metadata(&path).unwrap().permissions();
+        perms.set_readonly(false);
+        std::fs::set_permissions(&path, perms).unwrap();
         std::fs::remove_dir_all(&base).unwrap();
     }
 
