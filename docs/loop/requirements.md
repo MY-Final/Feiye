@@ -156,7 +156,7 @@
 **落点**：`src/features/commands/commands.ts`、`src/features/commands/CommandPalette.tsx`、`src/app/AppMenu.tsx`。
 **证据**：`backlog.md` 第 1928、1944 行。
 
-### [ ] R-16 导出 HTML 跟随主题 · S · P2
+### [x] R-16 导出 HTML 跟随主题 · S · P2（第 371 轮）
 
 **场景**：深色主题下写作，导出 HTML 发给别人或自己归档。
 **现在的问题**：`EXPORT_STYLE` 是硬编码浅色（`#fdfdfb` 背景、深色文字），导出结果与当前观感完全脱节；打印仍应保持白底。
