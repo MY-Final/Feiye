@@ -152,6 +152,22 @@
   align-items: center;
 }
 
+/* 存储管理 */
+
+.settings-storage-count {
+  color: var(--text);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-storage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+}
+
 /* 数值滑杆 */
 
 .settings-range-wrap {

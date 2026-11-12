@@ -5,7 +5,14 @@ import { trapTab } from "../../components/Dialog";
 import { SlidingSegmented } from "../../components/SlidingSegmented";
 import { APP_NAME, APP_NAME_EN, APP_TAGLINE } from "../../lib/app-info";
 import { checkCssBalance } from "../../lib/css-check";
-import { getSetting, setSetting } from "../../lib/tauri";
+import {
+  clearHistory,
+  clearRecoveries,
+  getSetting,
+  setSetting,
+  storageStats,
+  type StorageStats,
+} from "../../lib/tauri";
 import { CUSTOM_CSS_LIMIT } from "../../lib/theme";
 import { VIEW_MODES } from "../../lib/view-modes";
 import {
@@ -26,12 +33,19 @@ import {
 import { changeViewMode } from "../workspace/workspace-actions";
 import "./settings.css";
 
-type Category = "appearance" | "editing" | "view" | "shortcuts" | "about";
+type Category =
+  | "appearance"
+  | "editing"
+  | "view"
+  | "storage"
+  | "shortcuts"
+  | "about";
 
 const CATEGORIES: { id: Category; label: string }[] = [
   { id: "appearance", label: "外观排版" },
   { id: "editing", label: "编辑行为" },
   { id: "view", label: "视图与预览" },
+  { id: "storage", label: "存储" },
   { id: "shortcuts", label: "快捷键" },
   { id: "about", label: "关于" },
 ];
@@ -321,6 +335,147 @@ function AboutPanel() {
         检查更新
       </button>
     </div>
+  );
+}
+
+/** 字节数按 KB / MB / GB 显示，保留一位小数。 */
+function formatBytes(bytes: number): string {
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  return `${Math.max(bytes / 1024, 0.1).toFixed(1)} KB`;
+}
+
+function StoragePanel() {
+  const [stats, setStats] = useState<StorageStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      setStats(await storageStats());
+    } catch {
+      // 读不到时保留上一次的数字，只把当前状态说清楚。
+      useUiStore.getState().toast("无法读取存储统计", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  const summary = (files?: number, bytes?: number) => {
+    if (loading) return "统计中…";
+    if (!stats || files === undefined || bytes === undefined) {
+      return "无法读取存储统计";
+    }
+    return files === 0 ? "0 份" : `${files} 份 · ${formatBytes(bytes)}`;
+  };
+
+  const run = async (
+    action: () => Promise<number>,
+    done: (removed: number) => string,
+  ) => {
+    setBusy(true);
+    try {
+      useUiStore.getState().toast(done(await action()));
+    } catch {
+      useUiStore.getState().toast("清理失败，存储统计未变", "error");
+    } finally {
+      await load();
+      setBusy(false);
+    }
+  };
+
+  const confirmThen = async (
+    title: string,
+    message: string,
+    action: () => Promise<number>,
+    done: (removed: number) => string,
+  ) => {
+    const choice = await useUiStore.getState().ask({
+      title,
+      message,
+      buttons: [
+        { label: "清理", value: "clear", tone: "danger" },
+        { label: "取消", value: "cancel" },
+      ],
+    });
+    if (choice === "clear") void run(action, done);
+  };
+
+  const emptyHistory = !stats || stats.historyFiles === 0;
+  const emptyRecovery = !stats || stats.recoveryFiles === 0;
+
+  return (
+    <section className="settings-section">
+      <h3 className="settings-section-title">存储</h3>
+
+      <Row label="文档快照" hint="每篇笔记最多保留 20 份，删除后不可恢复">
+        <span className="settings-storage-count">
+          {summary(stats?.historyFiles, stats?.historyBytes)}
+        </span>
+      </Row>
+
+      <Row
+        label="崩溃恢复副本"
+        hint="未保存内容的恢复副本，清空不影响已保存的正文"
+      >
+        <span className="settings-storage-count">
+          {summary(stats?.recoveryFiles, stats?.recoveryBytes)}
+        </span>
+      </Row>
+
+      <div className="settings-storage-actions" role="group" aria-label="清理存储">
+        <button
+          type="button"
+          className="btn ghost"
+          disabled={busy || emptyHistory}
+          onClick={() =>
+            void confirmThen(
+              "清理 30 天前的快照？",
+              "将删除 30 天前的历史快照，不可恢复。",
+              () => clearHistory(30),
+              (removed) => `已清理 ${removed} 份快照`,
+            )
+          }
+        >
+          清理 30 天前的快照
+        </button>
+        <button
+          type="button"
+          className="btn danger"
+          disabled={busy || emptyHistory}
+          onClick={() =>
+            void confirmThen(
+              "清空全部历史快照？",
+              "全部笔记的历史快照都会被删除，不可恢复。",
+              () => clearHistory(),
+              (removed) => `已清理 ${removed} 份快照`,
+            )
+          }
+        >
+          清空全部快照
+        </button>
+        <button
+          type="button"
+          className="btn ghost"
+          disabled={busy || emptyRecovery}
+          onClick={() =>
+            void confirmThen(
+              "清空全部恢复副本？",
+              "仅删除崩溃恢复副本，不影响已保存的笔记正文。",
+              () => clearRecoveries(),
+              (removed) => `已清理 ${removed} 份恢复副本`,
+            )
+          }
+        >
+          清空全部恢复副本
+        </button>
+      </div>
+    </section>
   );
 }
 
@@ -777,6 +932,8 @@ export function SettingsDialog() {
             ) : null}
 
             {category === "shortcuts" ? <ShortcutPanel /> : null}
+
+            {category === "storage" ? <StoragePanel /> : null}
 
             {category === "about" ? <AboutPanel /> : null}
           </div>
