@@ -27,6 +27,27 @@ pub struct SearchHit {
     pub text: String,
 }
 
+/// 去掉行尾空白后比较，首行的 BOM 也视作不存在。
+fn is_fence(line: &str) -> bool {
+    let bare = line.strip_prefix('\u{feff}').unwrap_or(line);
+    bare.trim_end() == "---"
+}
+
+/// 文件开头 YAML frontmatter 占用的行数；没有或 500 行内无闭合则为 0。
+/// 规则与前端预览 / 大纲一致：首行与闭合行都是 `---`。
+fn frontmatter_end(lines: &[&str]) -> usize {
+    if !lines.first().map(|line| is_fence(line)).unwrap_or(false) {
+        return 0;
+    }
+    let last = lines.len().min(500);
+    for (index, line) in lines.iter().enumerate().take(last).skip(1) {
+        if is_fence(line) {
+            return index + 1;
+        }
+    }
+    0
+}
+
 fn preview(line: &str) -> String {
     let trimmed = line.trim();
     let mut text: String = trimmed.chars().take(MAX_TEXT_CHARS).collect();
@@ -83,7 +104,10 @@ fn walk(dir: &Path, rel: &str, needle: &str, limit: usize, hits: &mut Vec<Search
             Err(_) => continue,
         };
 
-        for (index, line) in content.lines().enumerate() {
+        // 开头的 frontmatter 不参与命中，但行号仍按原文计算，点击能落到正确位置。
+        let lines: Vec<&str> = content.lines().collect();
+        let skip = frontmatter_end(&lines);
+        for (index, line) in lines.iter().enumerate().skip(skip) {
             if hits.len() >= limit {
                 return;
             }
@@ -121,7 +145,7 @@ pub fn search_workspace(
 
 #[cfg(test)]
 mod tests {
-    use super::{preview, walk, SearchHit};
+    use super::{frontmatter_end, preview, walk, SearchHit};
 
     fn collect(dir: &std::path::Path, needle: &str) -> Vec<SearchHit> {
         let mut hits = Vec::new();
@@ -136,6 +160,54 @@ mod tests {
         let text = preview(&long);
         assert_eq!(text.chars().count(), 241);
         assert!(text.ends_with('…'));
+    }
+
+    #[test]
+    fn detects_frontmatter_end() {
+        assert_eq!(frontmatter_end(&[]), 0);
+        assert_eq!(frontmatter_end(&["a", "b"]), 0);
+        assert_eq!(frontmatter_end(&["---", "title: x", "---", "body"]), 3);
+        // 首行 BOM、闭合行行尾空白都不影响识别。
+        assert_eq!(frontmatter_end(&["\u{feff}---", "title: x", "---  "]), 3);
+        // CRLF 由 `str::lines` 去掉 `\r`。
+        let crlf = "---\r\ntags: [写作]\r\n---\r\n正文\r\n";
+        let lines: Vec<&str> = crlf.lines().collect();
+        assert_eq!(frontmatter_end(&lines), 3);
+        // 未闭合：当没有 frontmatter，不丢弃任何正文。
+        assert_eq!(frontmatter_end(&["---", "title: x", "body"]), 0);
+        // 首行不是 `---`：正文里的分隔线不误判。
+        assert_eq!(frontmatter_end(&["intro", "---", "title: x", "---"]), 0);
+        // 闭合行在第 500 行之外（第 501 行）视为未闭合。
+        let mut long = vec!["---"];
+        long.extend(std::iter::repeat("x").take(499));
+        long.push("---");
+        assert_eq!(frontmatter_end(&long), 0);
+        // 恰在第 500 行闭合仍算。
+        let mut edge = vec!["---"];
+        edge.extend(std::iter::repeat("x").take(498));
+        edge.push("---");
+        assert_eq!(frontmatter_end(&edge), 500);
+    }
+
+    #[test]
+    fn walk_skips_frontmatter_keeps_line_numbers() {
+        let base = std::env::temp_dir().join(format!("feiye-search-fm-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        std::fs::write(
+            base.join("a.md"),
+            "---\ntags: [写作]\ntitle: 写作草稿\n---\n第一行\n写作在正文\n",
+        )
+        .unwrap();
+
+        let hits = collect(&base, "写作");
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].line, 6);
+        assert_eq!(hits[0].text, "写作在正文");
+
+        assert!(collect(&base, "tags").is_empty());
+
+        std::fs::remove_dir_all(&base).unwrap();
     }
 
     #[test]

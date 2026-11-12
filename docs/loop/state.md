@@ -1,12 +1,12 @@
 # 循环状态
 
-- 轮次：382
+- 轮次：383
 - 起始时间：2026-11-12 10:45
 - 窗口终点：手动单轮（本轮完成后结束）
-- 最后更新：2026-11-12 13:35
+- 最后更新：2026-11-12 13:42
 - 当前分支：loop/pool-2026-11-12
 - 状态：进行中
-- 自上次检验轮：3（第 379 轮已检验 374–378；第 384 轮做下一次检验）
+- 自上次检验轮：4（第 379 轮已检验 374–378；第 384 轮做下一次检验）
 
 ## 上一窗口小结（2026-11-01 23:40–2026-11-02 15:45）
 
@@ -26,6 +26,7 @@
 
 ## 本窗口进展（2026-11-12 10:45– ）
 
+- 第 383 轮：全文搜索跳过 YAML frontmatter（R-10 收尾）——搜索此前把 `title:` / `tags:` / 注释里的 `#` 当正文命中。`commands/search.rs` 新增 `is_fence` / `frontmatter_end`：首行（允许 BOM）与闭合行去行尾空白后都是 `---`，闭合须在前 500 行内，否则当没有；`walk` 仍 `enumerate()` 按原文计行，只跳过前 N 行参与匹配，点击行号不变。构建通过（含 tsc，vite 1.05s，仅既有提示）；`cargo test` 49 项全过（原 47 + 新增 2）。CDP 不可用，人工复现见 backlog。计数 4，第 384 轮做检验轮。
 - 第 382 轮：分栏恢复阅读位置期间暂停滚动同步（R-04）——切回笔记时编辑器被预览经锚点反向映射推走约 205px。`editor-bridge.ts` 新增 `restoringScroll` 计数与 `isEditorScrollRestoring()`，`restoreEditorScroll` 写入位置后再放一帧才解除；`scroll-sync.ts` 在恢复期间只记 `restorePending` 不互推、结束后以编辑器为准补对齐一次，并用 `shouldIgnoreProgrammaticScroll` 把程序化写入后 120ms 内位置对不上的 scroll（布局钳制 / 滚动锚定）视为回声而非用户滚动。构建通过（含 tsc，vite 1.24s，仅既有提示）；bun 直调该判定函数 7 组用例全部符合预期；未改 `src-tauri/`。CDP 不可用，R-04 未勾选，人工复现见 backlog。
 - 第 381 轮：设置新增「存储」区（R-02 UI 收尾）——历史快照与崩溃恢复副本原先在设置里既看不到占用也清不掉。`SettingsDialog.tsx` 在「视图与预览」与「快捷键」之间新增「存储」分类，同文件 `StoragePanel` 打开时读 `storageStats()`，两行分别显示「N 份 · X MB」（`formatBytes` 输出 KB / MB / GB、一位小数，0 份只显示「0 份」），读取中「统计中…」、失败显示「无法读取存储统计」并保留原数字；「清理 30 天前的快照」调 `clearHistory(30)`、「清空全部快照」调 `clearHistory()`、「清空全部恢复副本」调 `clearRecoveries()`，均经 `useUiStore.ask` 二次确认（写明不可恢复 / 不影响已保存正文），操作期间禁用按钮，完成后重读统计并用 Toast 报清理数量，失败只报错不动数字；统计为 0 时对应按钮禁用。`settings.css` 补计数与按钮行样式。构建通过（含 tsc，vite 1.11s，仅既有的 chunk 体积与 ineffective dynamic import 提示）；`cargo test` 47 项全过（未改 Rust）。CDP 不可用（9222 未运行），人工验证步骤见 backlog。
 

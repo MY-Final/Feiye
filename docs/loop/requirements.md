@@ -112,6 +112,7 @@
 **期望**：识别文件开头的 frontmatter，预览折叠成低调的元信息块（或按设置隐藏），大纲与搜索跳过；所见模式可展开编辑源码。
 **第 376 轮说明**：预览折叠成「元信息」块、大纲跳过已做；所见模式仍按源码显示。
 **第 379 轮检验**：搜索侧仍未跳过 frontmatter，全文搜索会命中 YAML 行，留作后续小项。
+**第 383 轮**：全文搜索跳过 frontmatter（首行 / 闭合行 `---`，允许 BOM、CRLF，500 行内闭合；命中行号仍按原文）。
 **落点**：`src/features/preview/markdown.worker.ts`、`src/features/outline/*`、`src/features/editor/live-preview/*`。
 **证据**：源码中无 frontmatter 解析；当前 `---` 规则仅处理分隔线。
 
