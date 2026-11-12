@@ -52,7 +52,7 @@
 **落点**：`src/features/workspace/workspace-actions.ts`、`src/features/editor/editor-bridge.ts`、`src/stores/tabs.ts`、`src/features/split/SplitPane.tsx`、`src/stores/workspace.ts`。
 **证据**：`fix(tabs)` / `fix(editor)` / `fix(split)` / `fix(history)` / `fix(nav)` 中 12 条以「改名 / 移动 / 另存为」为关键词的提交。
 
-### [ ] R-04 分栏滚动同步的程序化滚动偏差 · S · P1
+### [ ] R-04 分栏滚动同步的程序化滚动偏差 · S · P1（第 382 轮实现恢复期抑制同步，待真机复核）
 
 **场景**：分栏模式下切走再切回一篇读在中段的笔记。
 **现在的问题**：预览恢复位置会经滚动同步把编辑器再推约 205px；第 325 轮记录后一直没按真实滚轮路径复核。

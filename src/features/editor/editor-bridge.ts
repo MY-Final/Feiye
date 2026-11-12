@@ -22,6 +22,8 @@ let currentKey: string | null = null;
 const stateCache = new Map<string, EditorState>();
 /** 阅读位置不属于 EditorState：单独按文档记住滚动距离，切回时还原。 */
 const scrollCache = new Map<string, number>();
+/** 正在程序化恢复阅读位置的层数；分栏滚动同步据此暂停，避免两侧互推。 */
+let restoringScroll = 0;
 const MAX_CACHED_STATES = 12;
 
 const guardedHandlers: EditorHandlers = {
@@ -73,6 +75,7 @@ export function unmountEditor(): void {
   stateCache.clear();
   scrollCache.clear();
   currentKey = null;
+  restoringScroll = 0;
 }
 
 function cacheCurrentState(): void {
@@ -154,13 +157,24 @@ export function restoreEditorScroll(cacheKey: string): void {
   const top = scrollCache.get(cacheKey);
   if (!view || top === undefined) return;
   const target = view;
+  restoringScroll += 1;
   // 等 setState 的测量与「滚到光标」处理完，下一帧再放回阅读位置，
   // 否则同步赋值会被 CodeMirror 随后的测量覆盖。
   requestAnimationFrame(() => {
     if (view === target && currentKey === cacheKey) {
       target.scrollDOM.scrollTop = top;
     }
+    // 再放一帧：让这次程序化滚动引发的 scroll 事件与布局测量走完，
+    // 分栏同步在恢复结束后统一以编辑器为准对齐一次，期间不互推。
+    requestAnimationFrame(() => {
+      restoringScroll = Math.max(0, restoringScroll - 1);
+    });
   });
+}
+
+/** 是否正在程序化恢复阅读位置（分栏滚动同步据此暂停）。 */
+export function isEditorScrollRestoring(): boolean {
+  return restoringScroll > 0;
 }
 
 /**
