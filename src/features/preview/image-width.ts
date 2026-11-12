@@ -88,6 +88,23 @@ function parseImageAt(text: string, start: number): ParsedImage | null {
   return null;
 }
 
+/**
+ * 预览里的 `src` 经过渲染器做 URI 编码（中文、尖括号里的空格都会变成 %XX），
+ * 与 Markdown 原文的地址不一致；比较前把两边都还原，才能找到同一张图。
+ * `decodeURI` 不碰 %2F 等保留字符，避免把两个不同地址当成同一个。
+ */
+function decodeDest(value: string): string {
+  try {
+    return decodeURI(value);
+  } catch {
+    return value;
+  }
+}
+
+function sameDest(left: string, right: string): boolean {
+  return left === right || decodeDest(left) === decodeDest(right);
+}
+
 /** 正文中所有地址匹配的行内图片；引用式图片不计入。 */
 function findImageRanges(text: string, src: string): ParsedImage[] {
   const matches: ParsedImage[] = [];
@@ -97,7 +114,7 @@ function findImageRanges(text: string, src: string): ParsedImage[] {
     if (next < 0) break;
     const parsed = parseImageAt(text, next);
     if (parsed) {
-      if (parsed.dest === src) matches.push(parsed);
+      if (sameDest(parsed.dest, src)) matches.push(parsed);
       index = parsed.end;
     } else {
       index = next + 2;
@@ -124,7 +141,8 @@ export function setImageWidth(
   const image = found[0];
   const width = `${clampImagePercent(percent)}%`;
   const rest = text.slice(image.end);
-  const attrs = /^[ \t]*\{([^{}]*)\}/.exec(rest);
+  // 渲染器接受图片后隔一个换行的属性块；这里同样认，否则会再插一组、把两组都弄坏。
+  const attrs = /^(?:[ \t]*\r?\n)?[ \t]*\{([^{}]*)\}/.exec(rest);
 
   if (!attrs) {
     return `${text.slice(0, image.end)}{width=${width}}${rest}`;

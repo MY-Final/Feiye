@@ -937,6 +937,16 @@ export function PreviewPane() {
       body.removeEventListener("pointercancel", onPointerCancel);
       body.removeEventListener("keydown", onKeyDown);
       observer?.disconnect();
+      // 预览重绘 / 离开预览时，别让上一次拖动的待写回定时器落到新 DOM 或已关闭的文档上。
+      widthDrag.current = null;
+      widthTarget.current = null;
+      if (widthTimer.current !== null) {
+        window.clearTimeout(widthTimer.current);
+        widthTimer.current = null;
+      }
+      body
+        .querySelectorAll(".preview-image-frame.is-dragging")
+        .forEach((frame) => frame.classList.remove("is-dragging"));
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [html, previewVisible]);
