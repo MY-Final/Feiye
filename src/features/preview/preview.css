@@ -50,6 +50,32 @@
   margin-top: 0;
 }
 
+/* YAML frontmatter：默认收起的元信息块，低调到不抢正文。 */
+.markdown-body details.frontmatter {
+  margin: 0 0 1.4em;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--bg-sunken);
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.markdown-body details.frontmatter > summary {
+  cursor: pointer;
+}
+
+.markdown-body details.frontmatter > pre {
+  margin: 8px 0 2px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
 .markdown-body h1,
 .markdown-body h2,
 .markdown-body h3,

@@ -104,11 +104,12 @@
 **注意**：需要新增 remark 插件依赖，与循环「不新增依赖」冲突，须单独批准。
 **证据**：源码中无 footnote 相关插件。
 
-### [ ] R-10 YAML frontmatter · S · P1
+### [x] R-10 YAML frontmatter · S · P1（第 376 轮）
 
 **场景**：笔记开头用 `---` 写 `title` / `tags` / `date`。
 **现在的问题**：frontmatter 会被当成 Markdown 内容：两个 `---` 触发分隔线 / Setext 标题语义，预览里出现一条横线和一个大标题，大纲也会混入元数据。
 **期望**：识别文件开头的 frontmatter，预览折叠成低调的元信息块（或按设置隐藏），大纲与搜索跳过；所见模式可展开编辑源码。
+**第 376 轮说明**：预览折叠成「元信息」块、大纲跳过已做；所见模式仍按源码显示。
 **落点**：`src/features/preview/markdown.worker.ts`、`src/features/outline/*`、`src/features/editor/live-preview/*`。
 **证据**：源码中无 frontmatter 解析；当前 `---` 规则仅处理分隔线。
 

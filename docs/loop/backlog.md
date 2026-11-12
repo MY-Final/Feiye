@@ -19,6 +19,25 @@
 
 <!-- 从这里开始追加 -->
 
+## 第 376 轮 · 2026-11-12 12:30
+**用户需求**：场景：笔记开头用 `---` 写 `title` / `tags` / `date`。现在的问题：frontmatter 被当成 Markdown 正文，两个 `---` 触发分隔线 / Setext 标题语义，预览里出现横线和大标题，大纲也会混入 YAML 注释里的 `#`。期望：识别文件开头的 frontmatter，预览折叠成低调的「元信息」块（默认收起、可展开看原文），大纲跳过这段；所见模式本轮可以继续按源码显示，在 backlog 记为遗留。
+**产品经理**：做。frontmatter 是纯文本笔记的常见约定，正确识别它属于「本地优先、纯文本、安静」的边界内修正，不新增依赖、不扩大产品边界；默认收起、只在预览出现，对不用 frontmatter 的用户零打扰，成本 S。
+**前端**：`markdown.worker.ts` 在 `processor.parse` 前用锚定开头的正则（`^\uFEFF?---`，允许 CRLF）取出 YAML 与截断正文，Mermaid 收集基于截断后正文；`details` 块在 `String(file)` 后拼接，YAML 内容经 `escapeHtml`（`& < > "`），不走 remark 原始 HTML 节点，避免 sanitize 的 schema 改动；`outline.ts` 计算开头 frontmatter 结束偏移（首行必须是 `---`，向下最多 500 行找闭合 `---`，找不到当没有），忽略 `node.from` 小于偏移的标题；`preview.css` 新增折叠块样式。风险：以 `---` 开头但本意是分隔线的文档会被当成 frontmatter（与常见编辑器行为一致）；导出 HTML 里的折叠块沿用浏览器默认样式，未在导出样式中单独美化。工作量 S。
+**后端**：无（未改 `src-tauri/`）。工作量无。
+**裁决**：做。
+**改动**：`src/features/preview/markdown.worker.ts`（+33/−2 行）、`src/features/editor/outline.ts`（+19 行）、`src/features/preview/preview.css`（+25 行），共 3 个源码文件；另更新 `docs/loop/state.md`、`docs/loop/backlog.md`、`docs/loop/requirements.md`。
+**构建**：`bun run build` 通过（含 tsc，vite 1.42s，仅既有的 chunk 体积与 ineffective dynamic import 提示）；未改 `src-tauri/`，未跑 cargo test。
+**用例（`$HOME/.bun/bin/bun -e` 直调正则，全部符合预期）**：标准 LF、CRLF、空 frontmatter（`---\n---`）、文档中段的 `---` 不识别、带 BOM 的开头识别、没有闭合时整体按正文。
+**测试步骤（CDP 不可用，9222 未运行，未做 CDP 实测；以下为人工复现）**：
+- 准备一篇以 `---` 开头、含 `title` / `tags` / `date`、以 `---` 闭合、后接正文的笔记。纯预览与分栏下，首屏只显示一行「元信息」摘要（浅底细边框，约 12.5px），点开后是等宽的 YAML 原文；正文不再出现那条横线和大标题。
+- 同篇笔记的大纲（侧栏「大纲」）不应出现 YAML 注释里的 `#`；正文自己的 `#` 标题仍在。
+- 在正文中段插入一行 `---`（前后有空行）：预览里仍是分隔线，不被当作 frontmatter；大纲不受影响。
+- 打开一篇没有 frontmatter 的普通笔记：预览、大纲、分栏同步与改动前一致。
+- 工具栏「导出 HTML」导出一篇含 frontmatter 的笔记，打开生成的 `.html`：`<main class="markdown-body">` 开头能看到 `<details class="frontmatter">` 折叠块（默认收起）。导出样式中未单独美化该块，呈浏览器默认外观。
+- 暗色主题下重复第一、二步，折叠块应为深色浅字、边框随主题变暗。
+**遗留**：所见（Live Preview）模式仍按源码显示 frontmatter，未做折叠或装饰；导出 HTML 的折叠块未单独美化；以 `---` 开头、本意是正文分隔线的文档会被当作 frontmatter（与常见编辑器一致）；没有把 frontmatter 用于标题 / 标签等元数据展示。
+**检验计数**：3（第 376 轮为正常需求轮，第 378 轮做检验轮）。
+
 ## 第 375 轮 · 2026-11-12 12:20
 **用户需求**：场景：把笔记复制到公众号、邮件或导出 HTML。现在的问题：Mermaid 在导出里仍是代码块；外链图片、未成功内联的本地图片不会提前说明，用户到收件人那里才发现。期望：导出 HTML 前汇总提示已内联本地图片 N 张、外链图片 M 张可能失效、Mermaid K 个未渲染、未内联本地图 X 张；有风险时让用户选「仍然导出 / 取消」。复制 HTML 不阻断，但成功提示里带上同类风险摘要。
 **产品经理**：做。提前说明导出结果的可靠性，属于「数据安全、安静」的具体化，不扩大边界；只在有风险时打扰，正常文档流程不变，成本 S。

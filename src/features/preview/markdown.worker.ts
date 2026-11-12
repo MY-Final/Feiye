@@ -161,19 +161,49 @@ function applyImageAttrs(node: MdastNode): void {
   for (const child of node.children ?? []) applyImageAttrs(child);
 }
 
+/**
+ * 只认文件最开头的 YAML frontmatter：开头一行 `---`、中间任意行、
+ * 再一行 `---`。中间找不到闭合就当没有，正文里的 `---` 仍是分隔线。
+ */
+const FRONTMATTER = /^\uFEFF?---[ \t]*\r?\n(?:([\s\S]*?)\r?\n)?---[ \t]*(?:\r?\n|$)/;
+
+function splitFrontmatter(markdown: string): {
+  frontmatter: string | null;
+  body: string;
+} {
+  const match = FRONTMATTER.exec(markdown);
+  if (!match) return { frontmatter: null, body: markdown };
+  return { frontmatter: match[1] ?? "", body: markdown.slice(match[0].length) };
+}
+
+/** 折叠块整段由这里拼 HTML，不经 remark，YAML 内容必须转义。 */
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 scope.onmessage = async (event) => {
   const { id, markdown } = event.data;
 
   try {
     const processor = await getProcessor();
-    const tree = processor.parse(markdown) as unknown as MdastNode;
+    const { frontmatter, body } = splitFrontmatter(markdown);
+    const tree = processor.parse(body) as unknown as MdastNode;
     applyImageAttrs(tree);
     const mermaid: string[] = [];
     collectMermaid(tree, mermaid);
     const file = await processor.run(tree as never);
+    // details / summary 是 sanitize 之后拼上的，不会被 schema 剥掉。
+    const block =
+      frontmatter === null
+        ? ""
+        : `<details class="frontmatter"><summary>元信息</summary><pre>${escapeHtml(frontmatter)}</pre></details>`;
     scope.postMessage({
       id,
-      html: String(processor.stringify(file)),
+      html: block + String(processor.stringify(file)),
       mermaid: mermaid.length ? mermaid : undefined,
     });
   } catch (error) {

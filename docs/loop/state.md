@@ -1,12 +1,12 @@
 # 循环状态
 
-- 轮次：375
+- 轮次：376
 - 起始时间：2026-11-12 10:45
 - 窗口终点：手动单轮（本轮完成后结束）
-- 最后更新：2026-11-12 12:20
+- 最后更新：2026-11-12 12:30
 - 当前分支：loop/pool-2026-11-12
 - 状态：进行中
-- 自上次检验轮：2（第 373 轮已检验 368–372；第 378 轮做下一次检验）
+- 自上次检验轮：3（第 373 轮已检验 368–372；第 378 轮做下一次检验）
 
 ## 上一窗口小结（2026-11-01 23:40–2026-11-02 15:45）
 
@@ -25,6 +25,8 @@
 - 单轮仍限 S 级（≤ 约 80 行、≤ 3 个文件），构建通过才提交；只提交不推送。
 
 ## 本窗口进展（2026-11-12 10:45– ）
+
+- 第 376 轮：折叠 YAML frontmatter 并跳过大纲——笔记开头的 `---` 元数据此前被当成正文，两个 `---` 触发分隔线 / Setext 标题，预览出现横线和大标题，大纲混入 YAML 注释里的 `#`。`markdown.worker.ts` 在交给 remark 前用锚定文件开头的正则取出 frontmatter（允许 BOM、CRLF），正文从闭合处截断，Mermaid 收集也只看正文；`String(file)` 之后把已转义的 `<details class="frontmatter"><summary>元信息</summary><pre>…</pre></details>` 前置到 HTML（不走 remark，避免 sanitize 剥掉 details / summary）；`outline.ts` 计算开头 frontmatter 结束偏移（首行必须是 `---`，500 行内找闭合，找不到当没有），跳过该偏移之前的标题；`preview.css` 给折叠块加低调样式（细边框、`--bg-sunken` 浅底、12–13px、pre 透明底），亮暗主题随令牌切换。构建通过（含 tsc，vite 1.42s，仅既有的 chunk 体积与 ineffective dynamic import 提示）；正则 6 组用例符合预期；未改 `src-tauri/`。所见模式本轮仍按源码显示；CDP 不可用（9222 未运行），人工验证步骤见 backlog。
 
 - 第 375 轮：导出 / 复制前的内容体检——此前外链图片、未内联的本地图与 Mermaid 代码块要到收件人那里才发现。`lib/images.ts` 用一次 DOM 扫描统计外链图片与未内联本地图（`scanContentRisks`，取代原先只数本地图的 `countLocalImages`）；Mermaid 数量改由 Worker 渲染结果给出（Shiki 高亮后 class 已变 `language-text`，按 class 查会漏），`preview-controller.ts` 新增 `renderMarkdownForExport` 一并返回，`renderMarkdownToHtml` 保持原签名。`Toolbar.tsx` 导出 HTML 时先体检，有风险才用既有确认框列出「已内联 N 张 / 外链 M 张可能失效 / Mermaid K 个未渲染 / 本地图 X 张未内联」，选「仍然导出」才写盘，取消不写文件、不刷新目录；复制 HTML 沿用成功 Toast，把同类风险拼进括号摘要，无风险时文案不变。构建通过（含 tsc，vite 1.21s，仅既有的 chunk 体积与 ineffective dynamic import 提示）；渲染与风险统计已移入 `try/catch`，文档过大 / Worker 或读图失败时仍弹「导出 HTML 失败」；未改 `src-tauri/`。CDP 不可用（9222 未运行），人工验证步骤见 backlog。
 
