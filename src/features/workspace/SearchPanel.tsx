@@ -6,7 +6,11 @@ import {
   type ReactNode,
 } from "react";
 
-import { searchWorkspace, type SearchHit } from "../../lib/tauri";
+import {
+  nextSearchGeneration,
+  searchWorkspace,
+  type SearchHit,
+} from "../../lib/tauri";
 import { useDocumentStore } from "../../stores/document";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { getEditorText, jumpToEditorPosition } from "../editor/editor-bridge";
@@ -105,6 +109,10 @@ export function SearchPanel({
 
   useEffect(() => {
     const needle = query.trim();
+    // 关键词一变就推进代号：上一次全量扫描在下一个文件前退出，
+    // 大库下不必等旧查询读完再开始新查询。
+    const generation = nextSearchGeneration();
+    generation.catch(() => {});
     if (!needle) {
       setHits([]);
       setSearched(false);
@@ -126,12 +134,14 @@ export function SearchPanel({
     // 让一阵目录事件只落成一次查询。
     const timer = window.setTimeout(() => {
       lastNeedleRef.current = needle;
-      searchWorkspace(needle, MAX_HITS)
+      generation
+        .then((id) => searchWorkspace(needle, MAX_HITS, id))
         .then((result) => {
-          if (cancelled) return;
-          setHits(result);
+          // 已被新关键词取代：后端提前返回的空结果也一并丢弃，别清掉新结果。
+          if (cancelled || result.cancelled) return;
+          setHits(result.hits);
           if (anchor) {
-            const index = result.findIndex(
+            const index = result.hits.findIndex(
               (hit) => hit.relPath === anchor.relPath && hit.line === anchor.line,
             );
             setActive(index < 0 ? 0 : index);
@@ -154,6 +164,13 @@ export function SearchPanel({
       window.clearTimeout(timer);
     };
   }, [query, root, dirRevision, savedModifiedMs, visible]);
+
+  // 组件卸载（侧栏销毁、整页重载）时也推进代号，不让没人要的扫描继续读盘。
+  useEffect(() => {
+    return () => {
+      void nextSearchGeneration().catch(() => {});
+    };
+  }, []);
 
   const openHit = async (hit: SearchHit) => {
     // 新关键词的结果还没回来时，列表里仍是上一次查询的命中，

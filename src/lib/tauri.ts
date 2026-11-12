@@ -234,12 +234,24 @@ export interface SearchHit {
   text: string;
 }
 
+/** 一次搜索的结果；`cancelled` 为真表示结果返回前已发起新查询，应直接丢弃。 */
+export interface SearchResponse {
+  hits: SearchHit[];
+  cancelled: boolean;
+}
+
+/** 推进搜索代号：新查询会让上一次全量扫描在下一个文件前退出。 */
+export function nextSearchGeneration(): Promise<number> {
+  return invoke<number>("next_search_generation");
+}
+
 /** 在工作区所有 Markdown 里按行搜索，大小写不敏感。 */
 export function searchWorkspace(
   query: string,
-  limit?: number,
-): Promise<SearchHit[]> {
-  return invoke<SearchHit[]>("search_workspace", { query, limit });
+  limit: number,
+  generation: number,
+): Promise<SearchResponse> {
+  return invoke<SearchResponse>("search_workspace", { query, limit, generation });
 }
 
 export interface HistoryEntry {

@@ -2,6 +2,7 @@
 
 use std::fs;
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::Serialize;
 use tauri::State;
@@ -16,6 +17,30 @@ const MAX_FILE_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_HITS: usize = 200;
 /// 单行预览最多保留多少字符。
 const MAX_TEXT_CHARS: usize = 240;
+
+/// 当前查询代号。前端每次发起查询前推进一次；旧查询发现代号对不上就提前退出。
+/// 只做原子读写，不持锁读盘，不会挡住其它命令。
+#[derive(Default)]
+pub struct SearchState(AtomicU64);
+
+impl SearchState {
+    /// 推进代号并返回新值；返回后旧查询在下一次检查时即失效。
+    fn bump(&self) -> u64 {
+        self.0.fetch_add(1, Ordering::SeqCst) + 1
+    }
+
+    fn generation(&self) -> u64 {
+        self.0.load(Ordering::SeqCst)
+    }
+}
+
+/// 一次搜索的返回值：`cancelled` 为真表示结果返回前已发起新查询，前端应直接丢弃。
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchResponse {
+    pub hits: Vec<SearchHit>,
+    pub cancelled: bool,
+}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -57,18 +82,34 @@ fn preview(line: &str) -> String {
     text
 }
 
-fn walk(dir: &Path, rel: &str, needle: &str, limit: usize, hits: &mut Vec<SearchHit>) {
+/// 递归扫描。`cancelled` 在每个文件 / 子目录前检查一次，返回 true 表示本次查询已被
+/// 新查询取代，调用方应丢弃结果；返回值即「是否取消」。
+fn walk(
+    dir: &Path,
+    rel: &str,
+    needle: &str,
+    limit: usize,
+    cancelled: &dyn Fn() -> bool,
+    hits: &mut Vec<SearchHit>,
+) -> bool {
     if hits.len() >= limit {
-        return;
+        return false;
+    }
+    if cancelled() {
+        return true;
     }
     let entries = match fs::read_dir(dir) {
         Ok(entries) => entries,
-        Err(_) => return,
+        Err(_) => return false,
     };
 
     for item in entries.flatten() {
         if hits.len() >= limit {
-            return;
+            return false;
+        }
+        // 用户在连续输入：每个文件之前看一眼代号，旧扫描不必跑完全库。
+        if cancelled() {
+            return true;
         }
         let name = item.file_name().to_string_lossy().into_owned();
         // 和文件树保持一致：隐藏项、符号链接、忽略目录都不进搜索。
@@ -88,7 +129,9 @@ fn walk(dir: &Path, rel: &str, needle: &str, limit: usize, hits: &mut Vec<Search
             if IGNORED_DIRS.contains(&name.as_str()) {
                 continue;
             }
-            walk(&item.path(), &child_rel, needle, limit, hits);
+            if walk(&item.path(), &child_rel, needle, limit, cancelled, hits) {
+                return true;
+            }
             continue;
         }
         if !file_type.is_file() || !fs_path::is_markdown(&name) {
@@ -109,7 +152,7 @@ fn walk(dir: &Path, rel: &str, needle: &str, limit: usize, hits: &mut Vec<Search
         let skip = frontmatter_end(&lines);
         for (index, line) in lines.iter().enumerate().skip(skip) {
             if hits.len() >= limit {
-                return;
+                return false;
             }
             if line.to_lowercase().contains(needle) {
                 hits.push(SearchHit {
@@ -120,18 +163,30 @@ fn walk(dir: &Path, rel: &str, needle: &str, limit: usize, hits: &mut Vec<Search
             }
         }
     }
+    false
+}
+
+/// 推进搜索代号：前端在每次新查询前调用，旧查询会在下一个文件前退出。
+#[tauri::command]
+pub fn next_search_generation(state: State<'_, SearchState>) -> u64 {
+    state.bump()
 }
 
 #[tauri::command]
 pub fn search_workspace(
     query: String,
     limit: Option<u32>,
+    generation: u64,
     state: State<'_, WorkspaceState>,
-) -> Result<Vec<SearchHit>, AppError> {
+    search: State<'_, SearchState>,
+) -> Result<SearchResponse, AppError> {
     let root = state.root()?;
     let needle = query.trim().to_lowercase();
     if needle.is_empty() {
-        return Ok(Vec::new());
+        return Ok(SearchResponse {
+            hits: Vec::new(),
+            cancelled: false,
+        });
     }
     let limit = limit
         .map(|value| value as usize)
@@ -139,17 +194,29 @@ pub fn search_workspace(
         .clamp(1, MAX_HITS);
 
     let mut hits = Vec::new();
-    walk(&root, "", &needle, limit, &mut hits);
-    Ok(hits)
+    let cancelled = walk(
+        &root,
+        "",
+        &needle,
+        limit,
+        &|| generation != search.generation(),
+        &mut hits,
+    );
+    Ok(SearchResponse {
+        hits: if cancelled { Vec::new() } else { hits },
+        cancelled,
+    })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{frontmatter_end, preview, walk, SearchHit};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use super::{frontmatter_end, preview, walk, SearchHit, SearchState};
 
     fn collect(dir: &std::path::Path, needle: &str) -> Vec<SearchHit> {
         let mut hits = Vec::new();
-        walk(dir, "", needle, 200, &mut hits);
+        assert!(!walk(dir, "", needle, 200, &|| false, &mut hits));
         hits
     }
 
@@ -228,6 +295,88 @@ mod tests {
 
         let hits = collect(&base, "needle in text");
         assert!(hits.is_empty());
+
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn walk_stops_after_cancel() {
+        let base = std::env::temp_dir().join(format!("feiye-search-cancel-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        for name in ["a.md", "b.md", "c.md"] {
+            std::fs::write(base.join(name), "needle\n").unwrap();
+        }
+
+        // 未取消：三篇都命中。
+        assert_eq!(collect(&base, "needle").len(), 3);
+
+        // 第一次检查即返回「已取消」：不读任何文件，结果为空。
+        let mut hits = Vec::new();
+        let calls = AtomicUsize::new(0);
+        let cancelled = walk(
+            &base,
+            "",
+            "needle",
+            200,
+            &|| {
+                calls.fetch_add(1, Ordering::SeqCst);
+                true
+            },
+            &mut hits,
+        );
+        assert!(cancelled);
+        assert!(hits.is_empty());
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn stale_generation_cancels_search_state() {
+        let base = std::env::temp_dir().join(format!("feiye-search-gen-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        std::fs::write(base.join("a.md"), "needle\n").unwrap();
+
+        let state = SearchState::default();
+        let stale = state.bump();
+        assert_eq!(stale, 1);
+
+        // 代号未推进：检查函数始终为 false，正常返回结果。
+        let mut hits = Vec::new();
+        assert!(!walk(&base, "", "needle", 200, &|| stale != state.generation(), &mut hits));
+        assert_eq!(hits.len(), 1);
+
+        // 新查询推进代号后，旧代号立刻失效；再用旧代号检查即视为取消。
+        assert_eq!(state.bump(), 2);
+        assert_ne!(state.generation(), stale);
+        let mut hits = Vec::new();
+        assert!(walk(&base, "", "needle", 200, &|| stale != state.generation(), &mut hits));
+        assert!(hits.is_empty());
+
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn cancel_checked_per_file_not_per_line() {
+        // 大数据量下检查频率只与文件数相关：这里记录检查次数，避免每次都做
+        // 不必要的原子读（与 DOS 攻击无关，主要是省 CPU 抖动）。
+        let base = std::env::temp_dir().join(format!("feiye-search-freq-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        let body = "line\n".repeat(50);
+        std::fs::write(base.join("a.md"), &body).unwrap();
+
+        let calls = AtomicUsize::new(0);
+        let mut hits = Vec::new();
+        assert!(!walk(&base, "", "line", 200, &|| {
+            calls.fetch_add(1, Ordering::SeqCst);
+            false
+        }, &mut hits));
+        // 根目录 + 一个文件：2 次检查，而不是每行一次。
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+        assert_eq!(hits.len(), 50);
 
         std::fs::remove_dir_all(&base).unwrap();
     }
