@@ -19,6 +19,33 @@
 
 <!-- 从这里开始追加 -->
 
+## 第 379 轮 · 2026-11-12 13:05（检验轮：回归 374–378）
+**用户需求**：无新需求；按循环规则系统性回归上一批 5 条改动，确认构建、后端测试、命令注册与关键路径没有回退。
+**产品经理**：检验轮不扩大产品边界，只核对 374–378 是否兑现承诺；发现真实缺陷才修，否则记录结论。
+**前端**：逐项静态核对 `commands.ts` / `CommandPalette.tsx` / `AppMenu.tsx` / `Toolbar.tsx` / `markdown.worker.ts` / `outline.ts` / `preview.css` / `HistoryDialog.tsx`；用 bun 从源码切出 `diffLines` 与 `splitFrontmatter` 直调（组件 / Worker 模块不能直接 import）。
+**后端**：核对 `history.rs` / `recovery.rs` / `commands/history.rs` / `lib.rs` 四个新命令的注册与参数映射，核实 `clear_history` 缺省参数在 Tauri 侧的 `Option` 行为。
+**裁决**：检验轮，无新功能；未发现需要修改源码的缺陷。
+**改动**：仅 `docs/loop/backlog.md`、`docs/loop/state.md`、`docs/loop/requirements.md`；源码零改动。
+**构建**：`$HOME/.bun/bin/bun run build` 通过（含 tsc，vite 1.04s，仅既有的 chunk 体积与 ineffective dynamic import 提示）；`(cd src-tauri && cargo test)` 47 passed、0 failed。
+**逐项结论**：
+- 374 命令分组单一来源：`COMMAND_GROUPS` 的 8 个分组 id / 文案 / 顺序与 374 前 `AppMenu.GROUPS`、`CommandPalette.GROUP_LABELS` 完全一致；`AppMenu` 按 `onlyGroups` 过滤同一份定义，`MenuBar.MENUS` 的顶层菜单到分组映射（编辑含 find、视图含 nav）不变；命令面板「最近使用」段与分组标题仍按合并列表位置计算。一致，无回退。
+- 375 导出 / 复制前内容体检：`renderMarkdownForExport` 返回 `{ html, mermaid }`，复制路径（`Toolbar.tsx` 156–197）与导出路径（405–436）都调用 `scanContentRisks`；导出有风险时走确认框、取消不写盘，复制把风险拼进成功 Toast；两条路径的渲染 / 内联 / 体检都在 `try/catch` 内，Worker 侧 `onmessage` 的 `error` 与 `onerror` 都会 `reject` `pendingExport`，因此 Worker 抛错会被既有「生成 HTML 失败 / 导出 HTML 失败」接住。生效，无回退。
+- 376 折叠 YAML frontmatter 并跳过大纲：`FRONTMATTER` 锚定文件开头、允许 BOM / CRLF、无闭合不识别；正文截断后交给 remark，Mermaid 只收集正文；`details` 块在 `String(file)` 后拼接并用 `escapeHtml` 转义，导出样式也有 `details.frontmatter` 的亮 / 暗配色；`outline.ts` 在首行 `---` 后最多 500 行找闭合，跳过之前偏移的标题。直调用例（标准 LF、CRLF、空 frontmatter、中段 `---` 不识别、BOM、无闭合）全部符合预期。
+- 377 历史版本对比当前：`diffLines` 去公共前后缀、变化块先删除后新增、不做逐行配对；直调用例（全同、中间改一行、开头 / 结尾插入、空旧内容、结尾换行）符合预期；`mode` / `currentText` 在每次打开或切文档时重置为「内容」与 `null`，不会把上次的快照带进下一次；`restore` 仍用所选版本内容并标记未保存。无回退。
+- 378 存储命令与 API：`storage_stats` / `delete_history` / `clear_history` / `clear_recoveries` 均已在 `lib.rs` 的 `generate_handler` 中注册；`src/lib/tauri.ts` 的命令名与参数（`relPath` / `id` / `beforeDays`）与 Rust 的 `rel_path` / `id` / `before_days` 对应，`StorageStats` 的 camelCase 字段与 Rust 序列化一致。`clearHistory()` 不传参数时 `invoke` 的 args 中 `beforeDays` 为 `undefined`，JSON 序列化丢弃该键；Tauri 2.12.5 的 `CommandItem::deserialize_option` 在键缺失时 `visit_none()`（`src/ipc/command.rs:146–157`），Rust 侧得到 `None`，与「不传则清空全部」一致；传 `null` 同样落 `None`，传数字得到 `Some(days)`。无缺陷。
+**遗留 / 下一轮候选**：
+- R-02 UI 尚未接入：设置「存储」区（显示统计、清理 30 天前 / 全部快照、清空恢复副本，清理前二次确认）与 `HistoryDialog` 单条删除，建议第 380 轮起拆小步实现。
+- 376 的搜索侧仍未跳过 frontmatter：R-10 期望「大纲与搜索跳过」，当前只有预览折叠与大纲跳过；全文搜索仍会命中 YAML 行。
+- 376 的 frontmatter 识别在预览侧无行数上限、`outline.ts` 限 500 行；超过 500 行的 frontmatter 极少见，暂不处理。
+- `clear_history(None)` 只删 `.md`、保留空的文档哈希目录；统计按文件计不受影响，如后续在意目录残留可在清理时顺带删空目录。
+**测试步骤（CDP 不可用，9222 未运行，未启动应用；以下为人工复现）**：
+- 命令面板 `Ctrl+Shift+P` 与标题栏各菜单：分组标题 / 顺序、菜单项、快捷键、禁用态与 374 前一致；执行命令后「最近使用」顺序正常。
+- 打开含外链图 / 本地图 / Mermaid 的笔记：`Ctrl+Shift+C` 复制 HTML，成功 Toast 括号内出现对应风险；「导出 HTML」有风险时先弹「导出内容有风险」，选「取消」不产生文件，选「仍然导出」才写盘；打开超过 1 MB 的文档导出，应提示「导出 HTML 失败：文档超过 1 MB…」。
+- 打开以 `---` 开头且有闭合的笔记：预览首屏为「元信息」折叠块，正文无横线 / 大标题；大纲不含 YAML 注释里的 `#`；导出 HTML 同样带折叠块且亮 / 暗主题可读。
+- 打开有历史版本的笔记，`Ctrl+Alt+H` →「对比当前」：正常显示增删行；关闭后改正文再打开，默认回到「内容」，再切「对比当前」使用新快照。
+- 接入 UI 后：设置「存储」显示的四个数字与数据目录实际一致；`clearHistory(30)` 保留最近 30 天、`clearHistory()` 清空全部；`clearRecoveries()` 只删 `.json`。
+**检验计数**：0（已回归 374–378；下次检验轮为 384）。
+
 ## 第 378 轮 · 2026-11-12 12:55
 **用户需求**：场景：长期使用后，应用数据目录里堆着每篇笔记最近 20 份历史快照和崩溃恢复副本。现在的问题：看不到它们占了多少空间，也没有清理入口。期望：先有后端命令与前端调用封装——统计快照 / 恢复副本的文件数与体积、删除单条快照、清理 N 天前或全部快照、清空全部恢复副本；设置 UI 下一轮再接。
 **产品经理**：做（M 级里程碑拆分）。存储可见与可清理属于「本地优先、数据安全、安静」的边界内补强，不新增依赖、不扩大产品边界；本轮只做后端与 API 层，UI 拆分到 379，避免单轮过大。R-02 保持未完成。

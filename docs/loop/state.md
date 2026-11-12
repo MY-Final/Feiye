@@ -1,12 +1,12 @@
 # 循环状态
 
-- 轮次：378
+- 轮次：379
 - 起始时间：2026-11-12 10:45
 - 窗口终点：手动单轮（本轮完成后结束）
-- 最后更新：2026-11-12 12:55
+- 最后更新：2026-11-12 13:05
 - 当前分支：loop/pool-2026-11-12
 - 状态：进行中
-- 自上次检验轮：5（第 373 轮已检验 368–372；第 379 轮做下一次检验）
+- 自上次检验轮：0（第 379 轮已检验 374–378；第 384 轮做下一次检验）
 
 ## 上一窗口小结（2026-11-01 23:40–2026-11-02 15:45）
 
@@ -25,6 +25,8 @@
 - 单轮仍限 S 级（≤ 约 80 行、≤ 3 个文件），构建通过才提交；只提交不推送。
 
 ## 本窗口进展（2026-11-12 10:45– ）
+
+- 第 379 轮（检验轮）：回归 374–378。构建通过（含 tsc，vite 1.04s）；`cargo test` 47 项全过。静态核对 374 分组单一来源（三处一致）、375 复制 / 导出两条路径都做风险体检且 Worker 抛错有 try/catch 接住、376 frontmatter 识别与大纲跳过（bun 直调 6 组用例符合预期）、377 diffLines 与对比模式重置（bun 直调 6 组用例符合预期）、378 四个命令均已注册且前后端参数一致；从 Tauri 2.12.5 源码确认 `Option<u64>` 参数在键缺失时 `visit_none()`，`clearHistory()` 不传参即得到 `None`，与「不传则清空全部」一致。未发现需要改源码的缺陷，本轮仅文档改动；CDP 不可用（9222 未运行）。R-02 UI 与搜索跳过 frontmatter 记入下一轮候选，计数清零，下一轮 380 按正常需求轮。
 
 - 第 378 轮：存储管理后端与 API 层（R-02 第一批）——历史快照与崩溃恢复副本原先只在数据目录里堆积，既看不到占用也没有清理入口。`history.rs` 新增 `storage_stats`（递归统计 `history/` 下 `.md` 的文件数与字节）、`delete_history`（复用 `document_dir` / `snapshot_path` 校验，文件不存在视为成功）、`clear_history`（`None` 清空全部，`Some(cutoff)` 按文件名前缀时间戳只删除更早的；只有 `None` 表示清空，避免超大天数饱和到 0 时误删，删除失败跳过并返回数量）；`recovery.rs` 新增 `storage_stats` 与 `clear_all`（只删 `.json`）。`commands/history.rs` 新增 `StorageStats`（camelCase：`historyFiles` / `historyBytes` / `recoveryFiles` / `recoveryBytes`）与 `storage_stats` / `delete_history` / `clear_history` / `clear_recoveries` 四个命令并注册到 `lib.rs`；`src/lib/tauri.ts` 补 `StorageStats` 类型与四个 `invoke` 封装。`commands/recovery.rs` 的 `recovery_dir` 放宽为 `pub(crate)` 供复用。构建通过（含 tsc，vite 1.26s，仅既有的 chunk 体积与 ineffective dynamic import 提示）；`cargo test` 47 项全过（新增 3 项覆盖统计、单条删除、按截止点 / 全部清理、只删 `.json`）。本轮未接 UI，设置页「存储」区与 HistoryDialog 单条删除留给 379；CDP 不可用（9222 未运行），未启动应用。
 
