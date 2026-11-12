@@ -59,7 +59,7 @@
 **落点**：`src/features/preview/scroll-sync.ts`、`src/features/preview/preview-scroll.ts`、`src/features/editor/editor-bridge.ts`。
 **证据**：`state.md` 第 112 行观察、「已知遗留」第 19 行。
 
-### [ ] R-05 搜索结果自动保鲜 · S · P1
+### [x] R-05 搜索结果自动保鲜 · S · P1（第 368 轮）
 
 **场景**：在搜索面板里搜到一半，回到正文保存，或在应用外改 / 删 / 改名了一篇笔记。
 **现在的问题**：`SearchPanel` 的查询只在关键词或工作区变化时重跑；保存、外部修改、目录监听刷新都不会更新结果，列表可能指向旧行号或已消失的文件。

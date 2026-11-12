@@ -86,6 +86,9 @@ export function SearchPanel({
   visible?: boolean;
 }) {
   const root = useWorkspaceStore((state) => state.root);
+  // 保存落盘与目录监听重读都会让结果变旧，需要按当前关键词重跑。
+  const dirRevision = useWorkspaceStore((state) => state.dirRevision);
+  const savedModifiedMs = useDocumentStore((state) => state.savedModifiedMs);
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [loading, setLoading] = useState(false);
@@ -93,6 +96,12 @@ export function SearchPanel({
   const [active, setActive] = useState(0);
   const listRef = useRef<HTMLUListElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // 重跑时按「同一篇 + 同一行」找回选中项；用 ref 读最新值，避免进依赖重新触发查询。
+  const hitsRef = useRef(hits);
+  const activeRef = useRef(active);
+  const lastNeedleRef = useRef<string | null>(null);
+  hitsRef.current = hits;
+  activeRef.current = active;
 
   useEffect(() => {
     const needle = query.trim();
@@ -100,17 +109,35 @@ export function SearchPanel({
       setHits([]);
       setSearched(false);
       setLoading(false);
+      lastNeedleRef.current = null;
       return;
     }
+    // 面板藏起来时不搜；切回可见会重进这里补一次。
+    if (!visible) {
+      setLoading(false);
+      return;
+    }
+    // 关键词没变说明是保存 / 外部改动引起的保鲜重跑：沿用当前选中项。
+    const rerun = needle === lastNeedleRef.current;
+    const anchor = rerun ? hitsRef.current[activeRef.current] : undefined;
     setLoading(true);
     let cancelled = false;
-    // 输入停顿 200ms 再搜，连着敲字不会把后端刷爆。
+    // 输入停顿 200ms 再搜，连着敲字不会把后端刷爆；刷新重跑慢一点（400ms），
+    // 让一阵目录事件只落成一次查询。
     const timer = window.setTimeout(() => {
+      lastNeedleRef.current = needle;
       searchWorkspace(needle, MAX_HITS)
         .then((result) => {
           if (cancelled) return;
           setHits(result);
-          setActive(0);
+          if (anchor) {
+            const index = result.findIndex(
+              (hit) => hit.relPath === anchor.relPath && hit.line === anchor.line,
+            );
+            setActive(index < 0 ? 0 : index);
+          } else {
+            setActive(0);
+          }
           setSearched(true);
         })
         .catch(() => {
@@ -121,12 +148,12 @@ export function SearchPanel({
         .finally(() => {
           if (!cancelled) setLoading(false);
         });
-    }, 200);
+    }, rerun ? 400 : 200);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [query, root]);
+  }, [query, root, dirRevision, savedModifiedMs, visible]);
 
   const openHit = async (hit: SearchHit) => {
     // 新关键词的结果还没回来时，列表里仍是上一次查询的命中，

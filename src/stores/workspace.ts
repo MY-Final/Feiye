@@ -155,6 +155,8 @@ interface WorkspaceStore {
    * 任何一次新的打开都会清空它，避免把旧分支混进来。
    */
   forward: string[];
+  /** 目录成功重读的次数；搜索面板据此判断文件是否可能已变。 */
+  dirRevision: number;
 
   setWorkspace(info: WorkspaceInfo | null): void;
   noteRecent(relPath: string): void;
@@ -206,6 +208,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   recent: [],
   history: [],
   forward: [],
+  dirRevision: 0,
   ...EMPTY_MAPS,
 
   setWorkspace(info) {
@@ -346,6 +349,10 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       return { children };
     });
     await get().loadDir(relPath);
+    // 成功读到新目录才算「可能变了」；失败时不打扰搜索面板。
+    if (!get().failed[relPath]) {
+      set((state) => ({ dirRevision: state.dirRevision + 1 }));
+    }
   },
 
   /** 重新读取根目录与所有已展开的目录。 */
