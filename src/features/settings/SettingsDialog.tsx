@@ -349,6 +349,7 @@ function StoragePanel() {
   const [stats, setStats] = useState<StorageStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const sectionRef = useRef<HTMLElement>(null);
 
   const load = async () => {
     setLoading(true);
@@ -386,6 +387,16 @@ function StoragePanel() {
     } finally {
       await load();
       setBusy(false);
+      // 清理期间三个按钮都禁用：确认框关闭时焦点被还给触发按钮，
+      // 随即因禁用被浏览器丢回页面。落定后把焦点交回存储区，
+      // 键盘用户不必从设置顶部重走；用户已移到别处就不抢。
+      requestAnimationFrame(() => {
+        if (document.activeElement !== document.body) return;
+        const next = sectionRef.current?.querySelector<HTMLButtonElement>(
+          "button:not(:disabled)",
+        );
+        (next ?? sectionRef.current)?.focus();
+      });
     }
   };
 
@@ -410,7 +421,12 @@ function StoragePanel() {
   const emptyRecovery = !stats || stats.recoveryFiles === 0;
 
   return (
-    <section className="settings-section">
+    <section
+      ref={sectionRef}
+      tabIndex={-1}
+      aria-label="存储"
+      className="settings-section"
+    >
       <h3 className="settings-section-title">存储</h3>
 
       <Row label="文档快照" hint="每篇笔记最多保留 20 份，删除后不可恢复">
