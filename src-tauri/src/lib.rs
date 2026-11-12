@@ -30,6 +30,7 @@ pub fn run() {
             commands::workspace::current_workspace,
             commands::workspace::close_workspace,
             commands::workspace::list_dir,
+            commands::workspace::list_markdown_files,
             commands::search::search_workspace,
             watcher::watch_workspace,
             watcher::unwatch_workspace,

@@ -44,6 +44,9 @@ import {
  */
 export const SHORTCUT_SHEET_EVENT = "feiye:shortcut-sheet";
 
+/** 打开「快速打开笔记」浮层的事件名，理由同上。 */
+export const QUICK_OPEN_EVENT = "feiye:quick-open";
+
 /** 命令是否可用只取决于这几项状态，菜单和命令面板共用同一份判断。 */
 export interface CommandContext {
   hasDoc: boolean;
@@ -381,6 +384,17 @@ const formatCommands: AppCommand[] = [
 
 /** 应用内动作的单一来源：命令面板按 available 过滤，标题栏菜单按分组展示。 */
 export const APP_COMMANDS: AppCommand[] = [
+  {
+    id: "quick-open",
+    title: "快速打开笔记…",
+    hint: "按文件名跳转到当前工作区的笔记",
+    shortcut: "Ctrl+Shift+O",
+    keywords: "quick open file 快速打开 文件名 跳转",
+    group: "file",
+    need: "workspace",
+    enabled: hasWorkspace,
+    run: () => void window.dispatchEvent(new Event(QUICK_OPEN_EVENT)),
+  },
   {
     id: "new",
     title: "新建笔记",

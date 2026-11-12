@@ -83,6 +83,11 @@ export function listDir(relPath: string): Promise<Entry[]> {
   return invoke<Entry[]>("list_dir", { relPath });
 }
 
+/** 递归列出当前工作区的 Markdown 文件（只读目录，不读内容）。 */
+export function listMarkdownFiles(): Promise<Entry[]> {
+  return invoke<Entry[]>("list_markdown_files");
+}
+
 export function readFile(relPath: string): Promise<FileContent> {
   return invoke<FileContent>("read_file", { relPath });
 }

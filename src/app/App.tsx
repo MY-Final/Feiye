@@ -21,6 +21,12 @@ import { PreviewPane } from "../features/preview/PreviewPane";
 import { TabBar } from "../features/tabs/TabBar";
 import { printActiveDocument } from "./Toolbar";
 import { CommandPalette } from "../features/commands/CommandPalette";
+import {
+  QuickOpen,
+  closeQuickOpen,
+  isQuickOpenOpen,
+  openQuickOpen,
+} from "../features/commands/QuickOpen";
 import { HistoryDialog } from "../features/history/HistoryDialog";
 import { SplitPane } from "../features/split/SplitPane";
 import { SettingsDialog } from "../features/settings/SettingsDialog";
@@ -98,6 +104,7 @@ function dialogOpen(): boolean {
       ui.paletteOpen ||
       ui.historyOpen ||
       isShortcutSheetOpen() ||
+      isQuickOpenOpen() ||
       useUpdateStore.getState().open,
   );
 }
@@ -255,7 +262,8 @@ export default function App() {
           ui.paletteOpen ||
           ui.historyOpen ||
           updateOpen ||
-          isShortcutSheetOpen()
+          isShortcutSheetOpen() ||
+          isQuickOpenOpen()
         ) {
           event.preventDefault();
           return;
@@ -285,7 +293,8 @@ export default function App() {
           ui.settingsOpen ||
           ui.historyOpen ||
           updateOpen ||
-          isShortcutSheetOpen()
+          isShortcutSheetOpen() ||
+          isQuickOpenOpen()
         ) {
           event.preventDefault();
           return;
@@ -305,7 +314,8 @@ export default function App() {
           ui.settingsOpen ||
           ui.paletteOpen ||
           updateOpen ||
-          isShortcutSheetOpen()
+          isShortcutSheetOpen() ||
+          isQuickOpenOpen()
         ) {
           event.preventDefault();
           return;
@@ -342,12 +352,36 @@ export default function App() {
           ui.settingsOpen ||
           ui.paletteOpen ||
           ui.historyOpen ||
-          updateOpen
+          updateOpen ||
+          isQuickOpenOpen()
         ) {
           return;
         }
         if (isShortcutSheetOpen()) closeShortcutSheet();
         else openShortcutSheet();
+        return;
+      }
+
+      // 快速打开笔记：Ctrl+Shift+O。其它弹层开着时不叠开；自己开着时再按一次关闭。
+      if (mod && event.shiftKey && event.key.toLowerCase() === "o") {
+        event.preventDefault();
+        if (
+          ui.confirm ||
+          ui.prompt ||
+          ui.settingsOpen ||
+          ui.paletteOpen ||
+          ui.historyOpen ||
+          updateOpen ||
+          isShortcutSheetOpen()
+        ) {
+          return;
+        }
+        if (!useWorkspaceStore.getState().root) {
+          useUiStore.getState().toast("先打开一个工作区再快速打开笔记");
+          return;
+        }
+        if (isQuickOpenOpen()) closeQuickOpen();
+        else openQuickOpen();
         return;
       }
 
@@ -887,6 +921,7 @@ export default function App() {
       <ShortcutSheet />
       <HistoryDialog />
       <CommandPalette />
+      <QuickOpen />
       <DialogHost />
       <UpdateDialog />
       <ToastHost />

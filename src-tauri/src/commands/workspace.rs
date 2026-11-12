@@ -179,6 +179,60 @@ fn list_children(root: &Path, rel: &str) -> Result<Vec<Entry>, AppError> {
     Ok(entries)
 }
 
+/// 快速打开一次最多返回多少篇；正常笔记库远低于这个数。
+const MAX_QUICK_OPEN_FILES: usize = 20_000;
+
+/// 递归列出工作区内的全部 Markdown 文件，供「快速打开」按文件名过滤。
+/// 只读目录项、不读文件内容，几千篇也只是目录遍历的开销。
+#[tauri::command]
+pub fn list_markdown_files(state: State<'_, WorkspaceState>) -> Result<Vec<Entry>, AppError> {
+    let root = state.root()?;
+    let mut files = Vec::new();
+    collect_markdown_files(&root, "", &mut files);
+    files.sort_by(|a, b| a.rel_path.cmp(&b.rel_path));
+    Ok(files)
+}
+
+fn collect_markdown_files(dir: &Path, rel: &str, files: &mut Vec<Entry>) {
+    if files.len() >= MAX_QUICK_OPEN_FILES {
+        return;
+    }
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for item in entries.flatten() {
+        if files.len() >= MAX_QUICK_OPEN_FILES {
+            return;
+        }
+        let name = item.file_name().to_string_lossy().into_owned();
+        // 与文件树 / 搜索一致：隐藏项、符号链接、忽略目录都不进列表。
+        if name.starts_with('.') {
+            continue;
+        }
+        let Ok(file_type) = item.file_type() else {
+            continue;
+        };
+        if file_type.is_symlink() {
+            continue;
+        }
+        let child_rel = fs_path::join_rel(rel, &name);
+        if file_type.is_dir() {
+            if IGNORED_DIRS.contains(&name.as_str()) {
+                continue;
+            }
+            collect_markdown_files(&item.path(), &child_rel, files);
+            continue;
+        }
+        if file_type.is_file() && fs_path::is_markdown(&name) {
+            files.push(Entry {
+                rel_path: child_rel,
+                name,
+                is_dir: false,
+            });
+        }
+    }
+}
+
 fn has_markdown_child(dir: &Path) -> bool {
     let Ok(entries) = fs::read_dir(dir) else {
         return false;
@@ -228,6 +282,29 @@ mod tests {
 
         assert!(list_children(&root, "..").is_err());
         assert!(list_children(&root, "../").is_err());
+    }
+
+    #[test]
+    fn lists_markdown_files_recursively() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = dunce::canonicalize(temp.path()).unwrap();
+        fs::create_dir(root.join("子目录")).unwrap();
+        fs::create_dir(root.join("node_modules")).unwrap();
+        fs::create_dir(root.join(".hidden")).unwrap();
+        fs::write(root.join("b.md"), "b").unwrap();
+        fs::write(root.join("a.md"), "a").unwrap();
+        fs::write(root.join("图.png"), "x").unwrap();
+        fs::write(root.join("子目录/c.md"), "c").unwrap();
+        fs::write(root.join("node_modules/n.md"), "n").unwrap();
+        fs::write(root.join(".hidden/h.md"), "h").unwrap();
+
+        let mut files = Vec::new();
+        collect_markdown_files(&root, "", &mut files);
+        files.sort_by(|a, b| a.rel_path.cmp(&b.rel_path));
+        let rels: Vec<&str> = files.iter().map(|entry| entry.rel_path.as_str()).collect();
+
+        assert_eq!(rels, vec!["a.md", "b.md", "子目录/c.md"]);
+        assert!(files.iter().all(|entry| !entry.is_dir));
     }
 
     #[test]
