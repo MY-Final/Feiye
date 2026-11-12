@@ -272,6 +272,9 @@ code{font-family:Consolas,"SFMono-Regular",Menlo,monospace;font-size:.9em}
 table{border-collapse:collapse;margin:0 0 1em}
 th,td{border:1px solid ${p.line};padding:6px 10px}
 hr{border:0;border-top:1px solid ${p.line};margin:2em 0}
+details.frontmatter{margin:0 0 1.4em;padding:6px 12px;border:1px solid ${p.line};border-radius:6px;background:${p.preBg};color:${p.quoteText};font-size:12.5px}
+details.frontmatter>summary{cursor:pointer}
+details.frontmatter>pre{margin:8px 0 2px;padding:0;border:0;background:transparent;font-size:12px;white-space:pre-wrap}
 pre.shiki{background:${p.preBg}!important}
 ${
   theme === "dark"

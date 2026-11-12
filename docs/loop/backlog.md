@@ -22,7 +22,7 @@
 ## 第 376 轮 · 2026-11-12 12:30
 **用户需求**：场景：笔记开头用 `---` 写 `title` / `tags` / `date`。现在的问题：frontmatter 被当成 Markdown 正文，两个 `---` 触发分隔线 / Setext 标题语义，预览里出现横线和大标题，大纲也会混入 YAML 注释里的 `#`。期望：识别文件开头的 frontmatter，预览折叠成低调的「元信息」块（默认收起、可展开看原文），大纲跳过这段；所见模式本轮可以继续按源码显示，在 backlog 记为遗留。
 **产品经理**：做。frontmatter 是纯文本笔记的常见约定，正确识别它属于「本地优先、纯文本、安静」的边界内修正，不新增依赖、不扩大产品边界；默认收起、只在预览出现，对不用 frontmatter 的用户零打扰，成本 S。
-**前端**：`markdown.worker.ts` 在 `processor.parse` 前用锚定开头的正则（`^\uFEFF?---`，允许 CRLF）取出 YAML 与截断正文，Mermaid 收集基于截断后正文；`details` 块在 `String(file)` 后拼接，YAML 内容经 `escapeHtml`（`& < > "`），不走 remark 原始 HTML 节点，避免 sanitize 的 schema 改动；`outline.ts` 计算开头 frontmatter 结束偏移（首行必须是 `---`，向下最多 500 行找闭合 `---`，找不到当没有），忽略 `node.from` 小于偏移的标题；`preview.css` 新增折叠块样式。风险：以 `---` 开头但本意是分隔线的文档会被当成 frontmatter（与常见编辑器行为一致）；导出 HTML 里的折叠块沿用浏览器默认样式，未在导出样式中单独美化。工作量 S。
+**前端**：`markdown.worker.ts` 在 `processor.parse` 前用锚定开头的正则（`^\uFEFF?---`，允许 CRLF）取出 YAML 与截断正文，Mermaid 收集基于截断后正文；`details` 块在 `String(file)` 后拼接，YAML 内容经 `escapeHtml`（`& < > "`），不走 remark 原始 HTML 节点，避免 sanitize 的 schema 改动；`outline.ts` 计算开头 frontmatter 结束偏移（首行必须是 `---`，向下最多 500 行找闭合 `---`，找不到当没有），忽略 `node.from` 小于偏移的标题；`preview.css` 新增折叠块样式。风险：以 `---` 开头但本意是分隔线的文档会被当成 frontmatter（与常见编辑器行为一致）；导出 HTML 里的折叠块已在 `Toolbar.tsx` 的导出样式中补亮 / 暗配色，与预览一致。工作量 S。
 **后端**：无（未改 `src-tauri/`）。工作量无。
 **裁决**：做。
 **改动**：`src/features/preview/markdown.worker.ts`（+33/−2 行）、`src/features/editor/outline.ts`（+19 行）、`src/features/preview/preview.css`（+25 行），共 3 个源码文件；另更新 `docs/loop/state.md`、`docs/loop/backlog.md`、`docs/loop/requirements.md`。
@@ -33,9 +33,9 @@
 - 同篇笔记的大纲（侧栏「大纲」）不应出现 YAML 注释里的 `#`；正文自己的 `#` 标题仍在。
 - 在正文中段插入一行 `---`（前后有空行）：预览里仍是分隔线，不被当作 frontmatter；大纲不受影响。
 - 打开一篇没有 frontmatter 的普通笔记：预览、大纲、分栏同步与改动前一致。
-- 工具栏「导出 HTML」导出一篇含 frontmatter 的笔记，打开生成的 `.html`：`<main class="markdown-body">` 开头能看到 `<details class="frontmatter">` 折叠块（默认收起）。导出样式中未单独美化该块，呈浏览器默认外观。
+- 工具栏「导出 HTML」导出一篇含 frontmatter 的笔记，打开生成的 `.html`：`<main class="markdown-body">` 开头能看到 `<details class="frontmatter">` 折叠块（默认收起），块底色 / 边框随亮暗主题变化，与预览里的观感一致。
 - 暗色主题下重复第一、二步，折叠块应为深色浅字、边框随主题变暗。
-**遗留**：所见（Live Preview）模式仍按源码显示 frontmatter，未做折叠或装饰；导出 HTML 的折叠块未单独美化；以 `---` 开头、本意是正文分隔线的文档会被当作 frontmatter（与常见编辑器一致）；没有把 frontmatter 用于标题 / 标签等元数据展示。
+**遗留**：所见（Live Preview）模式仍按源码显示 frontmatter，未做折叠或装饰；以 `---` 开头、本意是正文分隔线的文档会被当作 frontmatter（与常见编辑器一致）；没有把 frontmatter 用于标题 / 标签等元数据展示。
 **检验计数**：3（第 376 轮为正常需求轮，第 378 轮做检验轮）。
 
 ## 第 375 轮 · 2026-11-12 12:20
