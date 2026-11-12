@@ -13,7 +13,7 @@ import {
 } from "../../lib/tauri";
 import { useDocumentStore } from "../../stores/document";
 import { useUiStore } from "../../stores/ui";
-import { setEditorDocument } from "../editor/editor-bridge";
+import { getEditorText, setEditorDocument } from "../editor/editor-bridge";
 import { requestPreview } from "../preview/preview-controller";
 import { changeViewMode } from "../workspace/workspace-actions";
 import "./history.css";
@@ -36,6 +36,34 @@ function formatSize(bytes: number): string {
   return `${(bytes / 1024).toFixed(1)} KB`;
 }
 
+export interface DiffLine {
+  type: "same" | "add" | "del";
+  text: string;
+}
+
+/**
+ * 轻量行级 diff：去掉公共前后缀，中间变化块先列删除行、再列新增行。
+ * 不做逐行配对，超长文档也只是同一路径，不会有平方级开销。
+ */
+export function diffLines(oldText: string, newText: string): DiffLine[] {
+  const before = oldText === "" ? [] : oldText.split("\n");
+  const after = newText === "" ? [] : newText.split("\n");
+  let head = 0;
+  while (head < before.length && head < after.length && before[head] === after[head]) head++;
+  let tailOld = before.length - 1;
+  let tailNew = after.length - 1;
+  while (tailOld >= head && tailNew >= head && before[tailOld] === after[tailNew]) {
+    tailOld--;
+    tailNew--;
+  }
+  const out: DiffLine[] = [];
+  for (let i = 0; i < head; i++) out.push({ type: "same", text: before[i] });
+  for (let i = head; i <= tailOld; i++) out.push({ type: "del", text: before[i] });
+  for (let i = head; i <= tailNew; i++) out.push({ type: "add", text: after[i] });
+  for (let i = tailOld + 1; i < before.length; i++) out.push({ type: "same", text: before[i] });
+  return out;
+}
+
 /**
  * 文档历史：列出每次保存留下的快照，右侧预览内容；
  * 「恢复此版本」把旧内容载入编辑器并标记未保存，由用户再按保存写盘。
@@ -50,6 +78,9 @@ export function HistoryDialog() {
   const [selected, setSelected] = useState<string | null>(null);
   const [content, setContent] = useState<string | null>(null);
   const [reading, setReading] = useState(false);
+  const [mode, setMode] = useState<"content" | "diff">("content");
+  /** 切到对比时给编辑器正文拍个快照；弹层开着时正文不会再变。 */
+  const [currentText, setCurrentText] = useState<string | null>(null);
   const restoreFocus = useRef<HTMLElement | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -65,6 +96,8 @@ export function HistoryDialog() {
     setEntries([]);
     setSelected(null);
     setContent(null);
+    setMode("content");
+    setCurrentText(null);
     listHistory(docPath)
       .then((list) => {
         if (cancelled) return;
@@ -136,6 +169,18 @@ export function HistoryDialog() {
     const previous = restoreFocus.current;
     if (previous?.isConnected) previous.focus();
   };
+
+  const showDiff = () => {
+    setCurrentText(getEditorText());
+    setMode("diff");
+  };
+
+  const diff =
+    mode === "diff" && content !== null && currentText !== null
+      ? diffLines(content, currentText)
+      : null;
+  const identical =
+    diff !== null && diff.every((line) => line.type === "same");
 
   const restore = async () => {
     if (!docPath || content === null) return;
@@ -249,13 +294,60 @@ export function HistoryDialog() {
               ))}
             </ul>
             <div className="history-preview" aria-label="版本内容预览">
-              {reading ? (
-                <div className="history-empty">读取中…</div>
-              ) : content !== null ? (
-                <pre className="history-text">{content}</pre>
-              ) : (
-                <div className="history-empty">选择左侧版本查看内容</div>
-              )}
+              <div className="segmented history-mode" role="group" aria-label="版本视图">
+                <button
+                  type="button"
+                  className={mode === "content" ? "active" : ""}
+                  aria-pressed={mode === "content"}
+                  onClick={() => setMode("content")}
+                >
+                  内容
+                </button>
+                <button
+                  type="button"
+                  className={mode === "diff" ? "active" : ""}
+                  aria-pressed={mode === "diff"}
+                  onClick={showDiff}
+                >
+                  对比当前
+                </button>
+              </div>
+              <div className="history-preview-body">
+                {reading ? (
+                  <div className="history-empty">读取中…</div>
+                ) : mode === "diff" ? (
+                  currentText === null || currentText.trim() === "" ? (
+                    <div className="history-empty">
+                      编辑器里还没有内容，无法对比。
+                    </div>
+                  ) : identical ? (
+                    <div className="history-empty">与当前内容一致。</div>
+                  ) : (
+                    <>
+                      <p className="history-diff-note">
+                        与编辑器当前内容对比 · <span className="is-add">+ 新增</span>{" "}
+                        / <span className="is-del">- 删除</span>
+                      </p>
+                      <pre
+                        className="history-text history-diff"
+                        role="region"
+                        aria-label="与编辑器当前内容对比"
+                      >
+                        {(diff ?? []).map((line, index) => (
+                          <span key={index} className={`history-diff-line is-${line.type}`}>
+                            {line.type === "add" ? "+ " : line.type === "del" ? "- " : "  "}
+                            {line.text}
+                          </span>
+                        ))}
+                      </pre>
+                    </>
+                  )
+                ) : content !== null ? (
+                  <pre className="history-text">{content}</pre>
+                ) : (
+                  <div className="history-empty">选择左侧版本查看内容</div>
+                )}
+              </div>
             </div>
           </div>
         )}

@@ -1,12 +1,12 @@
 # 循环状态
 
-- 轮次：376
+- 轮次：377
 - 起始时间：2026-11-12 10:45
 - 窗口终点：手动单轮（本轮完成后结束）
-- 最后更新：2026-11-12 12:30
+- 最后更新：2026-11-12 12:40
 - 当前分支：loop/pool-2026-11-12
 - 状态：进行中
-- 自上次检验轮：3（第 373 轮已检验 368–372；第 378 轮做下一次检验）
+- 自上次检验轮：4（第 373 轮已检验 368–372；第 378 轮做下一次检验）
 
 ## 上一窗口小结（2026-11-01 23:40–2026-11-02 15:45）
 
@@ -25,6 +25,8 @@
 - 单轮仍限 S 级（≤ 约 80 行、≤ 3 个文件），构建通过才提交；只提交不推送。
 
 ## 本窗口进展（2026-11-12 10:45– ）
+
+- 第 377 轮：历史版本可与当前内容对比——恢复前只有纯文本预览，得靠记忆比对；`HistoryDialog.tsx` 新增「内容 / 对比当前」分段按钮（原生按钮 + `aria-pressed`，Tab / 回车可用），切到对比时用 `getEditorText()` 给编辑器正文拍快照，`diffLines` 按行去公共前后缀、中间变化块先列删除行再列新增行，不做逐行配对（超长文档也是线性开销），`+` / `-` / 空格前缀配 `role="region"` 对比区；无差异显示「与当前内容一致」，编辑器为空时给出说明；恢复按钮仍基于所选版本内容，行为不变。`history.css` 复用 `.segmented`，对比行用 `--syn-string` / `--danger` 文字色与浅底，亮暗主题可读。构建通过（含 tsc，vite 1.09s，仅既有的 chunk 体积与 ineffective dynamic import 提示）；bun 直调 `diffLines`（从源码切出同一份实现，组件模块依赖 DOM 不能直接 import）6 组用例符合预期；未改 `src-tauri/`。CDP 不可用（9222 未运行），人工验证步骤见 backlog。
 
 - 第 376 轮：折叠 YAML frontmatter 并跳过大纲——笔记开头的 `---` 元数据此前被当成正文，两个 `---` 触发分隔线 / Setext 标题，预览出现横线和大标题，大纲混入 YAML 注释里的 `#`。`markdown.worker.ts` 在交给 remark 前用锚定文件开头的正则取出 frontmatter（允许 BOM、CRLF），正文从闭合处截断，Mermaid 收集也只看正文；`String(file)` 之后把已转义的 `<details class="frontmatter"><summary>元信息</summary><pre>…</pre></details>` 前置到 HTML（不走 remark，避免 sanitize 剥掉 details / summary）；`outline.ts` 计算开头 frontmatter 结束偏移（首行必须是 `---`，500 行内找闭合，找不到当没有），跳过该偏移之前的标题；`preview.css` 给折叠块加低调样式（细边框、`--bg-sunken` 浅底、12–13px、pre 透明底），亮暗主题随令牌切换。构建通过（含 tsc，vite 1.42s，仅既有的 chunk 体积与 ineffective dynamic import 提示）；正则 6 组用例符合预期；未改 `src-tauri/`。所见模式本轮仍按源码显示；CDP 不可用（9222 未运行），人工验证步骤见 backlog。
 
