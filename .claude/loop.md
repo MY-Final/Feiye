@@ -8,7 +8,7 @@
 
 1. `git status`：工作区不干净先弄清是谁的改动，绝不覆盖用户未提交的改动。
 2. 读 `docs/loop/state.md`：轮次、时间窗、自上次检验轮的计数。
-3. 读 `docs/loop/backlog.md` 顶部几条：最近做过什么、什么被延后。
+3. 读 `docs/loop/backlog.md` 顶部几条：最近做过什么、什么被延后；候选需求优先从 `docs/loop/requirements.md` 取。
 4. 读 `README.md` 的「设计原则」「功能规划」：那是产品边界；**不碰「暂不做」**。
 
 ## 1. 用户
