@@ -249,7 +249,7 @@ pub fn delete_history(dir: &Path, root: &Path, rel_path: &str, id: &str) -> Resu
     }
 }
 
-/// 删除早于 `before_ms` 的快照；`None` 或 `Some(0)` 清空全部。返回成功删除数。
+/// 删除早于 `before_ms` 的快照；`None` 清空全部。返回成功删除数。
 /// 文件名无法解析时间戳的文件保持不变，删除失败（占用、权限）跳过。
 pub fn clear_history(dir: &Path, before_ms: Option<u64>) -> usize {
     let Ok(entries) = fs::read_dir(dir) else {
@@ -266,7 +266,7 @@ pub fn clear_history(dir: &Path, before_ms: Option<u64>) -> usize {
             continue;
         }
         let remove = match before_ms {
-            None | Some(0) => true,
+            None => true,
             Some(cutoff) => path
                 .file_stem()
                 .and_then(|stem| stem.to_str())
@@ -420,10 +420,10 @@ mod tests {
         assert_eq!(clear_history(&data, Some(now_ms() + 60_000)), 2);
         assert_eq!(storage_stats(&data).0, 0);
 
-        // Some(0) 与 None 都表示清空全部。
+        // Some(0) 只删早于 1970 的快照（一份都不删）；None 才清空全部。
         push_snapshot(&data, &root, "a.md", "a2").unwrap();
-        assert_eq!(clear_history(&data, Some(0)), 1);
-        push_snapshot(&data, &root, "notes/b.md", "b2").unwrap();
+        assert_eq!(clear_history(&data, Some(0)), 0);
+        assert_eq!(storage_stats(&data).0, 1);
         assert_eq!(clear_history(&data, None), 1);
         assert_eq!(storage_stats(&data).0, 0);
     }
