@@ -7,13 +7,17 @@ import {
 } from "react";
 
 import {
+  describeError,
   nextSearchGeneration,
+  replaceInFiles,
   searchWorkspace,
   type SearchHit,
 } from "../../lib/tauri";
 import { useDocumentStore } from "../../stores/document";
+import { useUiStore } from "../../stores/ui";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { getEditorText, jumpToEditorPosition } from "../editor/editor-bridge";
+import { reloadActiveDocument, saveActiveDocument } from "../editor/save";
 import { changeViewMode, openFile } from "./workspace-actions";
 import "./search.css";
 
@@ -98,8 +102,18 @@ export function SearchPanel({
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [active, setActive] = useState(0);
+  const [replaceOpen, setReplaceOpen] = useState(false);
+  const [replacement, setReplacement] = useState("");
+  const [replacing, setReplacing] = useState(false);
+  const [failures, setFailures] = useState<
+    { relPath: string; error: string }[]
+  >([]);
+  // 替换完成后自增，重跑当前关键词刷新结果。
+  const [refreshTick, setRefreshTick] = useState(0);
   const listRef = useRef<HTMLUListElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const replaceToggleRef = useRef<HTMLButtonElement>(null);
+  const replaceInputRef = useRef<HTMLInputElement>(null);
   // 重跑时按「同一篇 + 同一行」找回选中项；用 ref 读最新值，避免进依赖重新触发查询。
   const hitsRef = useRef(hits);
   const activeRef = useRef(active);
@@ -163,7 +177,7 @@ export function SearchPanel({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [query, root, dirRevision, savedModifiedMs, visible]);
+  }, [query, root, dirRevision, savedModifiedMs, visible, refreshTick]);
 
   // 组件卸载（侧栏销毁、整页重载）时也推进代号，不让没人要的扫描继续读盘。
   useEffect(() => {
@@ -223,6 +237,106 @@ export function SearchPanel({
     }
   };
 
+  const openReplace = () => {
+    setReplaceOpen(true);
+    // 用户刚点了「替换」，把光标交给替换词输入框，接着就能打字。
+    window.requestAnimationFrame(() => replaceInputRef.current?.focus());
+  };
+
+  const closeReplace = () => {
+    setReplaceOpen(false);
+    replaceToggleRef.current?.focus();
+  };
+
+  const onReplaceKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    closeReplace();
+  };
+
+  const replaceAll = async () => {
+    if (replacing || !needle || !hits.length) return;
+    const paths = Array.from(new Set(hits.map((hit) => hit.relPath)));
+    // 结果达到上限时只替换已列出的文件，实际处数可能更多。
+    const truncated = hits.length >= MAX_HITS;
+    const atLeast = truncated ? "至少 " : "";
+    const deleteHint =
+      replacement.length === 0 ? "（替换词为空：将删除匹配的文字）" : "";
+    const choice = await useUiStore.getState().ask({
+      title: "全部替换",
+      message: `将修改${atLeast}${paths.length} 篇笔记中的${atLeast}${hits.length} 处${deleteHint}，写入后不可撤销。`,
+      buttons: [
+        { label: "取消", value: "cancel", tone: "default" },
+        { label: "全部替换", value: "replace", tone: "danger" },
+      ],
+    });
+    if (choice !== "replace") return;
+
+    // 当前这篇有未保存修改：先尝试落盘；仍脏就跳过，避免批量写入与编辑器互相覆盖。
+    const current = useDocumentStore.getState();
+    let targets = paths;
+    const skipped: { relPath: string; error: string }[] = [];
+    if (current.path && paths.includes(current.path) && current.dirty) {
+      await saveActiveDocument({ auto: true });
+      if (useDocumentStore.getState().dirty) {
+        targets = paths.filter((path) => path !== current.path);
+        skipped.push({
+          relPath: current.path,
+          error: "当前笔记有未保存的修改，已跳过",
+        });
+      }
+    }
+
+    setReplacing(true);
+    setFailures([]);
+    try {
+      const report = await replaceInFiles(targets, needle, replacement);
+      const failed = [
+        ...skipped,
+        ...report.files
+          .filter((file) => file.error)
+          .map((file) => ({
+            relPath: file.relPath,
+            error: file.error ?? "",
+          })),
+      ];
+      setFailures(failed);
+      useUiStore
+        .getState()
+        .toast(
+          `已修改 ${report.changedFiles} 篇 / ${report.totalReplaced} 处${
+            failed.length ? `，${failed.length} 篇失败` : ""
+          }`,
+          failed.length ? "error" : "success",
+        );
+
+      // 当前这篇被改过：从磁盘重新装载，别让编辑器拿着旧正文在下一次保存时盖掉替换。
+      const doc = useDocumentStore.getState();
+      const changedOpen = doc.path
+        ? report.files.some(
+            (file) => file.relPath === doc.path && file.replaced > 0,
+          )
+        : false;
+      if (changedOpen && !doc.dirty) {
+        await reloadActiveDocument();
+        // 重新装载会把焦点交给正文；用户本来在面板里操作，把焦点还回来。
+        if (document.activeElement?.classList.contains("cm-content")) {
+          replaceToggleRef.current?.focus();
+        }
+      }
+
+      // 推进代号让仍在路上的旧查询作废，再重跑当前关键词刷新行号。
+      void nextSearchGeneration().catch(() => {});
+      setRefreshTick((tick) => tick + 1);
+    } catch (error) {
+      useUiStore
+        .getState()
+        .toast(`替换失败：${describeError(error)}`, "error");
+    } finally {
+      setReplacing(false);
+    }
+  };
+
   // 键盘在输入框里上下选结果时，焦点始终留在输入框，列表不会自己滚动；
   // 选中项一旦走出可视区就看不见了。把它滚进视野（与大纲一致）。
   useEffect(() => {
@@ -274,9 +388,65 @@ export function SearchPanel({
             ? `workspace-search-hit-${active}`
             : undefined
         }
-        onChange={(event) => setQuery(event.target.value)}
+        onChange={(event) => {
+          setQuery(event.target.value);
+          // 换了关键词，上一批替换失败项已不对应当前结果。
+          setFailures([]);
+        }}
         onKeyDown={onKeyDown}
       />
+
+      <div className="search-replace">
+        <button
+          ref={replaceToggleRef}
+          type="button"
+          className="search-replace-toggle"
+          aria-expanded={replaceOpen}
+          aria-controls="workspace-search-replace"
+          onClick={() => (replaceOpen ? closeReplace() : openReplace())}
+        >
+          替换
+        </button>
+        {replaceOpen ? (
+          <>
+            <input
+              ref={replaceInputRef}
+              id="workspace-search-replace"
+              className="search-input search-replace-input"
+              type="text"
+              value={replacement}
+              placeholder="替换为…（留空即删除）"
+              aria-label="替换为"
+              onChange={(event) => setReplacement(event.target.value)}
+              onKeyDown={onReplaceKeyDown}
+            />
+            <button
+              type="button"
+              className="search-replace-run"
+              disabled={replacing || !needle || !hits.length}
+              onClick={() => void replaceAll()}
+            >
+              {replacing ? "替换中…" : "全部替换"}
+            </button>
+          </>
+        ) : null}
+      </div>
+
+      {failures.length ? (
+        <div className="search-replace-failures" role="alert">
+          <div>{failures.length} 篇未能替换：</div>
+          <ul>
+            {failures.slice(0, 5).map((failure) => (
+              <li key={failure.relPath}>
+                {failure.relPath}：{failure.error}
+              </li>
+            ))}
+          </ul>
+          {failures.length > 5 ? (
+            <div>另有 {failures.length - 5} 篇失败</div>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* 常驻播报区：与视觉状态分开，避免「搜索中」随每次敲字刷屏。 */}
       <div

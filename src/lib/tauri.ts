@@ -254,6 +254,38 @@ export function searchWorkspace(
   return invoke<SearchResponse>("search_workspace", { query, limit, generation });
 }
 
+export interface FileReplaceResult {
+  relPath: string;
+  /** 这篇里实际替换的处数。 */
+  replaced: number;
+  /** 有值表示这篇失败，其它文件不受影响。 */
+  error?: string;
+}
+
+/** 批量替换汇总，供确认后的 Toast 与失败列表使用。 */
+export interface ReplaceReport {
+  files: FileReplaceResult[];
+  changedFiles: number;
+  totalReplaced: number;
+  failedFiles: number;
+}
+
+/**
+ * 在工作区里按字面量批量替换（大小写不敏感）。
+ * 只处理传入的 Markdown 相对路径，写入走原子替换，逐文件报告结果。
+ */
+export function replaceInFiles(
+  relPaths: string[],
+  query: string,
+  replacement: string,
+): Promise<ReplaceReport> {
+  return invoke<ReplaceReport>("replace_in_files", {
+    relPaths,
+    query,
+    replacement,
+  });
+}
+
 export interface HistoryEntry {
   id: string;
   savedAt: number;

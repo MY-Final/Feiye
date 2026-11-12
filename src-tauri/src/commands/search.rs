@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex};
 use serde::Serialize;
 use tauri::State;
 
+use super::file::{mtime_ms, write_path};
 use super::workspace::WorkspaceState;
 use crate::error::AppError;
 use crate::fs_path::{self, IGNORED_DIRS};
@@ -74,6 +75,14 @@ impl SearchState {
         }
     }
 
+    /// 文件被改写后显式作废缓存：mtime 精度有限、等长替换时 size 也不变，
+    /// 只靠版本标记可能继续命中旧内容。
+    fn forget(&self, path: &Path) {
+        if let Ok(mut inner) = self.cache.lock() {
+            inner.remove(path);
+        }
+    }
+
     /// 本次扫描完整走完后，丢掉这个工作区里已删除文件留下的缓存。
     fn prune(&self, root: &Path, seen: &HashSet<PathBuf>) {
         if let Ok(mut inner) = self.cache.lock() {
@@ -128,6 +137,12 @@ impl CacheInner {
             raw: entry.raw.clone(),
             lower: entry.lower.clone(),
         })
+    }
+
+    fn remove(&mut self, path: &Path) {
+        if let Some(old) = self.docs.remove(path) {
+            self.bytes = self.bytes.saturating_sub(old.bytes);
+        }
     }
 
     fn insert(&mut self, path: &Path, mtime: u64, size: u64, doc: &Doc) {
@@ -398,6 +413,176 @@ pub fn search_workspace(
     })
 }
 
+/// 单篇替换结果：`error` 有值表示这篇没写成，不影响其它文件。
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileReplace {
+    pub rel_path: String,
+    pub replaced: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// 批量替换汇总：前端据此报「已修改 X 篇 / Y 处，Z 篇失败」。
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReplaceReport {
+    pub files: Vec<FileReplace>,
+    pub changed_files: usize,
+    pub total_replaced: usize,
+    pub failed_files: usize,
+}
+
+/// 大小写不敏感的字面量替换。匹配窗口按「原查询的字符数」取，
+/// 比较时两边转小写；替换文本原样写入，不套用命中的大小写。
+fn replace_literal(text: &str, needle: &str, replacement: &str) -> (String, usize) {
+    let needle_lower = needle.to_lowercase();
+    if needle_lower.is_empty() {
+        return (text.to_string(), 0);
+    }
+    let width = needle.chars().count();
+    let indices: Vec<usize> = text.char_indices().map(|(index, _)| index).collect();
+    let mut out = String::with_capacity(text.len());
+    let mut count = 0;
+    let mut index = 0;
+    while index < indices.len() {
+        let start = indices[index];
+        let end = indices.get(index + width).copied().unwrap_or(text.len());
+        if text[start..end].to_lowercase() == needle_lower {
+            out.push_str(replacement);
+            count += 1;
+            index += width;
+            continue;
+        }
+        let next = indices.get(index + 1).copied().unwrap_or(text.len());
+        out.push_str(&text[start..next]);
+        index += 1;
+    }
+    (out, count)
+}
+
+/// 开头 YAML frontmatter 的字节长度。搜索跳过 frontmatter，替换也保持一致：
+/// 改正文里的术语，不改元数据，也不让确认框的数字比实际少。
+fn frontmatter_len(text: &str) -> usize {
+    let lines: Vec<&str> = text.lines().collect();
+    let count = frontmatter_end(&lines);
+    if count == 0 {
+        return 0;
+    }
+    // split_inclusive 保留原始换行（含 CRLF），偏移量可以原样切回去。
+    text.split_inclusive('\n').take(count).map(str::len).sum()
+}
+
+fn replaced_error(rel: &str, error: &AppError) -> FileReplace {
+    FileReplace {
+        rel_path: rel.to_string(),
+        replaced: 0,
+        error: Some(error.to_string()),
+    }
+}
+
+/// 替换单篇：路径、扩展名、符号链接逐项校验，写入复用 `write_path` 的原子替换。
+fn replace_in_file(
+    root: &Path,
+    rel: &str,
+    needle: &str,
+    replacement: &str,
+    cache: &SearchState,
+) -> FileReplace {
+    let clean = match fs_path::normalize_rel(rel) {
+        Ok(clean) => clean,
+        Err(err) => return replaced_error(rel, &err),
+    };
+    if clean.is_empty() || !fs_path::is_markdown(&clean) {
+        return replaced_error(
+            &clean,
+            &AppError::InvalidPath("只支持工作区内的 Markdown 文件".into()),
+        );
+    }
+    let path = match fs_path::resolve_in_workspace(root, &clean) {
+        Ok(path) => path,
+        Err(err) => return replaced_error(&clean, &err),
+    };
+    let meta = match fs::symlink_metadata(&path) {
+        Ok(meta) => meta,
+        Err(_) => return replaced_error(&clean, &AppError::NotFound(clean.clone())),
+    };
+    if meta.file_type().is_symlink() || !meta.is_file() {
+        return replaced_error(
+            &clean,
+            &AppError::InvalidPath("不是可替换的 Markdown 文件".into()),
+        );
+    }
+    let content = match fs::read(&path)
+        .map_err(AppError::from)
+        .and_then(|bytes| String::from_utf8(bytes).map_err(|_| AppError::NotUtf8))
+    {
+        Ok(content) => content,
+        Err(err) => return replaced_error(&clean, &err),
+    };
+
+    let skip = frontmatter_len(&content);
+    let (head, body) = content.split_at(skip);
+    let (new_body, count) = replace_literal(body, needle, replacement);
+    if count == 0 {
+        // 正文里没有命中：不写盘，也不动 mtime。
+        return FileReplace {
+            rel_path: clean,
+            replaced: 0,
+            error: None,
+        };
+    }
+    let out = format!("{head}{new_body}");
+    // 读盘时记下 mtime，写入前再核对一次：期间被外部改过就放弃这篇，避免覆盖。
+    match write_path(&path, &out, Some(mtime_ms(&meta))) {
+        Ok(_) => {
+            cache.forget(&path);
+            FileReplace {
+                rel_path: clean,
+                replaced: count,
+                error: None,
+            }
+        }
+        Err(err) => replaced_error(&clean, &err),
+    }
+}
+
+/// 工作区批量替换：只处理传入的 Markdown 路径，逐文件事务，单篇失败不影响其它。
+/// 返回逐文件结果与汇总，前端据此报数与列出失败项。
+#[tauri::command]
+pub fn replace_in_files(
+    rel_paths: Vec<String>,
+    query: String,
+    replacement: String,
+    state: State<'_, WorkspaceState>,
+    search: State<'_, SearchState>,
+) -> Result<ReplaceReport, AppError> {
+    let root = state.root()?;
+    let needle = query.trim();
+    if needle.is_empty() || rel_paths.is_empty() {
+        return Ok(ReplaceReport {
+            files: Vec::new(),
+            changed_files: 0,
+            total_replaced: 0,
+            failed_files: 0,
+        });
+    }
+
+    let files: Vec<FileReplace> = rel_paths
+        .iter()
+        .map(|rel| replace_in_file(&root, rel, needle, &replacement, &search))
+        .collect();
+    let changed_files = files.iter().filter(|file| file.replaced > 0).count();
+    let total_replaced = files.iter().map(|file| file.replaced).sum();
+    let failed_files = files.iter().filter(|file| file.error.is_some()).count();
+    Ok(ReplaceReport {
+        files,
+        changed_files,
+        total_replaced,
+        failed_files,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
@@ -406,8 +591,8 @@ mod tests {
     use std::sync::Arc;
 
     use super::{
-        cached_doc, file_stamp, frontmatter_end, pick_evictions, preview, walk, CacheInner, Doc,
-        SearchHit, SearchState,
+        cached_doc, file_stamp, frontmatter_end, pick_evictions, preview, replace_in_file,
+        replace_literal, walk, CacheInner, Doc, SearchHit, SearchState,
     };
 
     fn collect(dir: &std::path::Path, needle: &str) -> Vec<SearchHit> {
@@ -709,6 +894,108 @@ mod tests {
             assert_eq!(hits[0].line, 1);
             assert_eq!(hits[0].text, "Hello World");
         }
+
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn replaces_literal_case_insensitively() {
+        let (out, count) = replace_literal("Hello hello HELLO", "hello", "World");
+        assert_eq!(count, 3);
+        assert_eq!(out, "World World World");
+
+        // 替换文本原样写入，不套用命中的大小写。
+        let (out, count) = replace_literal("术语 术语", "术语", "Term 词");
+        assert_eq!(count, 2);
+        assert_eq!(out, "Term 词 Term 词");
+
+        // 空替换即删除匹配文字。
+        let (out, count) = replace_literal("a X b x c", "x", "");
+        assert_eq!(count, 2);
+        assert_eq!(out, "a  b  c");
+
+        // 空查询不动内容。
+        assert_eq!(replace_literal("abc", "", "x"), ("abc".to_string(), 0));
+    }
+
+    #[test]
+    fn replaces_files_and_isolates_failures() {
+        let base = std::env::temp_dir().join(format!("feiye-replace-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(base.join("sub")).unwrap();
+        std::fs::write(base.join("a.md"), "术语 Term term\n").unwrap();
+        std::fs::write(base.join("sub/b.md"), "无命中\n").unwrap();
+        std::fs::write(base.join("a.txt"), "术语\n").unwrap();
+        let cache = SearchState::default();
+
+        // 大小写不敏感：Term + term 都换成新词，同篇计 2 处。
+        let ok = replace_in_file(&base, "a.md", "term", "新词", &cache);
+        assert_eq!(ok.replaced, 2);
+        assert!(ok.error.is_none());
+        assert_eq!(
+            std::fs::read_to_string(base.join("a.md")).unwrap(),
+            "术语 新词 新词\n"
+        );
+
+        // 没有正文命中的文件不报错、不写盘。
+        let none = replace_in_file(&base, "sub/b.md", "术语", "新词", &cache);
+        assert_eq!(none.replaced, 0);
+        assert!(none.error.is_none());
+        assert_eq!(
+            std::fs::read_to_string(base.join("sub/b.md")).unwrap(),
+            "无命中\n"
+        );
+
+        // 非法路径、非 Markdown、不存在的文件：逐条报错，不影响别的文件。
+        for bad in ["../escape.md", "a.txt", "missing.md"] {
+            assert!(replace_in_file(&base, bad, "术语", "x", &cache).error.is_some());
+        }
+        assert_eq!(
+            std::fs::read_to_string(base.join("a.txt")).unwrap(),
+            "术语\n"
+        );
+
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn replace_skips_frontmatter() {
+        let base = std::env::temp_dir().join(format!("feiye-replace-fm-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        std::fs::write(base.join("a.md"), "---\ntags: [术语]\n---\n正文 术语\n").unwrap();
+        let cache = SearchState::default();
+
+        let result = replace_in_file(&base, "a.md", "术语", "新词", &cache);
+        assert_eq!(result.replaced, 1);
+        // 元数据原样保留，只改正文。
+        assert_eq!(
+            std::fs::read_to_string(base.join("a.md")).unwrap(),
+            "---\ntags: [术语]\n---\n正文 新词\n"
+        );
+
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn replace_invalidates_cache_entry() {
+        let base = std::env::temp_dir().join(format!("feiye-replace-cache-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        let path = base.join("a.md");
+        std::fs::write(&path, "Term\n").unwrap();
+        let cache = SearchState::default();
+
+        let (mtime, size) = file_stamp(&std::fs::metadata(&path).unwrap());
+        let before = cached_doc(&cache, &path, mtime, size).unwrap();
+        assert_eq!(*before.lower, vec!["term".to_string()]);
+
+        let result = replace_in_file(&base, "a.md", "term", "new", &cache);
+        assert_eq!(result.replaced, 1);
+
+        // 即使仍拿旧的 mtime / size 查，缓存也不该再返回改写前的内容。
+        let after = cached_doc(&cache, &path, mtime, size).unwrap();
+        assert_eq!(*after.lower, vec!["new".to_string()]);
 
         std::fs::remove_dir_all(&base).unwrap();
     }

@@ -35,6 +35,65 @@
   color: var(--text-faint);
 }
 
+.search-replace {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 0 10px 6px;
+}
+
+.search-replace-toggle,
+.search-replace-run {
+  flex: none;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.search-replace-toggle[aria-expanded="true"] {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.search-replace-run {
+  color: var(--text);
+}
+
+.search-replace-run:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.search-replace-input.search-input {
+  flex: 1;
+  min-width: 120px;
+  margin: 0;
+  padding: 4px 8px;
+}
+
+.search-replace-failures {
+  flex: none;
+  margin: 0 10px 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-sm);
+  color: var(--danger);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.search-replace-failures ul {
+  margin: 2px 0 0;
+  padding-left: 16px;
+}
+
 .search-status {
   flex: none;
   padding: 0 12px 6px;

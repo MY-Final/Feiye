@@ -35,6 +35,7 @@ pub fn run() {
             commands::workspace::list_markdown_files,
             commands::search::next_search_generation,
             commands::search::search_workspace,
+            commands::search::replace_in_files,
             watcher::watch_workspace,
             watcher::unwatch_workspace,
             commands::file::read_file,

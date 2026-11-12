@@ -26,7 +26,7 @@ pub struct FileMeta {
     pub size: u64,
 }
 
-fn mtime_ms(meta: &fs::Metadata) -> u64 {
+pub(crate) fn mtime_ms(meta: &fs::Metadata) -> u64 {
     meta.modified()
         .ok()
         .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
@@ -70,7 +70,11 @@ fn read_path(path: &Path) -> Result<FileContent, AppError> {
     })
 }
 
-fn write_path(path: &Path, content: &str, expected_ms: Option<u64>) -> Result<FileMeta, AppError> {
+pub(crate) fn write_path(
+    path: &Path,
+    content: &str,
+    expected_ms: Option<u64>,
+) -> Result<FileMeta, AppError> {
     if let Some(expected) = expected_ms {
         // 文件被外部删除时不该报「已被修改」：前端要据此提示另存 / 重建，
         // 而不是弹一个「外部修改」的冲突对话框。
