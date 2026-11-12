@@ -50,6 +50,10 @@ pub fn run() {
             commands::history::save_history,
             commands::history::list_history,
             commands::history::read_history,
+            commands::history::storage_stats,
+            commands::history::delete_history,
+            commands::history::clear_history,
+            commands::history::clear_recoveries,
             commands::image_asset::save_image_asset,
             commands::image_asset::read_image_data_url,
         ])

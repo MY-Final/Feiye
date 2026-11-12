@@ -264,3 +264,29 @@ export function readHistory(
 ): Promise<HistoryRevision> {
   return invoke<HistoryRevision>("read_history", { relPath, id });
 }
+
+export function deleteHistory(relPath: string, id: string): Promise<void> {
+  return invoke<void>("delete_history", { relPath, id });
+}
+
+export interface StorageStats {
+  historyFiles: number;
+  historyBytes: number;
+  recoveryFiles: number;
+  recoveryBytes: number;
+}
+
+/** 历史快照与恢复副本占用的文件数与字节数。 */
+export function storageStats(): Promise<StorageStats> {
+  return invoke<StorageStats>("storage_stats");
+}
+
+/** 删除早于 days 天的历史快照；不传则清空全部，返回删除数量。 */
+export function clearHistory(beforeDays?: number): Promise<number> {
+  return invoke<number>("clear_history", { beforeDays });
+}
+
+/** 清空全部崩溃恢复副本，返回删除数量。 */
+export function clearRecoveries(): Promise<number> {
+  return invoke<number>("clear_recoveries");
+}

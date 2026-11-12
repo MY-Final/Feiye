@@ -167,6 +167,43 @@ pub fn clear_snapshot(dir: &Path, root: &Path, rel_path: &str) -> Result<(), App
     delete_snapshot(dir, &id)
 }
 
+/// 统计恢复副本的文件数与总字节数（只计 `.json`）。
+pub fn storage_stats(dir: &Path) -> (u64, u64) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return (0, 0);
+    };
+    let mut files = 0;
+    let mut bytes = 0;
+    for entry in entries.filter_map(Result::ok) {
+        let path = entry.path();
+        if path.is_file() && path.extension().and_then(|ext| ext.to_str()) == Some("json") {
+            if let Ok(meta) = entry.metadata() {
+                files += 1;
+                bytes += meta.len();
+            }
+        }
+    }
+    (files, bytes)
+}
+
+/// 清空全部恢复副本，返回删除数量；其它文件（临时文件等）不动。
+pub fn clear_all(dir: &Path) -> usize {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return 0;
+    };
+    let mut removed = 0;
+    for entry in entries.filter_map(Result::ok) {
+        let path = entry.path();
+        if path.is_file()
+            && path.extension().and_then(|ext| ext.to_str()) == Some("json")
+            && fs::remove_file(&path).is_ok()
+        {
+            removed += 1;
+        }
+    }
+    removed
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -218,6 +255,23 @@ mod tests {
         clear_snapshot(&data, &root, "a.md").unwrap();
         assert!(list_snapshots(&data, &root).is_empty());
         assert!(!snapshot_path(&data, &saved.id).unwrap().exists());
+    }
+
+    #[test]
+    fn reports_storage_and_clears_only_json() {
+        let (_root_dir, root, _data_dir, data) = workspace();
+        save_snapshot(&data, &root, "a.md", "a.md", "first", None).unwrap();
+        save_snapshot(&data, &root, "b.md", "b.md", "second", None).unwrap();
+        fs::write(data.join("notes.txt"), b"keep").unwrap();
+
+        let (files, bytes) = storage_stats(&data);
+        assert_eq!(files, 2);
+        assert!(bytes > 0);
+
+        assert_eq!(clear_all(&data), 2);
+        assert!(list_snapshots(&data, &root).is_empty());
+        assert!(data.join("notes.txt").exists());
+        assert_eq!(clear_all(&data), 0);
     }
 
     #[test]

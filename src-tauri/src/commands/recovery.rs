@@ -6,7 +6,7 @@ use crate::commands::workspace::WorkspaceState;
 use crate::error::AppError;
 use crate::recovery::{self, RecoverySnapshot};
 
-fn recovery_dir(app: &AppHandle) -> Result<PathBuf, AppError> {
+pub(crate) fn recovery_dir(app: &AppHandle) -> Result<PathBuf, AppError> {
     let dir = app
         .path()
         .app_data_dir()

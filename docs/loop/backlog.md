@@ -19,6 +19,27 @@
 
 <!-- 从这里开始追加 -->
 
+## 第 378 轮 · 2026-11-12 12:55
+**用户需求**：场景：长期使用后，应用数据目录里堆着每篇笔记最近 20 份历史快照和崩溃恢复副本。现在的问题：看不到它们占了多少空间，也没有清理入口。期望：先有后端命令与前端调用封装——统计快照 / 恢复副本的文件数与体积、删除单条快照、清理 N 天前或全部快照、清空全部恢复副本；设置 UI 下一轮再接。
+**产品经理**：做（M 级里程碑拆分）。存储可见与可清理属于「本地优先、数据安全、安静」的边界内补强，不新增依赖、不扩大产品边界；本轮只做后端与 API 层，UI 拆分到 379，避免单轮过大。R-02 保持未完成。
+**前端**：`src/lib/tauri.ts` 新增 `StorageStats` 类型与 `storageStats()`、`deleteHistory(relPath, id)`、`clearHistory(beforeDays?)`、`clearRecoveries()` 四个 `invoke` 封装，风格与现有函数一致；不改任何组件，UI 零变化。风险：无（未接入调用点）。工作量 S。
+**后端**：`history.rs` 新增递归 `storage_stats`（只计 `.md`）、`delete_history`（复用 `document_dir` / `snapshot_path`，不存在视为成功）、`clear_history`（`None` / `Some(0)` 清空全部，`Some(cutoff)` 删除时间戳更早的，无法解析的文件保留，删除失败跳过）；`recovery.rs` 新增 `storage_stats` 与 `clear_all`（只删 `.json`）；`commands/history.rs` 新增 `StorageStats`（camelCase）与四个命令，`storage_stats` / `clear_recoveries` 用 `AppHandle` 定位两个目录；`lib.rs` 注册四个命令；`commands/recovery.rs` 的 `recovery_dir` 放宽为 `pub(crate)` 复用。风险：递归遍历数据目录只在用户主动打开设置 / 清理时发生，文档数量级下开销可忽略；`clear_history` 的 cutoff 用毫秒时间戳，天数为 0 与不传等价。工作量 M。
+**裁决**：做（本轮只完成后端与 API，UI 留给 379）。
+**改动**：`src-tauri/src/history.rs`（+115/−1 行，含 2 个测试）、`src-tauri/src/recovery.rs`（+54 行，含 1 个测试）、`src-tauri/src/commands/history.rs`（+54/−1 行）、`src-tauri/src/commands/recovery.rs`（+1/−1 行，`recovery_dir` 改 `pub(crate)`）、`src-tauri/src/lib.rs`（+4 行）、`src/lib/tauri.ts`（+26 行）；另更新 `docs/loop/state.md`、`docs/loop/backlog.md`、`docs/loop/requirements.md`。未新增依赖、未改构建配置、未碰 README「暂不做」。
+**构建**：`cargo test` 通过（47 passed，新增 3 项）；`$HOME/.bun/bin/bun run build` 通过（含 tsc，vite 1.26s，仅既有的 chunk 体积与 ineffective dynamic import 提示）。
+**用例（`cargo test` 覆盖）**：
+- 写入 2 条快照（不同文档）后 `storage_stats` 文件数为 2、字节数 > 0。
+- `delete_history` 只删指定 id，另一篇快照仍在；重复删除同一条仍返回成功；非法 id / 非法相对路径报错。
+- `clear_history(Some(1))`（截止点在全部快照之前）删 0 份；`Some(now + 60s)` 全删；`Some(0)` 与 `None` 全删。
+- `clear_all` 只删 `recovery/` 下 2 个 `.json`，同目录的 `notes.txt` 保留，再次调用返回 0。
+**测试步骤（CDP 不可用，9222 未运行，未启动应用；UI 尚未接入，以下为 379 接 UI 后的验收点）**：
+- 设置 →「存储」区应显示历史快照与恢复副本的文件数 / 体积（与数据目录实际文件一致）。
+- 打开历史弹层删除单条：列表少一条，重新打开仍不在；对应 `history/<hash>/<id>.md` 已消失。
+- 点「清理 30 天前快照」：只保留最近 30 天的快照；点「清空全部快照」：历史列表为空、统计归零。
+- 点「清空全部恢复副本」：下次启动不再提示恢复；`recovery/` 下的非 `.json` 文件不受影响。
+**遗留**：本轮 UI 未接，设置页「存储」区、HistoryDialog 单条删除、清理前确认与影响说明留给第 379 轮；R-02 第 39 行提到的「图片资源」统计尚未实现（需另查资源目录，本轮范围外）；清理不可撤销，379 需按 R-02 期望加二次确认。
+**检验计数**：5（第 378 轮为正常需求轮，第 379 轮做检验轮）。
+
 ## 第 377 轮 · 2026-11-12 12:40
 **用户需求**：场景：准备点「恢复此版本」。现在的问题：列表只有时间与大小，右侧只能看所选版本的纯文本，得靠记忆和当前正文比对，判断不出差在哪。期望：历史弹层加「内容 / 对比当前」切换；对比视图按行标出新增（`+`）与删除（`-`），顶部说明是与编辑器当前内容对比；恢复按钮行为不变。单条快照删除不在本轮。
 **产品经理**：做。恢复是不可撤销的关键操作，恢复前看清差异属于「数据安全、纯文本、安静」的边界内补强，不新增依赖、不扩大产品边界；只在用户主动切换时出现，对不用对比的人零打扰，成本 S。
