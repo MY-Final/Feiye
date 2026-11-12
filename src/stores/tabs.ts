@@ -1,5 +1,7 @@
 import { create } from "zustand";
 
+import { useSettingsStore } from "./settings";
+
 export interface DocumentTab {
   path: string;
   name: string;
@@ -15,7 +17,13 @@ interface TabsStore {
   clear(): void;
 }
 
-export const MAX_TABS = 12;
+/** 默认上限（设置里可选 8 / 12 / 20）；偏好加载或改动后同步为当前值，挤占提示据此显示。 */
+export let MAX_TABS = 12;
+
+// 设置里调整上限时即时同步；调低后已开的标签不动，等下一次 addTab 收敛。
+useSettingsStore.subscribe((state) => {
+  MAX_TABS = state.preferences.maxTabs;
+});
 
 function nameOf(path: string): string {
   return path.split("/").pop() ?? path;
@@ -41,10 +49,15 @@ export const useTabsStore = create<TabsStore>((set, get) => ({
       }
       return null;
     }
-    // 标签太多时先关掉最久没打开的那个（当前文档所在标签除外），
-    // 把被挤掉的标签交给调用方提示，别让它无声消失。
+    // 标签太多时先关掉最久没打开的那些（当前文档所在标签除外），
+    // 把最早被挤掉的标签交给调用方提示，别让它无声消失。
     const tabs = [...state.tabs, { path, name }];
-    const evicted = tabs.length > MAX_TABS ? (tabs.shift() ?? null) : null;
+    let evicted: DocumentTab | null = null;
+    if (tabs.length > MAX_TABS) {
+      evicted = tabs.shift() ?? null;
+      // 上限被调低时，下一次打开就一次收敛到新上限。
+      while (tabs.length > MAX_TABS) tabs.shift();
+    }
     set({ tabs });
     return evicted;
   },

@@ -10,6 +10,7 @@ import { CUSTOM_CSS_LIMIT } from "../../lib/theme";
 import { VIEW_MODES } from "../../lib/view-modes";
 import {
   flushPreferences,
+  MAX_TABS_OPTIONS,
   PREFERENCE_LIMITS,
   useSettingsStore,
   type DefaultView,
@@ -66,6 +67,11 @@ const RECOVERY_OPTIONS = [
   { value: 4000, label: "4 秒（默认）" },
   { value: 8000, label: "8 秒" },
 ];
+
+const MAX_TAB_COUNT_OPTIONS = MAX_TABS_OPTIONS.map((count) => ({
+  value: String(count),
+  label: `${count} 个`,
+}));
 
 const DEFAULT_VIEW_OPTIONS: { value: DefaultView; label: string }[] = [
   { value: "last", label: "上次使用的视图" },
@@ -754,6 +760,18 @@ export function SettingsDialog() {
                   >
                     <span aria-hidden="true" />
                   </button>
+                </Row>
+
+                <Row
+                  label="最多同时打开"
+                  hint="超出时关闭最久未用的标签，下次打开时生效"
+                >
+                  <SlidingSegmented
+                    options={MAX_TAB_COUNT_OPTIONS}
+                    value={String(preferences.maxTabs)}
+                    ariaLabel="最多同时打开的标签数"
+                    onChange={(value) => update({ maxTabs: Number(value) })}
+                  />
                 </Row>
               </section>
             ) : null}
