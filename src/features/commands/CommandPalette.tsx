@@ -8,24 +8,12 @@ import { useUiStore } from "../../stores/ui";
 import { useWorkspaceStore } from "../../stores/workspace";
 import {
   APP_COMMANDS,
+  COMMAND_GROUP_LABELS,
   readCommandContext,
   rememberCommand,
   type AppCommand,
-  type CommandGroup,
 } from "./commands";
 import "./commands.css";
-
-/** 与标题栏菜单（AppMenu.tsx）的 GROUPS 保持同样的分组与顺序。 */
-const GROUP_LABELS: Record<CommandGroup, string> = {
-  file: "文件",
-  edit: "编辑",
-  paragraph: "段落",
-  format: "格式",
-  nav: "导航",
-  view: "视图",
-  find: "查找",
-  app: "应用",
-};
 
 /**
  * 命令面板：一个输入框搜出应用内的动作，键盘上下选、回车执行。
@@ -91,7 +79,7 @@ export function CommandPalette() {
         }
         return position === recent.length ||
           visible[position - 1].group !== command.group
-          ? GROUP_LABELS[command.group]
+          ? COMMAND_GROUP_LABELS[command.group]
           : null;
       }),
     [visible, recent.length],

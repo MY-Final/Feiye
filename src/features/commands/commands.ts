@@ -66,6 +66,26 @@ export type CommandGroup =
   | "find"
   | "app";
 
+/**
+ * 分组文案与顺序的唯一来源：命令面板直接按它显示标题，
+ * 标题栏菜单按顶层菜单取子集。新增分组只改这一处。
+ */
+export const COMMAND_GROUPS: readonly { id: CommandGroup; label: string }[] = [
+  { id: "file", label: "文件" },
+  { id: "edit", label: "编辑" },
+  { id: "paragraph", label: "段落" },
+  { id: "format", label: "格式" },
+  { id: "nav", label: "导航" },
+  { id: "view", label: "视图" },
+  { id: "find", label: "查找" },
+  { id: "app", label: "应用" },
+];
+
+/** 按 id 查分组文案，顺序仍以 COMMAND_GROUPS 为准。 */
+export const COMMAND_GROUP_LABELS = Object.fromEntries(
+  COMMAND_GROUPS.map((group) => [group.id, group.label]),
+) as Record<CommandGroup, string>;
+
 /** 不可用时用来解释原因，菜单项的 title 直接取这里的描述。 */
 type CommandNeed = "workspace" | "doc" | "editable" | "back" | "forward";
 

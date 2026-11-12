@@ -148,7 +148,7 @@
 **落点**：`src/features/commands/commands.ts`、`src/features/settings/SettingsDialog.tsx`、`src/app/App.tsx`。
 **证据**：第 359 轮补全设置页快捷键表；命令面板与设置页各维护一份展示。
 
-### [ ] R-15 命令分组单一来源 · S · P2
+### [x] R-15 命令分组单一来源 · S · P2（第 374 轮）
 
 **场景**：新增一条命令或一个分组。
 **现在的问题**：命令面板的 `GROUP_LABELS` 与 `AppMenu.tsx` 的 `GROUPS` 各存一份分组文案，过去已记录「后续加组需两处同步」。
