@@ -126,6 +126,8 @@ export function rewritePreviewImages(
       return;
     }
 
+    // 预览里拖动改宽度时要按 Markdown 原文的地址回写，先把它留在节点上。
+    img.setAttribute("data-md-src", src);
     img.setAttribute("src", resolved.url);
     img.setAttribute("loading", "lazy");
     img.setAttribute("decoding", "async");

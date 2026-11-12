@@ -11,8 +11,14 @@ import { isExternalHref } from "../../lib/links";
 import { baseName, resolveRelLink } from "../../lib/paths";
 import { useDocumentStore } from "../../stores/document";
 import { useOutlineStore } from "../../stores/outline";
+import { useUiStore } from "../../stores/ui";
 import { useWorkspaceStore } from "../../stores/workspace";
-import { getEditorText, toggleTaskMarkerAt } from "../editor/editor-bridge";
+import {
+  getEditorText,
+  getEditorView,
+  toggleTaskMarkerAt,
+} from "../editor/editor-bridge";
+import { clampImagePercent, IMAGE_WIDTH_MAX, setImageWidth } from "./image-width";
 import { insertImageFiles } from "../editor/image-insert";
 import { openFile } from "../workspace/workspace-actions";
 import "./preview.css";
@@ -36,6 +42,39 @@ function findHeadingByAnchor(body: HTMLElement, fragment: string): number {
 
 import { attachSplitScrollSync } from "./scroll-sync";
 import { wrapImageCaptions } from "./figures";
+
+/**
+ * 用新正文替换编辑器内容（预览里的交互回写源码时使用）。
+ * 只派发最短的差异段，光标与撤销历史按 CodeMirror 的映射保留；
+ * 走常规 `input.format` 事务，脏标记与自动保存流程与手动编辑一致。
+ */
+function replaceDocumentText(next: string): boolean {
+  const editor = getEditorView();
+  if (!editor) return false;
+  const current = editor.state.doc.toString();
+  if (current === next) return false;
+
+  let start = 0;
+  while (start < current.length && current[start] === next[start]) start += 1;
+  let end = 0;
+  while (
+    end < current.length - start &&
+    end < next.length - start &&
+    current[current.length - 1 - end] === next[next.length - 1 - end]
+  ) {
+    end += 1;
+  }
+
+  editor.dispatch({
+    changes: {
+      from: start,
+      to: current.length - end,
+      insert: next.slice(start, next.length - end),
+    },
+    userEvent: "input.format",
+  });
+  return true;
+}
 import { renderMermaidBlocks, type MermaidTarget } from "./mermaid";
 import { useSettingsStore } from "../../stores/settings";
 
@@ -139,6 +178,24 @@ export function PreviewPane() {
   // 放大时单击关闭要稍等，给双击复位留出时间，别让第一下就关掉浮层。
   const closeTimer = useRef<number | null>(null);
   const imageRef = useRef<HTMLImageElement>(null);
+  // 拖动图片改宽度：正在拖的图片与待写回的百分比，松手 300ms 后合并成一次。
+  const widthDrag = useRef<{
+    img: HTMLImageElement;
+    handle: HTMLButtonElement;
+    frame: HTMLElement;
+    pointerId: number;
+    startX: number;
+    containerWidth: number;
+    startPercent: number;
+    side: number;
+    percent: number;
+  } | null>(null);
+  const widthTarget = useRef<{ img: HTMLImageElement; percent: number } | null>(
+    null,
+  );
+  const widthTimer = useRef<number | null>(null);
+  // 写回源码后预览会重绘，记下地址把焦点交还给同一张图片的手柄。
+  const widthFocusSrc = useRef<string | null>(null);
   const paneRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const lightboxRef = useRef<HTMLDivElement>(null);
@@ -147,6 +204,7 @@ export function PreviewPane() {
   const viewMode = useDocumentStore((state) => state.viewMode);
   const cursorLine = useDocumentStore((state) => state.cursor.line);
   const themeMode = useSettingsStore((state) => state.preferences.theme);
+  const toast = useUiStore((state) => state.toast);
   // 源码 / 所见模式下预览被隐藏：不解析、不重建它的 DOM，切到分栏 / 预览时补上。
   const previewVisible = viewMode === "split" || viewMode === "preview";
 
@@ -396,6 +454,18 @@ export function PreviewPane() {
     setLightbox(null);
     setZoom(1);
     setPan({ x: 0, y: 0 });
+  }, [docPath]);
+
+  // 切文档或卸载时丢掉还没写回的宽度，别把上一张图的百分比写到下一篇里。
+  useEffect(() => {
+    return () => {
+      widthTarget.current = null;
+      widthDrag.current = null;
+      if (widthTimer.current !== null) {
+        window.clearTimeout(widthTimer.current);
+        widthTimer.current = null;
+      }
+    };
   }, [docPath]);
 
   // 翻到另一张图、或缩回 100% 时回到居中，免得新图从上一张的偏移位置开始。
@@ -650,6 +720,225 @@ export function PreviewPane() {
         img.alt ? `查看大图：${img.alt}` : "查看大图",
       );
     }
+  }, [html, previewVisible]);
+
+  // 拖动图片改宽度：悬停或键盘聚焦时在图片左右露出圆形手柄，
+  // 拖动 / ← → 实时改预览宽度，停手 300ms 后把百分比写回 Markdown 的 {width=…}。
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (!body || !previewVisible) return;
+
+    const blockOf = (img: HTMLImageElement): HTMLElement =>
+      img.closest<HTMLElement>("figure, p, li, blockquote, div") ?? body;
+    const percentOf = (img: HTMLImageElement): number => {
+      const width = blockOf(img).clientWidth || 1;
+      return clampImagePercent((img.getBoundingClientRect().width / width) * 100);
+    };
+
+    // 只处理独立成段的图片：正文中间夹着文字的行内图换个块级定位框会断行。
+    const frames: HTMLElement[] = [];
+    for (const img of body.querySelectorAll<HTMLImageElement>("img")) {
+      if (img.closest("a")) continue;
+      const parent = img.parentElement;
+      if (!parent) continue;
+      if (parent.classList.contains("preview-image-frame")) {
+        frames.push(parent);
+        continue;
+      }
+      const inFigure = parent.classList.contains("md-figure");
+      const alone =
+        inFigure ||
+        Array.from(parent.childNodes).every(
+          (node) =>
+            node === img ||
+            (node.nodeType === Node.TEXT_NODE &&
+              !(node.textContent ?? "").trim()),
+        );
+      if (!alone) continue;
+
+      const frame = document.createElement("span");
+      frame.className = "preview-image-frame";
+      img.before(frame);
+      frame.append(img);
+      for (const side of ["left", "right"] as const) {
+        const handle = document.createElement("button");
+        handle.type = "button";
+        handle.className = `preview-image-handle is-${side}`;
+        handle.dataset.side = side;
+        handle.setAttribute("aria-label", "调整图片宽度");
+        handle.title = "拖动或用 ← → 调整宽度，Home 回满宽";
+        // 键盘只需要一个停靠点：左把手仍可用鼠标拖，但不进 Tab 序。
+        if (side === "left") handle.tabIndex = -1;
+        frame.append(handle);
+      }
+      frames.push(frame);
+    }
+
+    // 手柄贴住图片左右边缘（窄图居中时不能贴容器边），尺寸变化时跟着走。
+    const place = (frame: HTMLElement) => {
+      const img = frame.querySelector("img");
+      if (!img) return;
+      const left = img.offsetLeft;
+      const middle = img.offsetTop + img.offsetHeight / 2;
+      frame
+        .querySelectorAll<HTMLElement>(".preview-image-handle")
+        .forEach((handle) => {
+          handle.style.left = `${
+            handle.dataset.side === "left" ? left : left + img.offsetWidth
+          }px`;
+          handle.style.top = `${middle}px`;
+        });
+    };
+    const placeAll = () => frames.forEach(place);
+    placeAll();
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(placeAll);
+      for (const frame of frames) {
+        const img = frame.querySelector("img");
+        if (img) observer.observe(img);
+      }
+    }
+
+    const commitWidth = () => {
+      const target = widthTarget.current;
+      widthTarget.current = null;
+      if (!target) return;
+      const raw =
+        target.img.dataset.mdSrc ?? target.img.getAttribute("src") ?? "";
+      const text = getEditorText();
+      const next =
+        raw && text !== null ? setImageWidth(text, raw, target.percent) : null;
+      if (next === null) {
+        // 不猜是哪一张：源码里没有或多处同地址时只提示，不改正文。
+        toast("未找到唯一对应的图片源码，请手动调整");
+        target.img.style.width = "";
+        return;
+      }
+      widthFocusSrc.current = raw;
+      // 走编辑器的常规事务，脏标记与自动保存和手写源码一致；预览随重绘更新。
+      if (!replaceDocumentText(next)) widthFocusSrc.current = null;
+    };
+    const scheduleCommit = (img: HTMLImageElement, percent: number) => {
+      widthTarget.current = { img, percent };
+      if (widthTimer.current !== null) window.clearTimeout(widthTimer.current);
+      widthTimer.current = window.setTimeout(() => {
+        widthTimer.current = null;
+        commitWidth();
+      }, 300);
+    };
+
+    const handleOf = (target: EventTarget | null) =>
+      target instanceof Element
+        ? target.closest<HTMLButtonElement>(".preview-image-handle")
+        : null;
+
+    const onPointerDown = (event: PointerEvent) => {
+      const handle = handleOf(event.target);
+      const frame = handle?.closest<HTMLElement>(".preview-image-frame");
+      const img = frame?.querySelector("img");
+      if (!handle || !frame || !img) return;
+      event.preventDefault();
+      // 上一次调整还没写回就开始新的拖动：丢掉旧值，免得写回时把预览整块重绘。
+      widthTarget.current = null;
+      if (widthTimer.current !== null) {
+        window.clearTimeout(widthTimer.current);
+        widthTimer.current = null;
+      }
+      handle.focus();
+      handle.setPointerCapture(event.pointerId);
+      frame.classList.add("is-dragging");
+      const startPercent = percentOf(img);
+      widthDrag.current = {
+        img,
+        handle,
+        frame,
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        containerWidth: blockOf(img).clientWidth || 1,
+        startPercent,
+        // 右把手往右拖变宽，左把手往左拖变宽。
+        side: handle.dataset.side === "left" ? -1 : 1,
+        percent: startPercent,
+      };
+    };
+
+    const onPointerMove = (event: PointerEvent) => {
+      const drag = widthDrag.current;
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      const delta =
+        ((event.clientX - drag.startX) / drag.containerWidth) * 100;
+      drag.percent = clampImagePercent(drag.startPercent + delta * drag.side);
+      drag.img.style.width = `${drag.percent}%`;
+      place(drag.frame);
+    };
+
+    const endDrag = (event: PointerEvent, commit: boolean) => {
+      const drag = widthDrag.current;
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      widthDrag.current = null;
+      drag.frame.classList.remove("is-dragging");
+      if (drag.handle.hasPointerCapture(event.pointerId)) {
+        drag.handle.releasePointerCapture(event.pointerId);
+      }
+      if (commit) scheduleCommit(drag.img, drag.percent);
+    };
+    const onPointerUp = (event: PointerEvent) => endDrag(event, true);
+    const onPointerCancel = (event: PointerEvent) => endDrag(event, false);
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      const handle = handleOf(event.target);
+      const frame = handle?.closest<HTMLElement>(".preview-image-frame");
+      const img = frame?.querySelector("img");
+      if (!handle || !frame || !img) return;
+      if (
+        event.key !== "ArrowLeft" &&
+        event.key !== "ArrowRight" &&
+        event.key !== "Home"
+      ) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      const next =
+        event.key === "Home"
+          ? IMAGE_WIDTH_MAX
+          : clampImagePercent(
+              percentOf(img) + (event.key === "ArrowRight" ? 5 : -5),
+            );
+      img.style.width = `${next}%`;
+      place(frame);
+      scheduleCommit(img, next);
+    };
+
+    body.addEventListener("pointerdown", onPointerDown);
+    body.addEventListener("pointermove", onPointerMove);
+    body.addEventListener("pointerup", onPointerUp);
+    body.addEventListener("pointercancel", onPointerCancel);
+    body.addEventListener("keydown", onKeyDown);
+
+    // 写回源码后预览重绘，把焦点交还给同一张图片的右把手，键盘可继续微调。
+    if (widthFocusSrc.current) {
+      const wanted = widthFocusSrc.current;
+      widthFocusSrc.current = null;
+      const target = Array.from(
+        body.querySelectorAll<HTMLImageElement>("img"),
+      ).find((img) => img.dataset.mdSrc === wanted);
+      target
+        ?.closest(".preview-image-frame")
+        ?.querySelector<HTMLButtonElement>(".preview-image-handle.is-right")
+        ?.focus();
+    }
+
+    return () => {
+      body.removeEventListener("pointerdown", onPointerDown);
+      body.removeEventListener("pointermove", onPointerMove);
+      body.removeEventListener("pointerup", onPointerUp);
+      body.removeEventListener("pointercancel", onPointerCancel);
+      body.removeEventListener("keydown", onKeyDown);
+      observer?.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [html, previewVisible]);
 
   // ```mermaid 代码块画成图：Worker 只给源码，这里按需懒加载 Mermaid。
