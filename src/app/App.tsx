@@ -47,6 +47,7 @@ import {
   forwardDocumentPath,
   newDocumentNearActive,
   openFile,
+  openLaunchTarget,
   openNextDocument,
   openPreviousDocument,
   previousDocumentPath,
@@ -58,7 +59,16 @@ import {
 import { rememberOpenTabs } from "../features/workspace/tabs-memory";
 import { APP_NAME, APP_TAGLINE } from "../lib/app-info";
 import { baseName, parentRel } from "../lib/paths";
-import { getSetting, isAppError, readFile, setSetting, unwatchWorkspace, watchWorkspace } from "../lib/tauri";
+import {
+  getSetting,
+  isAppError,
+  readFile,
+  setSetting,
+  takeLaunchTarget,
+  unwatchWorkspace,
+  watchWorkspace,
+  type LaunchTarget,
+} from "../lib/tauri";
 import { isViewMode } from "../lib/view-modes";
 import { useDocumentStore, type ViewMode } from "../stores/document";
 import {
@@ -149,7 +159,27 @@ export default function App() {
         setSplitRatio(clampSplitRatio(savedRatio));
       }
       await restoreLastWorkspace();
+
+      // 从桌面图标拖进来的文件夹 / 笔记优先于上次的库。
+      const launch = await takeLaunchTarget();
+      if (launch) await openLaunchTarget(launch);
     })();
+  }, []);
+
+  // 扉页已在运行时，第二次启动只把路径转发过来：切库或打开那篇笔记。
+  useEffect(() => {
+    let unlisten: UnlistenFn | null = null;
+    let disposed = false;
+    void listen<LaunchTarget>("feiye://launch-path", (event) => {
+      if (event.payload) void openLaunchTarget(event.payload);
+    }).then((fn) => {
+      if (disposed) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
   }, []);
 
   // 启动几秒后静默查一次更新（每天至多一次）：等首屏和工作区恢复完再联网。

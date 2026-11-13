@@ -24,6 +24,7 @@ import {
   writeFile as apiWriteFile,
   setSetting,
   type Entry,
+  type LaunchTarget,
 } from "../../lib/tauri";
 import { useDocumentStore, type ViewMode } from "../../stores/document";
 import { MAX_TABS, useTabsStore } from "../../stores/tabs";
@@ -315,6 +316,29 @@ export async function openWorkspaceAt(
       else releaseTabsSave();
     }
   }
+}
+
+function sameRoot(a: string | null, b: string): boolean {
+  if (!a) return false;
+  const clean = (path: string) => path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+  return clean(a) === clean(b);
+}
+
+/**
+ * 处理系统传进来的启动路径：拖到桌面图标 / 「用扉页打开」。
+ * 目录直接作为工作区；Markdown 文件以其父目录为工作区并打开这篇。
+ * 已经在同一个库时不再重开，只把文件切过去。
+ */
+export async function openLaunchTarget(target: LaunchTarget): Promise<void> {
+  if (!sameRoot(useWorkspaceStore.getState().root, target.root)) {
+    await openWorkspaceAt(target.root);
+  }
+  const root = useWorkspaceStore.getState().root;
+  // 用户可能在上面的未保存提示里取消了切库，别把文件开进另一个库。
+  if (!sameRoot(root, target.root)) return;
+  if (!target.relPath) return;
+  const name = target.relPath.split("/").pop() ?? target.relPath;
+  await openFile({ name, relPath: target.relPath, isDir: false });
 }
 
 /** 逐级展开文件所在的父目录，让文件树能定位到它。 */
