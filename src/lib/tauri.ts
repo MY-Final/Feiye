@@ -286,6 +286,19 @@ export function replaceInFiles(
   });
 }
 
+/** 启动时由系统传入的路径：拖到桌面图标或「用扉页打开」。 */
+export interface LaunchTarget {
+  /** 作为工作区打开的目录。 */
+  root: string;
+  /** 需要随后打开的笔记相对路径；拖的是文件夹时为 null。 */
+  relPath: string | null;
+}
+
+/** 取走首个实例启动时携带的路径；只返回一次，没有则为 null。 */
+export function takeLaunchTarget(): Promise<LaunchTarget | null> {
+  return invoke<LaunchTarget | null>("take_launch_target");
+}
+
 export interface HistoryEntry {
   id: string;
   savedAt: number;

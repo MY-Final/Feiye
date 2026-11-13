@@ -3,15 +3,33 @@ mod error;
 mod fs_path;
 mod history;
 mod images;
+mod launch;
 mod recovery;
 mod watcher;
 
 use commands::workspace::WorkspaceState;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // 拖到桌面图标 / 「用扉页打开」时系统把路径作为参数传进来：
+    // 首个实例自己用，后续实例通过 single-instance 转发给已运行的窗口。
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let launch_target = launch::target_from_args(std::env::args().skip(1), &cwd);
+
     tauri::Builder::default()
+        // 单实例插件必须最先注册：第二个进程只负责把参数交出去并退出。
+        .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
+            let target = launch::target_from_args(argv.into_iter().skip(1), cwd.as_ref());
+            if let Some(target) = target {
+                let _ = app.emit("feiye://launch-path", target);
+            }
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }))
+        .manage(launch::LaunchState::new(launch_target))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::default().build())
@@ -27,6 +45,7 @@ pub fn run() {
             images::respond(root, &request)
         })
         .invoke_handler(tauri::generate_handler![
+            launch::take_launch_target,
             commands::workspace::open_workspace,
             commands::workspace::dir_exists,
             commands::workspace::current_workspace,
