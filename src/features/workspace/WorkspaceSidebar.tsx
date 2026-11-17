@@ -507,7 +507,7 @@ type SidebarTab = "files" | "outline" | "search";
 
 const SIDEBAR_WIDTH_KEY = "sidebarWidth";
 const SIDEBAR_TAB_KEY = "sidebarTab";
-const SIDEBAR_WIDTH = { min: 180, max: 420, default: 240 } as const;
+const SIDEBAR_WIDTH = { min: 200, max: 440, default: 264 } as const;
 
 /** 每个库最近聚焦的文件树行。切库时侧栏会卸载，所以放在组件外。 */
 const treeStopByRoot = new Map<string, string>();

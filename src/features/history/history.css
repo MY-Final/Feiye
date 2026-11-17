@@ -25,7 +25,7 @@
   padding: 4px;
   overflow-y: auto;
   border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--bg);
   list-style: none;
 }
@@ -57,7 +57,6 @@
 
 .history-item.is-active {
   background: var(--accent-soft);
-  box-shadow: inset 2px 0 0 var(--accent);
   color: var(--text);
 }
 
@@ -69,8 +68,8 @@
 }
 
 .history-latest {
-  padding: 0 4px;
-  border-radius: 3px;
+  padding: 0 5px;
+  border-radius: 4px;
   background: var(--accent);
   color: var(--on-accent);
   font-size: 9.5px;
@@ -90,7 +89,7 @@
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--bg);
 }
 

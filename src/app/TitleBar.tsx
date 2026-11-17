@@ -2,14 +2,17 @@ import { useState, type MouseEvent } from "react";
 
 import { BrandMark } from "../components/BrandMark";
 import { ContextMenu } from "../components/Menu";
+import { TabBar } from "../features/tabs/TabBar";
 import {
   chooseWorkspace,
   forgetWorkspace,
   listRecentWorkspaces,
+  newDocumentNearActive,
   openWorkspaceAt,
   rememberWorkspace,
 } from "../features/workspace/workspace-actions";
 import { useWindowControls } from "../features/window/use-window-controls";
+import { APP_NAME } from "../lib/app-info";
 import { MenuBar } from "./MenuBar";
 import { useDocumentStore } from "../stores/document";
 import { useUiStore } from "../stores/ui";
@@ -177,6 +180,8 @@ export function TitleBar() {
         </button>
 
         <BrandMark className="brand-seal" />
+        <span className="brand-word">{APP_NAME}</span>
+        <span className="titlebar-divider" aria-hidden="true" />
 
         {workspaceName ? (
           <>
@@ -211,17 +216,30 @@ export function TitleBar() {
           </button>
         )}
 
+        <span className="titlebar-divider" aria-hidden="true" />
         {/* 文字菜单放在库名之后：用看得见的「文件 / 编辑 / 段落…」替代 ⋯。 */}
         <MenuBar />
       </div>
 
       <div className="titlebar-tabs">
-        {/* 标签已移到标题栏下方单独一行；这里只在专注模式显示文档名。 */}
+        {/* 标签回到标题栏中段：不再单独占一行，顶部只留一条横带。 */}
         {zenMode && docName ? (
           <span className="doc-title" title={docName}>
             {docName}
             {dirty ? <span className="dirty-dot" title="未保存" /> : null}
           </span>
+        ) : null}
+        {!zenMode ? <TabBar /> : null}
+        {!zenMode && root ? (
+          <button
+            type="button"
+            className="tab-new"
+            title="新建笔记 (Ctrl+N)"
+            aria-label="新建笔记"
+            onClick={() => void newDocumentNearActive()}
+          >
+            +
+          </button>
         ) : null}
       </div>
 

@@ -529,6 +529,93 @@ function FocusIcon() {
   );
 }
 
+function InlineCodeIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M6.1 4.5 2.7 8l3.4 3.5M9.9 4.5 13.3 8l-3.4 3.5" />
+    </svg>
+  );
+}
+
+function QuoteIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path
+        d="M4.4 5.5h2.3L5.8 10.5H4.1l1.1-3.4H4.4zM9.6 5.5h2.3L11 10.5H9.3l1.1-3.4H9.6z"
+        fill="currentColor"
+        stroke="none"
+      />
+    </svg>
+  );
+}
+
+function BulletListIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <circle cx="3.3" cy="4.3" r="1" fill="currentColor" stroke="none" />
+      <circle cx="3.3" cy="8" r="1" fill="currentColor" stroke="none" />
+      <circle cx="3.3" cy="11.7" r="1" fill="currentColor" stroke="none" />
+      <path d="M6.3 4.3h7.2M6.3 8h7.2M6.3 11.7h7.2" />
+    </svg>
+  );
+}
+
+function OrderedListIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M2.4 3.1h1.3v3.3M2.2 6.4h1.8" />
+      <path d="M2.2 8.7c0-.7.6-1.2 1.3-1.2.7 0 1.2.4 1.2 1 0 1.2-2.5 1.5-2.5 3.1h2.6" />
+      <path d="M6.4 4.2h7.2M6.4 8h7.2M6.4 11.7h7.2" />
+    </svg>
+  );
+}
+
+function TaskListIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <rect x="1.9" y="3.1" width="4" height="4" rx="1.1" />
+      <path d="m2.8 5.1.8.8 1.5-1.6" />
+      <rect x="1.9" y="8.9" width="4" height="4" rx="1.1" />
+      <path d="M7.8 5.1h6.1M7.8 10.9h6.1" />
+    </svg>
+  );
+}
+
+function CodeBlockIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M6 3.6c-1.4 0-1.9.6-1.9 2v1.1c0 .8-.4 1.3-1.2 1.3.8 0 1.2.5 1.2 1.3v1.1c0 1.4.5 2 1.9 2" />
+      <path d="M10 3.6c1.4 0 1.9.6 1.9 2v1.1c0 .8.4 1.3 1.2 1.3-.8 0-1.2.5-1.2 1.3v1.1c0 1.4-.5 2-1.9 2" />
+    </svg>
+  );
+}
+
+function MathIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M11.6 3.4H4.7l3.1 4.6-3.1 4.6h6.9" />
+    </svg>
+  );
+}
+
+function TableIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <rect x="2.2" y="3.1" width="11.6" height="9.8" rx="1.4" />
+      <path d="M2.4 6.4h11.2M2.4 9.6h11.2M6.4 3.3v9.4" />
+    </svg>
+  );
+}
+
+function RuleIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M2.4 8h11.2" />
+      <circle cx="8" cy="8" r="1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 interface ToolButtonProps {
   title: string;
   active?: boolean;
@@ -711,7 +798,7 @@ export function Toolbar() {
           disabled={formattingDisabled}
           onClick={() => runEditorCommand((view) => toggleInline(view, "code"))}
         >
-          <span className="glyph mono">{"</>"}</span>
+          <InlineCodeIcon />
         </ToolButton>
         <ToolButton
           title="插入链接 (Ctrl+K)"
@@ -756,7 +843,7 @@ export function Toolbar() {
           disabled={formattingDisabled}
           onClick={() => runEditorCommand((view) => toggleBlockPrefix(view, "quote"))}
         >
-          ❝
+          <QuoteIcon />
         </ToolButton>
         <ToolButton
           title="无序列表 (Ctrl+Shift+[)"
@@ -764,7 +851,7 @@ export function Toolbar() {
           disabled={formattingDisabled}
           onClick={() => runEditorCommand((view) => toggleBlockPrefix(view, "bullet"))}
         >
-          <span className="glyph">•</span>
+          <BulletListIcon />
         </ToolButton>
         <ToolButton
           title="有序列表 (Ctrl+Shift+])"
@@ -772,7 +859,7 @@ export function Toolbar() {
           disabled={formattingDisabled}
           onClick={() => runEditorCommand((view) => toggleBlockPrefix(view, "ordered"))}
         >
-          <span className="glyph">1.</span>
+          <OrderedListIcon />
         </ToolButton>
         <ToolButton
           title="任务列表 (Ctrl+Shift+X)"
@@ -781,7 +868,7 @@ export function Toolbar() {
           disabled={formattingDisabled}
           onClick={() => runEditorCommand((view) => toggleBlockPrefix(view, "task"))}
         >
-          <span className="glyph">☑</span>
+          <TaskListIcon />
         </ToolButton>
       </div>
 
@@ -794,7 +881,7 @@ export function Toolbar() {
           disabled={formattingDisabled}
           onClick={() => runEditorCommand((view) => toggleFencedCode(view))}
         >
-          <span className="glyph mono">{"{}"}</span>
+          <CodeBlockIcon />
         </ToolButton>
         <ToolButton
           title="公式 (Ctrl+Shift+M)"
@@ -803,7 +890,7 @@ export function Toolbar() {
           disabled={formattingDisabled}
           onClick={() => runEditorCommand((view) => insertMath(view, true))}
         >
-          <span className="glyph">∑</span>
+          <MathIcon />
         </ToolButton>
         <ToolButton
           title="表格 (Ctrl+T)"
@@ -812,7 +899,7 @@ export function Toolbar() {
           disabled={formattingDisabled}
           onClick={() => runEditorCommand((view) => insertTable(view))}
         >
-          <span className="glyph">▦</span>
+          <TableIcon />
         </ToolButton>
         <ToolButton
           title="分隔线 (Ctrl+Shift+H)"
@@ -820,7 +907,7 @@ export function Toolbar() {
           disabled={formattingDisabled}
           onClick={() => runEditorCommand((view) => insertHorizontalRule(view))}
         >
-          <span className="glyph">―</span>
+          <RuleIcon />
         </ToolButton>
         <ToolButton
           title="插入图片"

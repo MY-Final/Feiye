@@ -27,13 +27,13 @@
 .palette-input {
   flex: none;
   width: 100%;
-  padding: 14px 16px;
+  padding: 16px 18px;
   border: 0;
   border-bottom: 1px solid var(--line);
   background: transparent;
   color: var(--text);
   font-family: var(--font-ui);
-  font-size: 14px;
+  font-size: 14.5px;
   outline: none;
 }
 
@@ -72,9 +72,9 @@
   justify-content: space-between;
   gap: 12px;
   width: 100%;
-  padding: 8px 10px;
+  padding: 9px 10px;
   border: 0;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text);
   font-family: inherit;
@@ -114,10 +114,10 @@
   flex: none;
   padding: 1px 6px;
   border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  border-radius: 5px;
   color: var(--text-faint);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 10.5px;
 }
 
 .palette-empty {

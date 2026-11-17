@@ -12,14 +12,14 @@
 
 .search-input {
   flex: none;
-  margin: 8px 10px 6px;
-  padding: 6px 8px;
+  margin: 10px 10px 8px;
+  padding: 7px 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--bg-sunken);
   color: var(--text);
   font-family: inherit;
-  font-size: 12px;
+  font-size: 12.5px;
   transition:
     border-color var(--dur-fast) ease,
     background-color var(--dur-fast) ease;
@@ -112,9 +112,9 @@
 .search-result {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   width: 100%;
-  padding: 6px 8px;
+  padding: 8px 10px;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -124,14 +124,14 @@
   cursor: pointer;
 }
 
-.search-result:hover,
-.search-result.is-active {
-  background: var(--bg-sunken);
+.search-result:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
   color: var(--text);
 }
 
 .search-result.is-active {
-  box-shadow: inset 2px 0 0 var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
 }
 
 .search-result-path {
@@ -149,15 +149,15 @@
 .search-result-text {
   display: -webkit-box;
   overflow: hidden;
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 12.5px;
+  line-height: 1.55;
   word-break: break-word;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
 
 .search-result-text mark {
-  border-radius: 2px;
+  border-radius: 3px;
   background: var(--accent-soft);
   color: var(--text);
 }

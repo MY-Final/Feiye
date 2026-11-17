@@ -16,15 +16,17 @@
   background: var(--bg);
 }
 
+/* 与文档头同高，让两侧正文从同一条基线上开始。 */
 .split-header {
   display: flex;
   flex: none;
-  align-items: center;
+  align-items: flex-end;
   gap: 8px;
-  height: 36px;
-  padding: 0 8px 0 12px;
-  border-bottom: 1px solid var(--line);
-  background: var(--bg-elevated);
+  box-sizing: border-box;
+  height: var(--doc-header-h, 86px);
+  padding: 0 12px 20px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+  background: var(--bg);
 }
 
 .split-label {
@@ -38,14 +40,18 @@
 .split-select {
   flex: 1;
   min-width: 0;
-  height: 24px;
-  padding: 0 4px;
+  height: 26px;
+  padding: 0 6px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background: var(--bg);
+  background: var(--bg-sunken);
   color: var(--text);
   font-family: inherit;
   font-size: 12px;
+}
+
+.split-select:hover:not(:disabled) {
+  border-color: var(--line-strong);
 }
 
 .split-select:disabled {
@@ -69,6 +75,11 @@
 .split-close:hover {
   background: var(--accent-soft);
   color: var(--text);
+}
+
+/* 专注模式没有文档头，两侧正文都从顶边开始。 */
+.main-column.is-zen .split-header {
+  display: none;
 }
 
 .split-body {

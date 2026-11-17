@@ -14,19 +14,40 @@ export function isAccentPreset(value: unknown): value is AccentPreset {
   return value === "indigo" || value === "umber" || value === "pine";
 }
 
+/**
+ * 主题 / 点缀色切换时给 <html> 挂一小段过渡类，让颜色是交叉淡入而不是
+ * 整块"啪"地换掉；系统主题在后台反复变化时也不会累积定时器。
+ */
+let themeTransitionTimer: number | null = null;
+function withThemeTransition(apply: () => void): void {
+  const root = document.documentElement;
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (!reduced) {
+    root.classList.add("theme-transition");
+    if (themeTransitionTimer !== null) window.clearTimeout(themeTransitionTimer);
+    themeTransitionTimer = window.setTimeout(() => {
+      root.classList.remove("theme-transition");
+      themeTransitionTimer = null;
+    }, 380);
+  }
+  apply();
+}
+
 /** 点缀色只换强调色，背景与正文仍由亮暗主题决定。 */
 export function applyAccent(preset: AccentPreset): void {
-  const root = document.documentElement;
-  if (preset === "indigo") {
-    delete root.dataset.accent;
-  } else {
-    root.dataset.accent = preset;
-  }
-  try {
-    localStorage.setItem(ACCENT_CACHE_KEY, preset);
-  } catch {
-    // 缓存失败不影响当前会话。
-  }
+  withThemeTransition(() => {
+    const root = document.documentElement;
+    if (preset === "indigo") {
+      delete root.dataset.accent;
+    } else {
+      root.dataset.accent = preset;
+    }
+    try {
+      localStorage.setItem(ACCENT_CACHE_KEY, preset);
+    } catch {
+      // 缓存失败不影响当前会话。
+    }
+  });
 }
 
 export function resolveTheme(mode: ThemeMode): "light" | "dark" {
@@ -39,15 +60,17 @@ export function resolveTheme(mode: ThemeMode): "light" | "dark" {
 /** 把主题解析为具体亮暗，并同步到 <html> 与原生控件配色。 */
 export function applyTheme(mode: ThemeMode): "light" | "dark" {
   const resolved = resolveTheme(mode);
-  const root = document.documentElement;
-  root.dataset.theme = resolved;
-  root.style.colorScheme = resolved;
+  withThemeTransition(() => {
+    const root = document.documentElement;
+    root.dataset.theme = resolved;
+    root.style.colorScheme = resolved;
 
-  try {
-    localStorage.setItem(THEME_CACHE_KEY, mode);
-  } catch {
-    // 缓存失败不影响主题本身。
-  }
+    try {
+      localStorage.setItem(THEME_CACHE_KEY, mode);
+    } catch {
+      // 缓存失败不影响主题本身。
+    }
+  });
 
   return resolved;
 }

@@ -18,8 +18,8 @@ import {
   saveActiveDocument,
 } from "../features/editor/save";
 import { PreviewPane } from "../features/preview/PreviewPane";
-import { TabBar } from "../features/tabs/TabBar";
 import { printActiveDocument } from "./Toolbar";
+import { DocumentHeader } from "./DocumentHeader";
 import { CommandPalette } from "../features/commands/CommandPalette";
 import {
   QuickOpen,
@@ -274,6 +274,39 @@ export default function App() {
     };
   }, []);
 
+  // 设置面板的 Ctrl+, 在捕获阶段处理：等事件冒泡到 window 时，编辑器
+  // 和中文输入法可能已经吃掉了这个逗号，把它写进正文。
+  useEffect(() => {
+    const onSettingsShortcut = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      if (event.key !== "," && event.code !== "Comma") return;
+
+      const ui = useUiStore.getState();
+      const updateOpen = useUpdateStore.getState().open;
+      // 其它弹层（含更新弹窗）开着时不再叠一个设置面板；
+      // 设置面板自己仍可再按一次关闭。
+      if (
+        ui.confirm ||
+        ui.prompt ||
+        ui.paletteOpen ||
+        ui.historyOpen ||
+        updateOpen ||
+        isShortcutSheetOpen() ||
+        isQuickOpenOpen()
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      ui.toggleSettings();
+    };
+    window.addEventListener("keydown", onSettingsShortcut, true);
+    return () =>
+      window.removeEventListener("keydown", onSettingsShortcut, true);
+  }, []);
+
   // 应用级快捷键。编辑器内的格式快捷键由 CodeMirror keymap 先行处理。
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -283,25 +316,8 @@ export default function App() {
       const updateOpen = useUpdateStore.getState().open;
       const mod = event.ctrlKey || event.metaKey;
 
-      // 设置面板优先处理 Ctrl+, 与 Esc，避免被 dialogOpen 提前拦截。
-      // 其它弹层（含更新弹窗）开着时不再叠一个设置面板；设置面板自己仍可再按一次关闭。
-      if (mod && (event.key === "," || event.code === "Comma")) {
-        if (
-          ui.confirm ||
-          ui.prompt ||
-          ui.paletteOpen ||
-          ui.historyOpen ||
-          updateOpen ||
-          isShortcutSheetOpen() ||
-          isQuickOpenOpen()
-        ) {
-          event.preventDefault();
-          return;
-        }
-        event.preventDefault();
-        ui.toggleSettings();
-        return;
-      }
+      // Ctrl+, 由下面的捕获阶段监听处理：它必须在编辑器之前拦下，
+      // 否则设置打开的同时逗号也会落进正文。
 
       if (
         event.key === "Escape" &&
@@ -783,164 +799,166 @@ export default function App() {
       <div className="app-body">
         {hasWorkspace && sidebarVisible && !zenMode ? <WorkspaceSidebar /> : null}
 
-        {/* 文档列：标签行与工具栏只覆盖编辑区，侧栏保持整列高度。 */}
-        <div className="main-column">
-          {/* 标签单独占一行：标题栏留给应用菜单与窗口控制，标签再宽也不会互相挤。 */}
-          {hasWorkspace && !zenMode ? (
-            <div className="tab-strip">
-              <TabBar />
-              <button
-                type="button"
-                className="tab-new"
-                title="新建笔记 (Ctrl+N)"
-                aria-label="新建笔记"
-                onClick={() => void newDocumentNearActive()}
-              >
-                +
-              </button>
-            </div>
-          ) : null}
-          {/* 专注模式把工具栏和侧栏都收起来，退出后按原来的偏好还原。 */}
-          {zenMode ? null : <Toolbar />}
-
-          {/* 专注模式只留正文：标签与工具栏一并收起，退出后原样回来。 */}
-          <div className="main-row">
-          <main
-          className={`workspace-main mode-${viewMode}${preferences.lineNumbers ? "" : " hide-line-numbers"}`}
+        {/* 文档列：工具栏与文档头只覆盖编辑区，侧栏保持整列高度。 */}
+        <div
+          className={`main-column${zenMode ? " is-zen" : ""}`}
           style={
             {
               "--split-ratio": splitRatio,
               "--editor-font-size": `${preferences.fontSize}px`,
               "--editor-line-height": String(preferences.lineHeight),
-              "--editor-measure": `min(${preferences.editorWidth}px, 100% - 80px)`,
+              "--editor-measure": `min(${preferences.editorWidth}px, 100% - 96px)`,
               "--font-body": FONT_FAMILY_STACKS[preferences.fontFamily],
               "--font-editor": FONT_FAMILY_STACKS[preferences.fontFamily],
             } as CSSProperties
           }
         >
-          {hasWorkspace ? (
-            <>
-              <section className="editor-pane" inert={!docPath}>
-                <EditorPane />
-              </section>
-              {viewMode === "split" ? (
-                <SplitHandle
-                  ratio={splitRatio}
-                  onChange={setSplitRatio}
-                  onCommit={(next) => void setSetting("splitRatio", next)}
-                />
-              ) : null}
-              <PreviewPane />
-              {!docPath ? (
-                <div className="pane-overlay">
-                  <div className="empty-state">
-                    <BrandMark size={34} className="mark" />
-                    <p>从左侧选择一篇 Markdown，或新建一篇。</p>
-                    <button
-                      type="button"
-                      className="btn"
-                      onClick={() => void createMarkdownFile("")}
-                    >
-                      新建文件
-                    </button>
-                    {recent.length > 0 ? (
-                      <>
-                        <div className="recent-heading">
-                          <p>最近打开</p>
+          {/* 专注模式把工具栏和侧栏都收起来，退出后按原来的偏好还原。 */}
+          {zenMode ? null : <Toolbar />}
+
+          {/* 专注模式只留正文：标签与工具栏一并收起，退出后原样回来。 */}
+          <div className="main-row">
+            <div className={`primary-column mode-${viewMode}`}>
+              {/* 专注模式只留正文，标题已在标题栏里，不再重复。 */}
+              {zenMode ? null : <DocumentHeader />}
+              <main
+                className={`workspace-main mode-${viewMode}${preferences.lineNumbers ? "" : " hide-line-numbers"}`}
+              >
+                {hasWorkspace ? (
+                  <>
+                  <section className="editor-pane" inert={!docPath}>
+                    <EditorPane />
+                  </section>
+                  {viewMode === "split" ? (
+                    <SplitHandle
+                      ratio={splitRatio}
+                      onChange={setSplitRatio}
+                      onCommit={(next) => void setSetting("splitRatio", next)}
+                    />
+                  ) : null}
+                  <PreviewPane />
+                  {!docPath ? (
+                    <div className="pane-overlay">
+                      <div className="empty-state">
+                        <BrandMark size={30} className="mark" />
+                        <h2 className="empty-title">开始写作</h2>
+                        <p>从左侧选择一篇笔记，或直接新建。</p>
+                        <div className="empty-actions">
                           <button
                             type="button"
-                            className="recent-clear"
-                            onClick={() => {
-                              const store = useWorkspaceStore.getState();
-                              const root = store.root;
-                              const previous = store.clearRecent();
-                              if (previous.length === 0) return;
-                              useUiStore.getState().toast(
-                                `已清空最近打开（${previous.length} 篇） · 点击撤销`,
-                                "info",
-                                () => {
-                                  // 撤销窗口内换了库就不往回塞，免得把旧路径写进新库。
-                                  const current = useWorkspaceStore.getState();
-                                  if (current.root !== root) return;
-                                  current.restoreRecent(previous);
-                                  useUiStore.getState().toast("已恢复最近打开");
-                                },
-                                "点击撤销清空",
-                              );
-                            }}
+                            className="btn primary"
+                            onClick={() => void createMarkdownFile("")}
                           >
-                            清空
+                            新建笔记
+                          </button>
+                          <button
+                            type="button"
+                            className="btn"
+                            title="按文件名快速打开（Ctrl+Shift+O）"
+                            onClick={() => openQuickOpen()}
+                          >
+                            快速打开 <kbd>Ctrl Shift O</kbd>
                           </button>
                         </div>
-                        {recent.map((relPath) => (
-                          <div key={relPath} className="recent-row">
-                            <button
-                              type="button"
-                              className="btn ghost recent-file"
-                              title={relPath}
-                              onClick={() =>
-                                void openFile({
-                                  relPath,
-                                  name: baseName(relPath),
-                                  isDir: false,
-                                })
-                              }
-                            >
-                              <span className="recent-name">
-                                {noteLabel(
-                                  baseName(relPath),
-                                  preferences.hideFileExtensions,
-                                )}
-                              </span>
-                              {parentRel(relPath) ? (
-                                <span className="recent-dir">
-                                  {parentRel(relPath)}
-                                </span>
-                              ) : null}
-                            </button>
-                            <button
-                              type="button"
-                              className="recent-remove"
-                              title="从「最近打开」移除"
-                              aria-label={`从「最近打开」移除 ${baseName(relPath)}`}
-                              onClick={() =>
-                                useWorkspaceStore
-                                  .getState()
-                                  .updateRecent(relPath, null)
-                              }
-                            >
-                              ×
-                            </button>
-                          </div>
-                        ))}
-                      </>
-                    ) : null}
+                        {recent.length > 0 ? (
+                          <>
+                            <div className="recent-heading">
+                              <p>最近打开</p>
+                              <button
+                                type="button"
+                                className="recent-clear"
+                                onClick={() => {
+                                  const store = useWorkspaceStore.getState();
+                                  const root = store.root;
+                                  const previous = store.clearRecent();
+                                  if (previous.length === 0) return;
+                                  useUiStore.getState().toast(
+                                    `已清空最近打开（${previous.length} 篇） · 点击撤销`,
+                                    "info",
+                                    () => {
+                                      // 撤销窗口内换了库就不往回塞，免得把旧路径写进新库。
+                                      const current = useWorkspaceStore.getState();
+                                      if (current.root !== root) return;
+                                      current.restoreRecent(previous);
+                                      useUiStore.getState().toast("已恢复最近打开");
+                                    },
+                                    "点击撤销清空",
+                                  );
+                                }}
+                              >
+                                清空
+                              </button>
+                            </div>
+                            {recent.map((relPath) => (
+                              <div key={relPath} className="recent-row">
+                                <button
+                                  type="button"
+                                  className="btn ghost recent-file"
+                                  title={relPath}
+                                  onClick={() =>
+                                    void openFile({
+                                      relPath,
+                                      name: baseName(relPath),
+                                      isDir: false,
+                                    })
+                                  }
+                                >
+                                  <span className="recent-name">
+                                    {noteLabel(
+                                      baseName(relPath),
+                                      preferences.hideFileExtensions,
+                                    )}
+                                  </span>
+                                  {parentRel(relPath) ? (
+                                    <span className="recent-dir">
+                                      {parentRel(relPath)}
+                                    </span>
+                                  ) : null}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="recent-remove"
+                                  title="从「最近打开」移除"
+                                  aria-label={`从「最近打开」移除 ${baseName(relPath)}`}
+                                  onClick={() =>
+                                    useWorkspaceStore
+                                      .getState()
+                                      .updateRecent(relPath, null)
+                                  }
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                          </>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+                  </>
+                ) : (
+                  <div className="welcome">
+                    <div className="welcome-inner">
+                      <BrandMark size={42} className="mark" />
+                      <h1>{APP_NAME}</h1>
+                      <p className="welcome-tagline">{APP_TAGLINE}</p>
+                      <span className="welcome-rule" aria-hidden="true" />
+                      <button
+                        type="button"
+                        className="btn primary"
+                        onClick={() => void chooseWorkspace()}
+                      >
+                        打开文件夹
+                      </button>
+                      <p className="welcome-hint">
+                        本地 Markdown · 不建立数据库 · 文件始终属于你
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ) : null}
-            </>
-          ) : (
-            <div className="welcome">
-              <div className="welcome-inner">
-                <BrandMark size={42} className="mark" />
-                <h1>{APP_NAME}</h1>
-                <p className="welcome-tagline">{APP_TAGLINE}</p>
-                <span className="welcome-rule" aria-hidden="true" />
-                <button
-                  type="button"
-                  className="btn primary"
-                  onClick={() => void chooseWorkspace()}
-                >
-                  打开文件夹
-                </button>
-                <p className="welcome-hint">
-                  本地 Markdown · 不建立数据库 · 文件始终属于你
-                </p>
-              </div>
+                )}
+              </main>
             </div>
-          )}
-          </main>
-          <SplitPane />
+            <SplitPane />
           </div>
         </div>
       </div>

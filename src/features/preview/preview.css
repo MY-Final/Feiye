@@ -46,6 +46,13 @@
   overflow-wrap: break-word;
 }
 
+/* 分栏时预览只占主列的一部分，别再套一层正文宽度上限，只需收窄留白，
+   否则 100% - 96px 会在窄栏里再砍掉 96px，一行只剩十几个字。 */
+.workspace-main.mode-split .preview-pane .markdown-body {
+  max-width: none;
+  padding: 40px 22px 45vh;
+}
+
 .markdown-body > *:first-child {
   margin-top: 0;
 }
@@ -83,10 +90,10 @@
 .markdown-body h5,
 .markdown-body h6 {
   margin: 1.7em 0 0.6em;
-  font-family: var(--font-heading);
-  font-weight: 600;
+  font-family: var(--font-ui);
+  font-weight: 650;
   line-height: 1.35;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.005em;
 }
 
 .markdown-body h1 {

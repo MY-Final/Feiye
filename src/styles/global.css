@@ -1,89 +1,98 @@
 :root {
-  /* 墨线 · 靛青：冷纸、墨字、靛青点缀 */
-  --bg: #f5f5f1;
-  --bg-elevated: #fafaf7;
-  --bg-sunken: #ecede7;
-  --text: #1a1b18;
-  --text-muted: #5c615a;
-  --text-faint: #686e65;
-  --line: #dcddd5;
-  --line-strong: #c3c6bc;
-  --accent: #2f5561;
-  --accent-strong: #24434d;
-  --accent-soft: rgba(47, 85, 97, 0.1);
-  --on-accent: #fbfbf8;
-  --danger: #a63d34;
-  --danger-soft: #f5e9e6;
-  --danger-line: #e4c9c4;
-  --code-bg: #eceee7;
-  --table-stripe: #eff0ea;
-  --editor-active-line: rgba(47, 85, 97, 0.035);
-  --editor-selection: rgba(47, 85, 97, 0.18);
-  --overlay-shadow: 0 18px 48px rgba(20, 24, 22, 0.18);
-  --overlay-shadow-soft: 0 8px 24px rgba(20, 24, 22, 0.12);
+  /* 宣纸 · 黛青：暖纸、墨字、深青点缀；表面有厚度，强调色只给当前状态。 */
+  --bg: #f7f4ec;
+  --bg-elevated: #fdfbf6;
+  --bg-sunken: #efeade;
+  --bg-sidebar: #f3efe4;
+  --text: #1b1a17;
+  --text-muted: #575249;
+  --text-faint: #6d6557;
+  --line: #e5dfd1;
+  --line-strong: #cfc7b5;
+  --accent: #335c68;
+  --accent-strong: #244650;
+  --accent-soft: rgba(51, 92, 104, 0.1);
+  --on-accent: #fbfaf4;
+  --danger: #a84337;
+  --danger-soft: #f7e9e4;
+  --danger-line: #e6cbc3;
+  --code-bg: #efeade;
+  --table-stripe: #f2ede2;
+  --editor-active-line: rgba(51, 92, 104, 0.045);
+  --editor-selection: rgba(51, 92, 104, 0.17);
+  --overlay-shadow: 0 24px 60px rgba(46, 38, 26, 0.18);
+  --overlay-shadow-soft: 0 12px 32px rgba(46, 38, 26, 0.12);
+  --shadow-surface: 0 1px 2px rgba(46, 38, 26, 0.04), 0 2px 10px rgba(46, 38, 26, 0.04);
+  --shadow-raised: 0 2px 6px rgba(46, 38, 26, 0.06), 0 12px 30px rgba(46, 38, 26, 0.08);
 
-  /* 语法高亮：冷纸上的低饱和配色，与靛青主色协调 */
-  --syn-heading: #24434d;
-  --syn-keyword: #8c3a52;
-  --syn-string: #356649;
+  /* 语法高亮：暖纸上的低饱和墨色，与黛青主色协调 */
+  --syn-heading: #274a52;
+  --syn-keyword: #8c3a4f;
+  --syn-string: #35634a;
   --syn-number: #9a5a2a;
-  --syn-comment: #7a8077;
+  --syn-comment: #837b6c;
   --syn-type: #6b4a87;
   --syn-function: #2f5f8a;
   --syn-variable: #2f5561;
-  --syn-property: #3f5a6b;
+  --syn-property: #435a66;
   --syn-operator: #7a5c3e;
-  --syn-punctuation: #8a8f86;
+  --syn-punctuation: #8a8275;
   --syn-link: #2c6f7b;
   --syn-meta: #7d7136;
-  --syn-invalid: #a63d34;
+  --syn-invalid: #a84337;
 
-  --font-ui: "Segoe UI Variable Text", "Segoe UI", -apple-system,
-    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei",
-    "Noto Sans CJK SC", sans-serif;
+  --font-ui: "Segoe UI Variable Text", "HarmonyOS Sans SC", "MiSans",
+    -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI",
+    "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
   --font-body: var(--font-ui);
   --font-editor: var(--font-body);
   --font-heading: "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC",
     "STSong", "SimSun", Georgia, "Times New Roman", serif;
+  --font-wordmark: var(--font-heading);
   --font-mono: "Cascadia Mono", "Cascadia Code", "SFMono-Regular", Consolas,
     "Liberation Mono", monospace;
 
-  --editor-measure: min(900px, 100% - 80px);
-  --editor-font-size: 15px;
-  --editor-line-height: 1.75;
-  --editor-padding: 40px 28px 45vh;
+  --editor-measure: min(880px, 100% - 96px);
+  --editor-font-size: 16px;
+  --editor-line-height: 1.85;
+  --editor-padding: 44px 32px 45vh;
 
-  --radius-sm: 3px;
-  --radius-md: 4px;
-  --radius-lg: 6px;
+  --radius-sm: 6px;
+  --radius-md: 9px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
 
-  /* 收敛式布局的公共尺度：新规则统一取用，旧规则保持原值。 */
+  /* 收敛式布局的公共尺度：信息密度服务于阅读，不为省空间而牺牲呼吸。 */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
+  --space-5: 24px;
   --control-xs: 22px;
   --control-sm: 26px;
-  --control-md: 32px;
-  --bar-title: 44px;
-  --bar-toolbar: 36px;
-  --bar-status: 24px;
-  --sidebar-head: 32px;
+  --control-md: 30px;
+  --bar-title: 46px;
+  --bar-toolbar: 40px;
+  --bar-status: 26px;
+  --sidebar-head: 40px;
+  --tab-height: 32px;
+  --doc-header-h: 86px;
   --text-2xs: 10px;
   --text-xs: 11px;
   --text-sm: 12px;
+  --text-base: 13.5px;
   --z-popover: 95;
 
-  /* 交互动效：短、轻，只用透明度与几像素位移，不做弹跳。 */
+  /* 交互动效：短、轻，只用透明度、颜色与几像素位移，不做弹跳。 */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
-  --dur-fast: 0.12s;
-  --dur-base: 0.16s;
-  --dur-slow: 0.22s;
+  --dur-fast: 0.14s;
+  --dur-base: 0.2s;
+  --dur-slow: 0.3s;
 
   color-scheme: light;
   font-family: var(--font-ui);
-  font-size: 15px;
-  line-height: 1.65;
+  font-size: 13.5px;
+  line-height: 1.62;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -92,79 +101,97 @@
 
 /* 主题由 JS 解析后写到 data-theme，系统模式下会随系统变化重新解析。 */
 :root[data-theme="dark"] {
-  --bg: #151817;
-  --bg-elevated: #1a1e1d;
-  --bg-sunken: #111413;
-  --text: #e7e8e2;
-  --text-muted: #a0a69e;
-  --text-faint: #7c837a;
-  --line: #2b312e;
-  --line-strong: #3b433f;
-  --accent: #8fb4bc;
-  --accent-strong: #b0cdd3;
-  --accent-soft: rgba(143, 180, 188, 0.14);
-  --on-accent: #111817;
-  --danger: #da8a80;
-  --danger-soft: rgba(166, 61, 52, 0.16);
-  --danger-line: #5a3833;
-  --code-bg: #1b201e;
-  --table-stripe: #181c1a;
-  --editor-active-line: rgba(255, 255, 255, 0.03);
-  --editor-selection: rgba(143, 180, 188, 0.22);
-  --overlay-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
-  --overlay-shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.38);
+  --bg: #1a1916;
+  --bg-elevated: #23211c;
+  --bg-sunken: #141310;
+  --bg-sidebar: #1e1d18;
+  --text: #eae5d9;
+  --text-muted: #ada595;
+  --text-faint: #948c7b;
+  --line: #302d26;
+  --line-strong: #433f35;
+  --accent: #9cc3c6;
+  --accent-strong: #bddadd;
+  --accent-soft: rgba(156, 195, 198, 0.14);
+  --on-accent: #0c1617;
+  --danger: #dc9488;
+  --danger-soft: rgba(168, 67, 55, 0.17);
+  --danger-line: #5c3a33;
+  --code-bg: #201e1a;
+  --table-stripe: #1d1b17;
+  --editor-active-line: rgba(255, 255, 255, 0.035);
+  --editor-selection: rgba(156, 195, 198, 0.22);
+  --overlay-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  --overlay-shadow-soft: 0 12px 32px rgba(0, 0, 0, 0.42);
+  --shadow-surface: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 10px rgba(0, 0, 0, 0.18);
+  --shadow-raised: 0 2px 8px rgba(0, 0, 0, 0.35), 0 14px 34px rgba(0, 0, 0, 0.3);
 
   --syn-heading: #a8c6cc;
   --syn-keyword: #e0a0b4;
   --syn-string: #a3c9a0;
   --syn-number: #e3b57e;
-  --syn-comment: #7c857c;
+  --syn-comment: #857e70;
   --syn-type: #c4a7e0;
   --syn-function: #8fb8dc;
   --syn-variable: #b8c7c4;
   --syn-property: #9fb6c4;
   --syn-operator: #cbb28f;
-  --syn-punctuation: #7f877f;
+  --syn-punctuation: #857e70;
   --syn-link: #8fc8d4;
   --syn-meta: #c9bd7e;
-  --syn-invalid: #da8a80;
+  --syn-invalid: #dc9488;
 
   color-scheme: dark;
 }
 
 /* 点缀色预设：只换强调色，背景与正文仍由亮暗主题决定。 */
 :root[data-accent="umber"] {
-  --accent: #8a4f26;
-  --accent-strong: #6f3e1c;
-  --accent-soft: rgba(138, 79, 38, 0.1);
-  --on-accent: #fbf8f4;
-  --editor-active-line: rgba(138, 79, 38, 0.035);
-  --editor-selection: rgba(138, 79, 38, 0.18);
+  --accent: #8a5228;
+  --accent-strong: #6d3f1c;
+  --accent-soft: rgba(138, 82, 40, 0.1);
+  --on-accent: #fbf8f2;
+  --editor-active-line: rgba(138, 82, 40, 0.04);
+  --editor-selection: rgba(138, 82, 40, 0.18);
 }
 
 :root[data-theme="dark"][data-accent="umber"] {
-  --accent: #d8a26b;
-  --accent-strong: #e8bc8c;
-  --accent-soft: rgba(216, 162, 107, 0.14);
+  --accent: #d6a26d;
+  --accent-strong: #e8bc8e;
+  --accent-soft: rgba(214, 162, 109, 0.14);
   --on-accent: #1a120a;
-  --editor-selection: rgba(216, 162, 107, 0.22);
+  --editor-selection: rgba(214, 162, 109, 0.22);
 }
 
 :root[data-accent="pine"] {
-  --accent: #2f6144;
-  --accent-strong: #264d36;
-  --accent-soft: rgba(47, 97, 68, 0.1);
-  --on-accent: #f7fbf8;
-  --editor-active-line: rgba(47, 97, 68, 0.035);
-  --editor-selection: rgba(47, 97, 68, 0.18);
+  --accent: #31634a;
+  --accent-strong: #26503a;
+  --accent-soft: rgba(49, 99, 74, 0.1);
+  --on-accent: #f7fbf7;
+  --editor-active-line: rgba(49, 99, 74, 0.04);
+  --editor-selection: rgba(49, 99, 74, 0.18);
 }
 
 :root[data-theme="dark"][data-accent="pine"] {
-  --accent: #8fc7a4;
-  --accent-strong: #b3dcc2;
-  --accent-soft: rgba(143, 199, 164, 0.14);
+  --accent: #93c7a6;
+  --accent-strong: #b6dcc3;
+  --accent-soft: rgba(147, 199, 166, 0.14);
   --on-accent: #0d1711;
-  --editor-selection: rgba(143, 199, 164, 0.22);
+  --editor-selection: rgba(147, 199, 166, 0.22);
+}
+
+/* 切换主题 / 点缀色时短暂交叉淡入，界面不"啪"地换一套颜色。 */
+html.theme-transition,
+html.theme-transition *,
+html.theme-transition *::before,
+html.theme-transition *::after {
+  transition:
+    color 0.35s ease,
+    background-color 0.35s ease,
+    border-color 0.35s ease,
+    box-shadow 0.35s ease,
+    fill 0.35s ease,
+    stroke 0.35s ease !important;
+  transition-delay: 0s !important;
 }
 
 *,
@@ -196,6 +223,10 @@ textarea {
   color: inherit;
 }
 
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
@@ -211,8 +242,8 @@ a:focus-visible,
 }
 
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
@@ -220,7 +251,7 @@ a:focus-visible,
 }
 
 ::-webkit-scrollbar-thumb {
-  border: 2px solid transparent;
+  border: 3px solid transparent;
   border-radius: 999px;
   background: var(--line-strong);
   background-clip: content-box;
@@ -228,7 +259,7 @@ a:focus-visible,
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  border-width: 1px;
+  border-width: 2px;
   background: var(--text-faint);
   background-clip: content-box;
 }

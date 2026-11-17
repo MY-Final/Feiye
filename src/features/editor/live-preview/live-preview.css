@@ -22,8 +22,8 @@
 .mode-wysiwyg .cm-wysiwyg-h4,
 .mode-wysiwyg .cm-wysiwyg-h5,
 .mode-wysiwyg .cm-wysiwyg-h6 {
-  font-family: var(--font-heading);
-  font-weight: 600;
+  font-family: var(--font-ui);
+  font-weight: 650;
   color: var(--text);
   line-height: 1.35;
 }

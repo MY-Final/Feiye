@@ -30,10 +30,10 @@
 
 .settings-header h2 {
   margin: 0;
-  font-family: var(--font-heading);
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  font-family: var(--font-ui);
+  font-size: 15.5px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
 }
 
 .settings-header .icon-btn {
@@ -55,12 +55,11 @@
   padding: 14px 10px;
   overflow-y: auto;
   border-right: 1px solid var(--line);
-  background: var(--bg);
+  background: var(--bg-sidebar);
 }
 
 .settings-nav-item {
-  position: relative;
-  height: 32px;
+  height: 34px;
   padding: 0 10px 0 14px;
   border: none;
   border-radius: var(--radius-sm);
@@ -81,19 +80,8 @@
 
 .settings-nav-item.active {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--text);
   font-weight: 600;
-}
-
-.settings-nav-item.active::before {
-  content: "";
-  position: absolute;
-  top: 8px;
-  bottom: 8px;
-  left: 5px;
-  width: 2px;
-  border-radius: 1px;
-  background: var(--accent);
 }
 
 .settings-content {
@@ -119,8 +107,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 28px;
-  padding: 14px 0;
-  border-top: 1px solid var(--line);
+  padding: 15px 0;
+  border-top: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
 }
 
 .settings-section-title + .settings-row {
@@ -142,8 +130,8 @@
 
 .settings-desc {
   color: var(--text-faint);
-  font-size: 11.5px;
-  line-height: 1.55;
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 .settings-control {
@@ -220,10 +208,10 @@
 }
 
 .settings-number {
-  width: 44px;
+  width: 46px;
   padding: 2px 4px;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   outline: none;
   background: transparent;
   color: var(--text-muted);
@@ -252,8 +240,8 @@
 /* 下拉选择 */
 
 .settings-select {
-  width: 186px;
-  height: 28px;
+  width: 190px;
+  height: 30px;
   padding: 0 26px 0 9px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
@@ -361,7 +349,8 @@
 .settings-about p {
   margin: 8px 0 0;
   color: var(--text-muted);
-  font-size: 12.5px;
+  font-size: 13px;
+  line-height: 1.7;
 }
 
 .settings-about dl {
@@ -407,7 +396,7 @@
   flex: none;
   align-items: center;
   justify-content: space-between;
-  height: 54px;
+  height: 56px;
   padding: 0 16px 0 20px;
   border-top: 1px solid var(--line);
   background: var(--bg-elevated);
@@ -486,7 +475,7 @@
 
 .settings-custom-css-hint code {
   padding: 1px 4px;
-  border-radius: 3px;
+  border-radius: 4px;
   background: var(--bg-sunken);
   font-size: 11px;
 }
@@ -498,7 +487,7 @@
   padding: 8px 10px;
   resize: vertical;
   border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-mono, ui-monospace, monospace);
