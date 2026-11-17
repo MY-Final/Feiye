@@ -57,10 +57,10 @@
   --editor-line-height: 1.85;
   --editor-padding: 44px 32px 45vh;
 
-  --radius-sm: 6px;
-  --radius-md: 9px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
+  --radius-sm: 7.5px;
+  --radius-md: 11.3px;
+  --radius-lg: 15.0px;
+  --radius-xl: 20.0px;
 
   /* 收敛式布局的公共尺度：信息密度服务于阅读，不为省空间而牺牲呼吸。 */
   --space-1: 4px;
@@ -198,6 +198,14 @@ html.theme-transition *::after {
 *::before,
 *::after {
   box-sizing: border-box;
+}
+
+/* 连续曲率圆角：正圆弧换成更接近纸张的 squircle，转角过渡更连续。
+   新版 WebView2 支持 corner-shape；不支持的环境自动退回普通圆角。 */
+*,
+*::before,
+*::after {
+  corner-shape: squircle;
 }
 
 html,

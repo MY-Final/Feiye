@@ -157,7 +157,7 @@
 }
 
 .search-result-text mark {
-  border-radius: 3px;
+  border-radius: 3.8px;
   background: var(--accent-soft);
   color: var(--text);
 }

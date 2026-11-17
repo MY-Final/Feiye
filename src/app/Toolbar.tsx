@@ -258,6 +258,7 @@ function currentExportTheme(): ExportTheme {
 function exportStyle(theme: ExportTheme): string {
   const p = EXPORT_PALETTE[theme];
   return `
+*{corner-shape:squircle}
 body{margin:0;background:${p.bg};color:${p.text};font:16px/1.75 "Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
 main{max-width:760px;margin:0 auto;padding:48px 24px 72px}
 h1,h2,h3,h4,h5,h6{font-family:Georgia,"Songti SC","SimSun",serif;line-height:1.35;margin:1.8em 0 .6em;font-weight:600;color:${p.text}}
@@ -266,13 +267,13 @@ p,ul,ol{margin:0 0 1em}li>p{margin:0}
 a{color:${p.link}}
 img{max-width:100%;height:auto}
 blockquote{margin:0 0 1em;padding:.2em 1em;border-left:3px solid ${p.quoteLine};color:${p.quoteText}}
-pre{overflow:auto;padding:14px 16px;border-radius:8px;background:${p.preBg};font-size:13px;line-height:1.55}
+pre{overflow:auto;padding:14px 16px;border-radius:10.0px;background:${p.preBg};font-size:13px;line-height:1.55}
 code{font-family:Consolas,"SFMono-Regular",Menlo,monospace;font-size:.9em}
-:not(pre)>code{padding:.15em .35em;border-radius:4px;background:${p.codeBg}}
+:not(pre)>code{padding:.15em .35em;border-radius:5.0px;background:${p.codeBg}}
 table{border-collapse:collapse;margin:0 0 1em}
 th,td{border:1px solid ${p.line};padding:6px 10px}
 hr{border:0;border-top:1px solid ${p.line};margin:2em 0}
-details.frontmatter{margin:0 0 1.4em;padding:6px 12px;border:1px solid ${p.line};border-radius:6px;background:${p.preBg};color:${p.quoteText};font-size:12.5px}
+details.frontmatter{margin:0 0 1.4em;padding:6px 12px;border:1px solid ${p.line};border-radius:7.5px;background:${p.preBg};color:${p.quoteText};font-size:12.5px}
 details.frontmatter>summary{cursor:pointer}
 details.frontmatter>pre{margin:8px 0 2px;padding:0;border:0;background:transparent;font-size:12px;white-space:pre-wrap}
 pre.shiki{background:${p.preBg}!important}

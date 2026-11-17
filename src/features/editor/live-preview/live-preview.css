@@ -344,7 +344,7 @@
   display: block;
   max-width: 100%;
   height: auto;
-  border-radius: 2px;
+  border-radius: 2.5px;
 }
 
 .mode-wysiwyg .cm-wysiwyg-image.broken,

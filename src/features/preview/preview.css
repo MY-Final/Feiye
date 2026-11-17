@@ -255,6 +255,7 @@
   padding: 0;
   border: 1px solid var(--line-strong);
   border-radius: 50%;
+  corner-shape: round;
   background: var(--bg-elevated);
   box-shadow: 0 1px 3px rgb(0 0 0 / 18%);
   color: var(--text-muted);
@@ -424,7 +425,7 @@
   margin: 0;
   padding: 12px 14px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 10.0px;
   background: var(--bg-elevated);
   overflow-x: auto;
 }
