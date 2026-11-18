@@ -87,6 +87,7 @@ import {
   SplitHandle,
 } from "./SplitHandle";
 import { StatusBar } from "./StatusBar";
+import { TabRow } from "./TabRow";
 import { TitleBar } from "./TitleBar";
 import { Toolbar, copyActiveAsHtml } from "./Toolbar";
 import "./App.css";
@@ -813,7 +814,8 @@ export default function App() {
             } as CSSProperties
           }
         >
-          {/* 专注模式把工具栏和侧栏都收起来，退出后按原来的偏好还原。 */}
+          {/* 专注模式把标签、工具栏和侧栏都收起来，退出后按原来的偏好还原。 */}
+          {zenMode ? null : <TabRow />}
           {zenMode ? null : <Toolbar />}
 
           {/* 专注模式只留正文：标签与工具栏一并收起，退出后原样回来。 */}

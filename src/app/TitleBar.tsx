@@ -2,12 +2,10 @@ import { useState, type MouseEvent } from "react";
 
 import { BrandMark } from "../components/BrandMark";
 import { ContextMenu } from "../components/Menu";
-import { TabBar } from "../features/tabs/TabBar";
 import {
   chooseWorkspace,
   forgetWorkspace,
   listRecentWorkspaces,
-  newDocumentNearActive,
   openWorkspaceAt,
   rememberWorkspace,
 } from "../features/workspace/workspace-actions";
@@ -222,24 +220,11 @@ export function TitleBar() {
       </div>
 
       <div className="titlebar-tabs">
-        {/* 标签回到标题栏中段：不再单独占一行，顶部只留一条横带。 */}
         {zenMode && docName ? (
           <span className="doc-title" title={docName}>
             {docName}
             {dirty ? <span className="dirty-dot" title="未保存" /> : null}
           </span>
-        ) : null}
-        {!zenMode ? <TabBar /> : null}
-        {!zenMode && root ? (
-          <button
-            type="button"
-            className="tab-new"
-            title="新建笔记 (Ctrl+N)"
-            aria-label="新建笔记"
-            onClick={() => void newDocumentNearActive()}
-          >
-            +
-          </button>
         ) : null}
       </div>
 

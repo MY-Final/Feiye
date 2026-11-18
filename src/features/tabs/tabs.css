@@ -1,4 +1,20 @@
-/* 文档标签现在住在标题栏中段：标签是纸面上抬起的一小块，不画整行底色。 */
+/* 标签行在标题栏下方单独占一条，与侧栏标题同高，只覆盖编辑区。 */
+.doc-tabrow {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: var(--sidebar-head);
+  padding: 0 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 62%, transparent);
+  background: var(--bg);
+}
+
+.doc-tabrow .tab-bar {
+  flex: 0 1 auto;
+}
+
+/* 标签是纸面上抬起的一小块，不画整行底色。 */
 .tab-bar {
   display: flex;
   flex: 1 1 auto;

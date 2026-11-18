@@ -42,10 +42,11 @@
   padding-right: 4px;
 }
 
-/* 标签行现在放进标题栏中段，标题栏只占一行。 */
+/* 标签已搬到标题栏下方的独立一行，中段只留给专注模式的文档标题。 */
 .titlebar-tabs {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
   min-width: 0;
   padding: 0 10px;
@@ -53,12 +54,7 @@
 }
 
 .titlebar-tabs .doc-title {
-  margin: 0 auto;
-}
-
-/* 标签只占自己的宽度，「+」紧跟在最后一个标签后面，不要被推到窗口右缘。 */
-.titlebar-tabs .tab-bar {
-  flex: 0 1 auto;
+  margin: 0;
 }
 
 .titlebar-right {
